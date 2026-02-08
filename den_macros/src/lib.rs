@@ -353,6 +353,7 @@ struct StyleRule {
     padding: Option<f32>,
     display: DisplayMode,
     border: Option<BorderStyle>,
+    border_radius: Option<f32>,
     width: WidthValue,
 }
 
@@ -365,12 +366,13 @@ impl StyleRule {
         if other.padding.is_some() { self.padding = other.padding; }
         if other.display != DisplayMode::Block { self.display = other.display; }
         if other.border.is_some() { self.border = other.border; }
+        if other.border_radius.is_some() { self.border_radius = other.border_radius; }
         if other.width != WidthValue::Auto { self.width = other.width; }
     }
 
     /// Whether this resolved style requires an egui Frame wrapper.
     fn needs_frame(&self) -> bool {
-        self.background.is_some() || self.padding.is_some() || self.border.is_some()
+        self.background.is_some() || self.padding.is_some() || self.border.is_some() || self.border_radius.is_some()
     }
 }
 
@@ -454,6 +456,7 @@ fn parse_scss(input: &str) -> HashMap<String, StyleRule> {
             padding: None,
             display: DisplayMode::Block,
             border: None,
+            border_radius: None,
             width: WidthValue::Auto,
         };
 
@@ -494,6 +497,7 @@ fn parse_scss(input: &str) -> HashMap<String, StyleRule> {
                 "padding" => rule.padding = parse_size_value(&value),
                 "display" if value == "flex" => rule.display = DisplayMode::Flex,
                 "border" => rule.border = parse_border_value(&value),
+                "border-radius" => rule.border_radius = parse_size_value(&value),
                 "width" => rule.width = parse_width_value(&value),
                 _ => {}
             }
@@ -734,6 +738,11 @@ fn generate_element(
         if let Some(pad) = resolved.padding {
             frame_expr = quote! {
                 #frame_expr.inner_margin(#pad)
+            };
+        }
+        if let Some(radius) = resolved.border_radius {
+            frame_expr = quote! {
+                #frame_expr.corner_radius(#radius)
             };
         }
         if let Some(border_style) = resolved.border {
