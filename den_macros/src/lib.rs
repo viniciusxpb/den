@@ -1,6 +1,7 @@
 use proc_macro::TokenStream;
 use quote::quote;
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use syn::parse::{Parse, ParseStream};
 
 /// Macro that loads an HTML + SCSS template pair and generates egui code.
@@ -55,7 +56,7 @@ pub fn den_template(input: TokenStream) -> TokenStream {
     let styles = parse_scss(&scss);
     let elements = parse_html(&html);
 
-    match generate_egui_code(&elements, &styles, has_self) {
+    match generate_egui_code(&elements, &styles, has_self, &template_path) {
         Ok(tokens) => tokens.into(),
         Err(msg) => syn::Error::new(parsed.path.span(), msg)
             .to_compile_error()
@@ -355,6 +356,7 @@ struct StyleRule {
     border: Option<BorderStyle>,
     border_radius: Option<f32>,
     width: WidthValue,
+    hover: Option<Box<StyleRule>>,
 }
 
 impl StyleRule {
@@ -368,6 +370,7 @@ impl StyleRule {
         if other.border.is_some() { self.border = other.border; }
         if other.border_radius.is_some() { self.border_radius = other.border_radius; }
         if other.width != WidthValue::Auto { self.width = other.width; }
+        if other.hover.is_some() { self.hover = other.hover.clone(); }
     }
 
     /// Whether this resolved style requires an egui Frame wrapper.
@@ -376,12 +379,28 @@ impl StyleRule {
     }
 
     /// Extract only inheritable CSS properties (color, font-size) for propagation to children.
+    /// Hover is NOT inheritable in CSS.
     fn inheritable(&self) -> Self {
         Self {
             color: self.color,
             font_size: self.font_size,
             ..Default::default()
         }
+    }
+
+    /// Whether this style has any hover overrides.
+    fn needs_hover(&self) -> bool {
+        self.hover.is_some()
+    }
+
+    /// Merge base style with hover overrides to produce the hovered appearance.
+    fn resolve_hover(&self) -> Self {
+        let mut hovered = self.clone();
+        if let Some(h) = &self.hover {
+            hovered.merge_from(h);
+        }
+        hovered.hover = None;
+        hovered
     }
 }
 
@@ -449,6 +468,15 @@ fn parse_scss(input: &str) -> HashMap<String, StyleRule> {
             continue;
         }
 
+        // Check for pseudo-selector (e.g. :hover)
+        let pseudo = if pos < bytes.len() && bytes[pos] == b':' {
+            pos += 1; // skip ':'
+            let p = read_identifier(bytes, &mut pos);
+            if p.is_empty() { None } else { Some(p) }
+        } else {
+            None
+        };
+
         skip_whitespace(bytes, &mut pos);
 
         // Expect '{'
@@ -458,16 +486,7 @@ fn parse_scss(input: &str) -> HashMap<String, StyleRule> {
         pos += 1; // skip '{'
 
         // Read properties until '}'
-        let mut rule = StyleRule {
-            color: None,
-            font_size: None,
-            background: None,
-            padding: None,
-            display: DisplayMode::Block,
-            border: None,
-            border_radius: None,
-            width: WidthValue::Auto,
-        };
+        let mut rule = StyleRule::default();
 
         loop {
             skip_whitespace(bytes, &mut pos);
@@ -512,7 +531,18 @@ fn parse_scss(input: &str) -> HashMap<String, StyleRule> {
             }
         }
 
-        styles.insert(class_name, rule);
+        match pseudo.as_deref() {
+            Some("hover") => {
+                let entry = styles.entry(class_name).or_insert_with(StyleRule::default);
+                entry.hover = Some(Box::new(rule));
+            }
+            Some(p) => {
+                eprintln!("Den: unsupported pseudo-selector ':{p}', ignoring");
+            }
+            None => {
+                styles.entry(class_name).or_insert_with(StyleRule::default).merge_from(&rule);
+            }
+        }
     }
 
     styles
@@ -581,16 +611,29 @@ fn generate_egui_code(
     elements: &[HtmlElement],
     styles: &HashMap<String, StyleRule>,
     has_self: bool,
+    template_path: &str,
 ) -> Result<proc_macro2::TokenStream, String> {
     let inherited = StyleRule::default();
     let mut stmts = Vec::new();
-    for el in elements {
-        stmts.push(generate_element(el, styles, has_self, &inherited)?);
+    for (i, el) in elements.iter().enumerate() {
+        let mut path = vec![i];
+        stmts.push(generate_element(el, styles, has_self, &inherited, template_path, &mut path)?);
     }
 
     Ok(quote! {
         #( #stmts )*
     })
+}
+
+/// Generate a deterministic ID for a hover element based on template path,
+/// element position in the tree, tag name, and classes.
+fn den_element_id(template_path: &str, tree_path: &[usize], tag: &str, classes: &[String]) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    template_path.hash(&mut hasher);
+    tree_path.hash(&mut hasher);
+    tag.hash(&mut hasher);
+    classes.hash(&mut hasher);
+    hasher.finish()
 }
 
 /// Build a token stream for the text content of an element.
@@ -652,11 +695,53 @@ fn build_text_token_stream(
     Ok(Some(quote! { format!(#fmt_string, #( #fmt_args ),*) }))
 }
 
+/// Build an `egui::Frame` expression from a resolved style.
+fn build_frame_expr(style: &StyleRule) -> proc_macro2::TokenStream {
+    let mut frame_expr = quote! { egui::Frame::default() };
+    if let Some((r, g, b)) = style.background {
+        frame_expr = quote! { #frame_expr.fill(egui::Color32::from_rgb(#r, #g, #b)) };
+    }
+    if let Some(pad) = style.padding {
+        frame_expr = quote! { #frame_expr.inner_margin(#pad) };
+    }
+    if let Some(radius) = style.border_radius {
+        frame_expr = quote! { #frame_expr.corner_radius(#radius) };
+    }
+    if let Some(border_style) = style.border {
+        let border_width = border_style.width;
+        let (border_r, border_g, border_b) = border_style.color;
+        frame_expr = quote! {
+            #frame_expr.stroke(egui::Stroke::new(
+                #border_width,
+                egui::Color32::from_rgb(#border_r, #border_g, #border_b),
+            ))
+        };
+    }
+    frame_expr
+}
+
+/// Build an `egui::RichText` expression from text tokens and a resolved style.
+fn build_rich_text_expr(
+    text_ts: &proc_macro2::TokenStream,
+    style: &StyleRule,
+) -> proc_macro2::TokenStream {
+    let mut rt = quote! { egui::RichText::new(#text_ts) };
+    if let Some((r, g, b)) = style.color {
+        rt = quote! { #rt.color(egui::Color32::from_rgb(#r, #g, #b)) };
+    }
+    if let Some(size) = style.font_size {
+        rt = quote! { #rt.size(#size) };
+    }
+    rt
+}
+
 fn generate_element(
     el: &HtmlElement,
     styles: &HashMap<String, StyleRule>,
     has_self: bool,
     inherited: &StyleRule,
+    template_path: &str,
+    tree_path: &mut Vec<usize>,
 ) -> Result<proc_macro2::TokenStream, String> {
     // Start from inherited styles, then merge this element's own classes on top
     let mut resolved = inherited.inheritable();
@@ -669,110 +754,129 @@ fn generate_element(
     // Generate children code, propagating inheritable styles
     let child_inherited = resolved.inheritable();
     let mut children_code = Vec::new();
-    for child in &el.children {
-        children_code.push(generate_element(child, styles, has_self, &child_inherited)?);
+    for (i, child) in el.children.iter().enumerate() {
+        tree_path.push(i);
+        children_code.push(generate_element(child, styles, has_self, &child_inherited, template_path, tree_path)?);
+        tree_path.pop();
     }
 
     // Build text content from segments
     let text_ts = build_text_token_stream(&el.segments, has_self)?;
-    let has_children = !children_code.is_empty();
+    let has_hover = resolved.needs_hover();
 
-    // Build RichText with applied styles
-    let text_expr = if let Some(ts) = text_ts {
-        let mut rt = quote! { egui::RichText::new(#ts) };
-        if let Some((r, g, b)) = resolved.color {
-            rt = quote! { #rt.color(egui::Color32::from_rgb(#r, #g, #b)) };
+    // Build inner content (text + children) for a given style
+    let build_inner = |style: &StyleRule,
+                       text_ts: &Option<proc_macro2::TokenStream>,
+                       children_code: &[proc_macro2::TokenStream],
+                       tag: &str|
+     -> proc_macro2::TokenStream {
+        let text_expr = text_ts
+            .as_ref()
+            .map(|ts| build_rich_text_expr(ts, style));
+
+        let inner = match tag {
+            "heading" | "h1" | "h2" | "h3" => {
+                if let Some(rt) = text_expr {
+                    quote! { ui.heading(#rt); }
+                } else if !children_code.is_empty() {
+                    quote! { #( #children_code )* }
+                } else {
+                    quote! {}
+                }
+            }
+            _ => {
+                let mut stmts = Vec::new();
+                if let Some(rt) = text_expr {
+                    stmts.push(quote! { ui.label(#rt); });
+                }
+                for child in children_code {
+                    stmts.push(child.clone());
+                }
+                quote! { #( #stmts )* }
+            }
+        };
+
+        // Wrap in horizontal layout if display: flex
+        let inner = if style.display == DisplayMode::Flex {
+            quote! { ui.horizontal(|ui| { #inner }); }
+        } else {
+            inner
+        };
+
+        // Apply width constraint
+        match style.width {
+            WidthValue::Percent(pct) => {
+                quote! {
+                    ui.set_width(ui.available_width() * #pct);
+                    #inner
+                }
+            }
+            WidthValue::Px(px) => {
+                quote! {
+                    ui.set_width(#px);
+                    #inner
+                }
+            }
+            WidthValue::Auto => inner,
         }
-        if let Some(size) = resolved.font_size {
-            rt = quote! { #rt.size(#size) };
-        }
-        Some(rt)
-    } else {
-        None
     };
 
-    // Generate based on tag
     let tag = el.tag.as_str();
 
-    let inner_code = match tag {
-        "heading" | "h1" | "h2" | "h3" => {
-            if let Some(rt) = text_expr {
-                quote! { ui.heading(#rt); }
-            } else if has_children {
-                quote! { #( #children_code )* }
-            } else {
-                quote! {}
-            }
-        }
-        _ => {
-            let mut stmts = Vec::new();
-            if let Some(rt) = text_expr {
-                stmts.push(quote! { ui.label(#rt); });
-            }
-            for child in &children_code {
-                stmts.push(child.clone());
-            }
-            quote! { #( #stmts )* }
-        }
-    };
+    if has_hover {
+        // Hover: each element gets a compile-time unique ID. We store last-frame
+        // hover state in egui temp memory, read it before rendering to pick the
+        // right style, then update after rendering. 1-frame latency, imperceptible.
+        let hovered_style = resolved.resolve_hover();
 
-    // Wrap in horizontal layout if display: flex
-    let inner_code = if resolved.display == DisplayMode::Flex {
-        quote! { ui.horizontal(|ui| { #inner_code }); }
+        let base_inner = build_inner(&resolved, &text_ts, &children_code, tag);
+        let hover_inner = build_inner(&hovered_style, &text_ts, &children_code, tag);
+
+        let base_code = if resolved.needs_frame() {
+            let frame = build_frame_expr(&resolved);
+            quote! { #frame.show(ui, |ui| { #base_inner }); }
+        } else {
+            base_inner
+        };
+
+        let hover_code = if hovered_style.needs_frame() {
+            let frame = build_frame_expr(&hovered_style);
+            quote! { #frame.show(ui, |ui| { #hover_inner }); }
+        } else {
+            hover_inner
+        };
+
+        let element_id = den_element_id(template_path, tree_path, tag, &el.classes);
+        Ok(quote! {
+            {
+                let __den_id = egui::Id::new(#element_id);
+                let __den_was_hovered = ui.data(|d| d.get_temp::<bool>(__den_id).unwrap_or(false));
+                let __den_scope = ui.scope(|ui| {
+                    if __den_was_hovered {
+                        #hover_code
+                    } else {
+                        #base_code
+                    }
+                });
+                // Check hover on the full rendered rect (including children/text),
+                // not scope.response.hovered() which misses areas consumed by child widgets.
+                let __den_is_hovered = ui.rect_contains_pointer(__den_scope.response.rect);
+                ui.data_mut(|d| d.insert_temp(__den_id, __den_is_hovered));
+            }
+        })
     } else {
-        inner_code
-    };
+        // No hover — original path
+        let inner_code = build_inner(&resolved, &text_ts, &children_code, tag);
 
-    // Apply width constraint (set_width for exact sizing, matching CSS semantics)
-    let inner_code = match resolved.width {
-        WidthValue::Percent(pct) => {
+        Ok(if resolved.needs_frame() {
+            let frame_expr = build_frame_expr(&resolved);
             quote! {
-                ui.set_width(ui.available_width() * #pct);
-                #inner_code
+                #frame_expr.show(ui, |ui| {
+                    #inner_code
+                });
             }
-        }
-        WidthValue::Px(px) => {
-            quote! {
-                ui.set_width(#px);
-                #inner_code
-            }
-        }
-        WidthValue::Auto => inner_code,
-    };
-
-    Ok(if resolved.needs_frame() {
-        let mut frame_expr = quote! { egui::Frame::default() };
-        if let Some((r, g, b)) = resolved.background {
-            frame_expr = quote! {
-                #frame_expr.fill(egui::Color32::from_rgb(#r, #g, #b))
-            };
-        }
-        if let Some(pad) = resolved.padding {
-            frame_expr = quote! {
-                #frame_expr.inner_margin(#pad)
-            };
-        }
-        if let Some(radius) = resolved.border_radius {
-            frame_expr = quote! {
-                #frame_expr.corner_radius(#radius)
-            };
-        }
-        if let Some(border_style) = resolved.border {
-            let border_width = border_style.width;
-            let (border_r, border_g, border_b) = border_style.color;
-            frame_expr = quote! {
-                #frame_expr.stroke(egui::Stroke::new(
-                    #border_width,
-                    egui::Color32::from_rgb(#border_r, #border_g, #border_b),
-                ))
-            };
-        }
-        quote! {
-            #frame_expr.show(ui, |ui| {
-                #inner_code
-            });
-        }
-    } else {
-        inner_code
-    })
+        } else {
+            inner_code
+        })
+    }
 }

@@ -16,3 +16,15 @@
     background: #1a1a2e;
     width: 100%;
 }
+
+.button {
+    background: #16213e;
+    border: 1px solid #16213e;
+    border-radius: 4;
+    padding: 8;
+}
+
+.button:hover {
+    background: #e94560;
+    border: 1px solid #e94560;
+}
