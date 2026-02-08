@@ -15,7 +15,11 @@ impl Default for HomePage {
 }
 
 impl HomePage {
-    pub fn render(&self, ui: &mut egui::Ui) {
+    pub fn render(&mut self, ui: &mut egui::Ui) {
         den_macros::den_template!("pages/home/home", self);
+    }
+
+    fn on_button_click(&mut self) {
+        eprintln!("Button clicked!");
     }
 }

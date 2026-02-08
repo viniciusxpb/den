@@ -104,6 +104,7 @@ struct HtmlElement {
     classes: Vec<String>,
     segments: Vec<TextSegment>,
     children: Vec<HtmlElement>,
+    on_click: Option<String>,
 }
 
 /// Map `this` to `self` only as a keyword, not inside identifiers. (Fix #4)
@@ -209,16 +210,39 @@ fn parse_element_chars(chars: &[char], pos: &mut usize) -> Option<HtmlElement> {
 
     // Read attributes
     let mut classes = Vec::new();
+    let mut on_click = None;
     skip_ws(chars, pos);
     while *pos < chars.len() && chars[*pos] != '>' && chars[*pos] != '/' {
-        let attr_name = read_ident(chars, pos);
-        skip_ws(chars, pos);
-        if *pos < chars.len() && chars[*pos] == '=' {
-            *pos += 1; // skip '='
+        if chars[*pos] == '(' {
+            // Event binding: (click)="funcao()"
+            *pos += 1; // skip '('
+            let event_name = read_ident(chars, pos);
+            if *pos < chars.len() && chars[*pos] == ')' {
+                *pos += 1; // skip ')'
+            }
             skip_ws(chars, pos);
-            let value = read_quoted(chars, pos);
-            if attr_name == "class" {
-                classes = value.split_whitespace().map(|s| s.to_string()).collect();
+            if *pos < chars.len() && chars[*pos] == '=' {
+                *pos += 1; // skip '='
+                skip_ws(chars, pos);
+                let raw_value = read_quoted(chars, pos);
+                let func_name = raw_value.trim_end_matches("()");
+                let func_name = map_this_to_self(func_name);
+                if event_name == "click" {
+                    on_click = Some(func_name);
+                } else {
+                    eprintln!("Den: unsupported event '({event_name})', ignoring");
+                }
+            }
+        } else {
+            let attr_name = read_ident(chars, pos);
+            skip_ws(chars, pos);
+            if *pos < chars.len() && chars[*pos] == '=' {
+                *pos += 1; // skip '='
+                skip_ws(chars, pos);
+                let value = read_quoted(chars, pos);
+                if attr_name == "class" {
+                    classes = value.split_whitespace().map(|s| s.to_string()).collect();
+                }
             }
         }
         skip_ws(chars, pos);
@@ -235,6 +259,7 @@ fn parse_element_chars(chars: &[char], pos: &mut usize) -> Option<HtmlElement> {
             classes,
             segments: Vec::new(),
             children: Vec::new(),
+            on_click,
         });
     }
     if *pos < chars.len() && chars[*pos] == '>' {
@@ -273,6 +298,7 @@ fn parse_element_chars(chars: &[char], pos: &mut usize) -> Option<HtmlElement> {
         classes,
         segments,
         children,
+        on_click,
     })
 }
 
@@ -822,34 +848,51 @@ fn generate_element(
     };
 
     let tag = el.tag.as_str();
+    let has_click = el.on_click.is_some();
 
-    if has_hover {
-        // Hover: each element gets a compile-time unique ID. We store last-frame
-        // hover state in egui temp memory, read it before rendering to pick the
-        // right style, then update after rendering. 1-frame latency, imperceptible.
-        let hovered_style = resolved.resolve_hover();
+    if has_click && !has_self {
+        return Err(
+            "Template uses (click) event but `self` was not passed to den_template!. \
+             Use: den_template!(\"path\", self);"
+                .to_string(),
+        );
+    }
 
-        let base_inner = build_inner(&resolved, &text_ts, &children_code, tag);
-        let hover_inner = build_inner(&hovered_style, &text_ts, &children_code, tag);
+    // Build the click handler token stream (if any)
+    let click_call = el.on_click.as_ref().map(|func_name| {
+        let func_tokens: proc_macro2::TokenStream = format!("self.{func_name}()")
+            .parse()
+            .expect("Den: invalid function name in (click)");
+        func_tokens
+    });
 
-        let base_code = if resolved.needs_frame() {
-            let frame = build_frame_expr(&resolved);
-            quote! { #frame.show(ui, |ui| { #base_inner }); }
-        } else {
-            base_inner
-        };
+    let needs_interaction = has_hover || has_click;
 
-        let hover_code = if hovered_style.needs_frame() {
-            let frame = build_frame_expr(&hovered_style);
-            quote! { #frame.show(ui, |ui| { #hover_inner }); }
-        } else {
-            hover_inner
-        };
-
+    if needs_interaction {
         let element_id = den_element_id(template_path, tree_path, tag, &el.classes);
-        Ok(quote! {
-            {
-                let __den_id = egui::Id::new(#element_id);
+
+        // Build the rendered content (with or without hover style switching)
+        let render_code = if has_hover {
+            let hovered_style = resolved.resolve_hover();
+
+            let base_inner = build_inner(&resolved, &text_ts, &children_code, tag);
+            let hover_inner = build_inner(&hovered_style, &text_ts, &children_code, tag);
+
+            let base_code = if resolved.needs_frame() {
+                let frame = build_frame_expr(&resolved);
+                quote! { #frame.show(ui, |ui| { #base_inner }); }
+            } else {
+                base_inner
+            };
+
+            let hover_code = if hovered_style.needs_frame() {
+                let frame = build_frame_expr(&hovered_style);
+                quote! { #frame.show(ui, |ui| { #hover_inner }); }
+            } else {
+                hover_inner
+            };
+
+            quote! {
                 let __den_was_hovered = ui.data(|d| d.get_temp::<bool>(__den_id).unwrap_or(false));
                 let __den_scope = ui.scope(|ui| {
                     if __den_was_hovered {
@@ -858,14 +901,50 @@ fn generate_element(
                         #base_code
                     }
                 });
-                // Check hover on the full rendered rect (including children/text),
-                // not scope.response.hovered() which misses areas consumed by child widgets.
                 let __den_is_hovered = ui.rect_contains_pointer(__den_scope.response.rect);
                 ui.data_mut(|d| d.insert_temp(__den_id, __den_is_hovered));
             }
+        } else {
+            // Click only, no hover — wrap in scope to capture rect
+            let inner_code = build_inner(&resolved, &text_ts, &children_code, tag);
+            let wrapped = if resolved.needs_frame() {
+                let frame_expr = build_frame_expr(&resolved);
+                quote! { #frame_expr.show(ui, |ui| { #inner_code }); }
+            } else {
+                inner_code
+            };
+            quote! {
+                let __den_scope = ui.scope(|ui| {
+                    #wrapped
+                });
+            }
+        };
+
+        // Build click handling (if any)
+        let click_code = if let Some(call) = click_call {
+            quote! {
+                let __den_resp = ui.interact(
+                    __den_scope.response.rect,
+                    __den_id.with("click"),
+                    egui::Sense::click(),
+                );
+                if __den_resp.clicked() {
+                    #call;
+                }
+            }
+        } else {
+            quote! {}
+        };
+
+        Ok(quote! {
+            {
+                let __den_id = egui::Id::new(#element_id);
+                #render_code
+                #click_code
+            }
         })
     } else {
-        // No hover — original path
+        // No hover, no click — original simple path
         let inner_code = build_inner(&resolved, &text_ts, &children_code, tag);
 
         Ok(if resolved.needs_frame() {
