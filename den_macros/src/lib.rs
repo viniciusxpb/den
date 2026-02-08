@@ -316,25 +316,101 @@ fn read_quoted(chars: &[char], pos: &mut usize) -> String {
 // SCSS identifiers are ASCII-only, so byte-level parsing is safe here.
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Default, PartialEq)]
+type RgbColor = (u8, u8, u8);
+
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 enum DisplayMode {
     #[default]
     Block,
     Flex,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
+struct BorderStyle {
+    width: f32,
+    color: RgbColor,
+}
+
+impl Default for BorderStyle {
+    fn default() -> Self {
+        Self { width: 1.0, color: (0, 0, 0) }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+enum WidthValue {
+    #[default]
+    Auto,
+    Percent(f32),
+    Px(f32),
+}
+
+#[derive(Debug, Clone, Default)]
 struct StyleRule {
-    color: Option<(u8, u8, u8)>,
+    color: Option<RgbColor>,
     font_size: Option<f32>,
-    background: Option<(u8, u8, u8)>,
+    background: Option<RgbColor>,
     padding: Option<f32>,
     display: DisplayMode,
+    border: Option<BorderStyle>,
+    width: WidthValue,
+}
+
+impl StyleRule {
+    /// Merge another rule into this one (last-wins for set properties).
+    fn merge_from(&mut self, other: &Self) {
+        if other.color.is_some() { self.color = other.color; }
+        if other.font_size.is_some() { self.font_size = other.font_size; }
+        if other.background.is_some() { self.background = other.background; }
+        if other.padding.is_some() { self.padding = other.padding; }
+        if other.display != DisplayMode::Block { self.display = other.display; }
+        if other.border.is_some() { self.border = other.border; }
+        if other.width != WidthValue::Auto { self.width = other.width; }
+    }
+
+    /// Whether this resolved style requires an egui Frame wrapper.
+    fn needs_frame(&self) -> bool {
+        self.background.is_some() || self.padding.is_some() || self.border.is_some()
+    }
 }
 
 /// Parse a raw CSS value as a size in pixels (strips optional "px" suffix).
 fn parse_size_value(value: &str) -> Option<f32> {
     value.trim_end_matches("px").parse::<f32>().ok()
+}
+
+/// Parse `width` values: `100%`, `50%`, `200px`, `200`.
+/// Returns `Auto` and prints a compile-time warning for unrecognized values.
+fn parse_width_value(value: &str) -> WidthValue {
+    if value == "auto" {
+        return WidthValue::Auto;
+    }
+    if let Some(pct) = value.strip_suffix('%')
+        && let Ok(v) = pct.trim().parse::<f32>()
+    {
+        return WidthValue::Percent(v / 100.0);
+    }
+    if let Some(v) = parse_size_value(value) {
+        return WidthValue::Px(v);
+    }
+    eprintln!("Den: unsupported width value '{value}', falling back to auto");
+    WidthValue::Auto
+}
+
+/// Parse `border: 1px solid #e94560` into BorderStyle.
+/// Only `solid` style is supported; other styles emit a compile-time warning.
+fn parse_border_value(value: &str) -> Option<BorderStyle> {
+    let parts: Vec<&str> = value.split_whitespace().collect();
+    if parts.len() < 3 {
+        return None;
+    }
+    let width = parse_size_value(parts[0])?;
+    let style = parts[1];
+    if style != "solid" {
+        eprintln!("Den: border style '{style}' is not supported, rendering as solid");
+    }
+    let color = parse_hex_color(parts[2])?;
+    Some(BorderStyle { width, color })
 }
 
 fn parse_scss(input: &str) -> HashMap<String, StyleRule> {
@@ -377,6 +453,8 @@ fn parse_scss(input: &str) -> HashMap<String, StyleRule> {
             background: None,
             padding: None,
             display: DisplayMode::Block,
+            border: None,
+            width: WidthValue::Auto,
         };
 
         loop {
@@ -410,11 +488,13 @@ fn parse_scss(input: &str) -> HashMap<String, StyleRule> {
             }
 
             match prop_name.as_str() {
-                "color" => rule.color = Some(parse_hex_color(&value)),
+                "color" => rule.color = parse_hex_color(&value),
                 "font-size" => rule.font_size = parse_size_value(&value),
-                "background" => rule.background = Some(parse_hex_color(&value)),
+                "background" => rule.background = parse_hex_color(&value),
                 "padding" => rule.padding = parse_size_value(&value),
                 "display" if value == "flex" => rule.display = DisplayMode::Flex,
+                "border" => rule.border = parse_border_value(&value),
+                "width" => rule.width = parse_width_value(&value),
                 _ => {}
             }
         }
@@ -455,7 +535,7 @@ fn read_css_identifier(bytes: &[u8], pos: &mut usize) -> String {
 // Hex color parser
 // ---------------------------------------------------------------------------
 
-fn parse_hex_color(hex: &str) -> (u8, u8, u8) {
+fn parse_hex_color(hex: &str) -> Option<RgbColor> {
     let hex = hex.trim_start_matches('#');
     let hex = if hex.len() == 3 {
         let mut expanded = String::with_capacity(6);
@@ -468,10 +548,15 @@ fn parse_hex_color(hex: &str) -> (u8, u8, u8) {
         hex.to_string()
     };
 
-    let r = u8::from_str_radix(&hex[0..2], 16).unwrap_or(255);
-    let g = u8::from_str_radix(&hex[2..4], 16).unwrap_or(255);
-    let b = u8::from_str_radix(&hex[4..6], 16).unwrap_or(255);
-    (r, g, b)
+    if hex.len() < 6 {
+        eprintln!("Den: invalid hex color '#{hex}', expected #RGB or #RRGGBB");
+        return None;
+    }
+
+    let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+    let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+    let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+    Some((r, g, b))
 }
 
 // ---------------------------------------------------------------------------
@@ -559,29 +644,10 @@ fn generate_element(
     has_self: bool,
 ) -> Result<proc_macro2::TokenStream, String> {
     // Merge styles from all classes (last-wins for overlapping properties)
-    let mut color: Option<(u8, u8, u8)> = None;
-    let mut font_size: Option<f32> = None;
-    let mut background: Option<(u8, u8, u8)> = None;
-    let mut padding: Option<f32> = None;
-    let mut display = DisplayMode::Block;
-
+    let mut resolved = StyleRule::default();
     for class in &el.classes {
         if let Some(rule) = styles.get(class) {
-            if rule.color.is_some() {
-                color = rule.color;
-            }
-            if rule.font_size.is_some() {
-                font_size = rule.font_size;
-            }
-            if rule.background.is_some() {
-                background = rule.background;
-            }
-            if rule.padding.is_some() {
-                padding = rule.padding;
-            }
-            if rule.display == DisplayMode::Flex {
-                display = DisplayMode::Flex;
-            }
+            resolved.merge_from(rule);
         }
     }
 
@@ -598,10 +664,10 @@ fn generate_element(
     // Build RichText with applied styles
     let text_expr = if let Some(ts) = text_ts {
         let mut rt = quote! { egui::RichText::new(#ts) };
-        if let Some((r, g, b)) = color {
+        if let Some((r, g, b)) = resolved.color {
             rt = quote! { #rt.color(egui::Color32::from_rgb(#r, #g, #b)) };
         }
-        if let Some(size) = font_size {
+        if let Some(size) = resolved.font_size {
             rt = quote! { #rt.size(#size) };
         }
         Some(rt)
@@ -611,7 +677,6 @@ fn generate_element(
 
     // Generate based on tag
     let tag = el.tag.as_str();
-    let needs_frame = background.is_some() || padding.is_some();
 
     let inner_code = match tag {
         "heading" | "h1" | "h2" | "h3" => {
@@ -624,7 +689,6 @@ fn generate_element(
             }
         }
         _ => {
-            // Fix #9: removed no-op empty element block
             let mut stmts = Vec::new();
             if let Some(rt) = text_expr {
                 stmts.push(quote! { ui.label(#rt); });
@@ -637,22 +701,49 @@ fn generate_element(
     };
 
     // Wrap in horizontal layout if display: flex
-    let inner_code = if display == DisplayMode::Flex {
+    let inner_code = if resolved.display == DisplayMode::Flex {
         quote! { ui.horizontal(|ui| { #inner_code }); }
     } else {
         inner_code
     };
 
-    Ok(if needs_frame {
+    // Apply width constraint (set_width for exact sizing, matching CSS semantics)
+    let inner_code = match resolved.width {
+        WidthValue::Percent(pct) => {
+            quote! {
+                ui.set_width(ui.available_width() * #pct);
+                #inner_code
+            }
+        }
+        WidthValue::Px(px) => {
+            quote! {
+                ui.set_width(#px);
+                #inner_code
+            }
+        }
+        WidthValue::Auto => inner_code,
+    };
+
+    Ok(if resolved.needs_frame() {
         let mut frame_expr = quote! { egui::Frame::default() };
-        if let Some((r, g, b)) = background {
+        if let Some((r, g, b)) = resolved.background {
             frame_expr = quote! {
                 #frame_expr.fill(egui::Color32::from_rgb(#r, #g, #b))
             };
         }
-        if let Some(p) = padding {
+        if let Some(pad) = resolved.padding {
             frame_expr = quote! {
-                #frame_expr.inner_margin(#p)
+                #frame_expr.inner_margin(#pad)
+            };
+        }
+        if let Some(border_style) = resolved.border {
+            let border_width = border_style.width;
+            let (border_r, border_g, border_b) = border_style.color;
+            frame_expr = quote! {
+                #frame_expr.stroke(egui::Stroke::new(
+                    #border_width,
+                    egui::Color32::from_rgb(#border_r, #border_g, #border_b),
+                ))
             };
         }
         quote! {
