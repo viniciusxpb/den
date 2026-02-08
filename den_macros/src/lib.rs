@@ -374,6 +374,15 @@ impl StyleRule {
     fn needs_frame(&self) -> bool {
         self.background.is_some() || self.padding.is_some() || self.border.is_some() || self.border_radius.is_some()
     }
+
+    /// Extract only inheritable CSS properties (color, font-size) for propagation to children.
+    fn inheritable(&self) -> Self {
+        Self {
+            color: self.color,
+            font_size: self.font_size,
+            ..Default::default()
+        }
+    }
 }
 
 /// Parse a raw CSS value as a size in pixels (strips optional "px" suffix).
@@ -573,9 +582,10 @@ fn generate_egui_code(
     styles: &HashMap<String, StyleRule>,
     has_self: bool,
 ) -> Result<proc_macro2::TokenStream, String> {
+    let inherited = StyleRule::default();
     let mut stmts = Vec::new();
     for el in elements {
-        stmts.push(generate_element(el, styles, has_self)?);
+        stmts.push(generate_element(el, styles, has_self, &inherited)?);
     }
 
     Ok(quote! {
@@ -646,19 +656,21 @@ fn generate_element(
     el: &HtmlElement,
     styles: &HashMap<String, StyleRule>,
     has_self: bool,
+    inherited: &StyleRule,
 ) -> Result<proc_macro2::TokenStream, String> {
-    // Merge styles from all classes (last-wins for overlapping properties)
-    let mut resolved = StyleRule::default();
+    // Start from inherited styles, then merge this element's own classes on top
+    let mut resolved = inherited.inheritable();
     for class in &el.classes {
         if let Some(rule) = styles.get(class) {
             resolved.merge_from(rule);
         }
     }
 
-    // Generate children code
+    // Generate children code, propagating inheritable styles
+    let child_inherited = resolved.inheritable();
     let mut children_code = Vec::new();
     for child in &el.children {
-        children_code.push(generate_element(child, styles, has_self)?);
+        children_code.push(generate_element(child, styles, has_self, &child_inherited)?);
     }
 
     // Build text content from segments
