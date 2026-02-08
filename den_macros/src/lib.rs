@@ -316,9 +316,25 @@ fn read_quoted(chars: &[char], pos: &mut usize) -> String {
 // SCSS identifiers are ASCII-only, so byte-level parsing is safe here.
 // ---------------------------------------------------------------------------
 
+#[derive(Debug, Clone, Default, PartialEq)]
+enum DisplayMode {
+    #[default]
+    Block,
+    Flex,
+}
+
 #[derive(Debug, Clone)]
 struct StyleRule {
-    properties: HashMap<String, String>,
+    color: Option<(u8, u8, u8)>,
+    font_size: Option<f32>,
+    background: Option<(u8, u8, u8)>,
+    padding: Option<f32>,
+    display: DisplayMode,
+}
+
+/// Parse a raw CSS value as a size in pixels (strips optional "px" suffix).
+fn parse_size_value(value: &str) -> Option<f32> {
+    value.trim_end_matches("px").parse::<f32>().ok()
 }
 
 fn parse_scss(input: &str) -> HashMap<String, StyleRule> {
@@ -355,7 +371,14 @@ fn parse_scss(input: &str) -> HashMap<String, StyleRule> {
         pos += 1; // skip '{'
 
         // Read properties until '}'
-        let mut properties = HashMap::new();
+        let mut rule = StyleRule {
+            color: None,
+            font_size: None,
+            background: None,
+            padding: None,
+            display: DisplayMode::Block,
+        };
+
         loop {
             skip_whitespace(bytes, &mut pos);
             if pos >= bytes.len() || bytes[pos] == b'}' {
@@ -386,10 +409,17 @@ fn parse_scss(input: &str) -> HashMap<String, StyleRule> {
                 pos += 1; // skip ';'
             }
 
-            properties.insert(prop_name, value);
+            match prop_name.as_str() {
+                "color" => rule.color = Some(parse_hex_color(&value)),
+                "font-size" => rule.font_size = parse_size_value(&value),
+                "background" => rule.background = Some(parse_hex_color(&value)),
+                "padding" => rule.padding = parse_size_value(&value),
+                "display" if value == "flex" => rule.display = DisplayMode::Flex,
+                _ => {}
+            }
         }
 
-        styles.insert(class_name, StyleRule { properties });
+        styles.insert(class_name, rule);
     }
 
     styles
@@ -528,29 +558,29 @@ fn generate_element(
     styles: &HashMap<String, StyleRule>,
     has_self: bool,
 ) -> Result<proc_macro2::TokenStream, String> {
-    // Merge styles from all classes
+    // Merge styles from all classes (last-wins for overlapping properties)
     let mut color: Option<(u8, u8, u8)> = None;
     let mut font_size: Option<f32> = None;
     let mut background: Option<(u8, u8, u8)> = None;
     let mut padding: Option<f32> = None;
+    let mut display = DisplayMode::Block;
 
     for class in &el.classes {
         if let Some(rule) = styles.get(class) {
-            if let Some(c) = rule.properties.get("color") {
-                color = Some(parse_hex_color(c));
+            if rule.color.is_some() {
+                color = rule.color;
             }
-            if let Some(fs) = rule.properties.get("font-size")
-                && let Ok(v) = fs.trim_end_matches("px").parse::<f32>()
-            {
-                font_size = Some(v);
+            if rule.font_size.is_some() {
+                font_size = rule.font_size;
             }
-            if let Some(bg) = rule.properties.get("background") {
-                background = Some(parse_hex_color(bg));
+            if rule.background.is_some() {
+                background = rule.background;
             }
-            if let Some(p) = rule.properties.get("padding")
-                && let Ok(v) = p.trim_end_matches("px").parse::<f32>()
-            {
-                padding = Some(v);
+            if rule.padding.is_some() {
+                padding = rule.padding;
+            }
+            if rule.display == DisplayMode::Flex {
+                display = DisplayMode::Flex;
             }
         }
     }
@@ -604,6 +634,13 @@ fn generate_element(
             }
             quote! { #( #stmts )* }
         }
+    };
+
+    // Wrap in horizontal layout if display: flex
+    let inner_code = if display == DisplayMode::Flex {
+        quote! { ui.horizontal(|ui| { #inner_code }); }
+    } else {
+        inner_code
     };
 
     Ok(if needs_frame {

@@ -1,3 +1,6 @@
+dev: ## Hot reload: monitora alterações e re-roda a aplicação
+	cargo watch -w den_app/src -w den_macros/src -x 'run -p den_app'
+
 review: ## Copia diff para clipboard com prompt de code review
 	@echo -e "Antes de tudo procure boas práticas para aplicações Rust e egui, depois encarne um desenvolvedor full-stack Rust Angular sênior. Faça um code review das alterações abaixo, considere que você está fazendo code review de uma aplicação em Rust que usa proc macros para compilar templates HTML + SCSS em código egui nativo em compile time (o dev escreve HTML para estrutura, SCSS para estilos, e Rust para lógica — a macro transforma tudo em chamadas egui automaticamente). Seja especialmente chato com: magic numbers (devem estar em um config.rs ou constantes nomeadas), variáveis inline sem nome descritivo, erros genéricos fora de um error.rs centralizado, unwrap() sem justificativa (proponha solução com ? ou expect com mensagem), e warnings do clippy (rode cargo clippy mentalmente e aponte violações).\n\n$$(git diff HEAD)" | xclip -selection clipboard
 	@echo "\033[32mDiff copiado para o clipboard com prompt de review.\033[0m"

@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod app_config;
 mod pages;
 
 use eframe::egui;
@@ -9,14 +10,18 @@ fn main() -> eframe::Result {
     env_logger::init();
 
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([400.0, 300.0]),
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([app_config::WINDOW_WIDTH, app_config::WINDOW_HEIGHT]),
         ..Default::default()
     };
 
     eframe::run_native(
-        "Den",
+        app_config::APP_TITLE,
         options,
-        Box::new(|_cc| Ok(Box::new(DenApp::default()))),
+        Box::new(|cc| {
+            cc.egui_ctx.set_visuals(app_config::default_visuals());
+            Ok(Box::new(DenApp::default()))
+        }),
     )
 }
 
