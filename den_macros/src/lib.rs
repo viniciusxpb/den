@@ -255,10 +255,8 @@ fn parse_element_chars(chars: &[char], pos: &mut usize) -> Option<HtmlElement> {
                     *pos += 1; // skip '>'
                 }
                 break;
-            } else {
-                if let Some(child) = parse_element_chars(chars, pos) {
-                    children.push(child);
-                }
+            } else if let Some(child) = parse_element_chars(chars, pos) {
+                children.push(child);
             }
         } else {
             raw_text.push(chars[*pos]);
@@ -541,18 +539,18 @@ fn generate_element(
             if let Some(c) = rule.properties.get("color") {
                 color = Some(parse_hex_color(c));
             }
-            if let Some(fs) = rule.properties.get("font-size") {
-                if let Ok(v) = fs.trim_end_matches("px").parse::<f32>() {
-                    font_size = Some(v);
-                }
+            if let Some(fs) = rule.properties.get("font-size")
+                && let Ok(v) = fs.trim_end_matches("px").parse::<f32>()
+            {
+                font_size = Some(v);
             }
             if let Some(bg) = rule.properties.get("background") {
                 background = Some(parse_hex_color(bg));
             }
-            if let Some(p) = rule.properties.get("padding") {
-                if let Ok(v) = p.trim_end_matches("px").parse::<f32>() {
-                    padding = Some(v);
-                }
+            if let Some(p) = rule.properties.get("padding")
+                && let Ok(v) = p.trim_end_matches("px").parse::<f32>()
+            {
+                padding = Some(v);
             }
         }
     }

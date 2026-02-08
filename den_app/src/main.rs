@@ -20,16 +20,9 @@ fn main() -> eframe::Result {
     )
 }
 
+#[derive(Default)]
 struct DenApp {
     home: HomePage,
-}
-
-impl Default for DenApp {
-    fn default() -> Self {
-        Self {
-            home: HomePage::default(),
-        }
-    }
 }
 
 impl eframe::App for DenApp {
