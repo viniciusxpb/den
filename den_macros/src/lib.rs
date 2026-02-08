@@ -1,62 +1,189 @@
 use proc_macro::TokenStream;
 use quote::quote;
 use std::collections::HashMap;
+use syn::parse::{Parse, ParseStream};
 
 /// Macro that loads an HTML + SCSS template pair and generates egui code.
 ///
-/// Usage: `den_template!("pages/home/home");`
+/// Usage:
+/// ```rust
+/// // Without data binding:
+/// den_template!("pages/home/home");
+///
+/// // With data binding (enables {{ this.field }} in templates):
+/// den_template!("pages/home/home", self);
+/// ```
+///
+/// Template interpolation uses `{{ this.field }}` syntax. The `this` keyword
+/// maps to `self` in Rust. Fields used in templates must implement `Display`.
 ///
 /// This reads `pages/home/home.html` and `pages/home/home.scss` relative to
 /// the crate's `src/` directory and generates the corresponding egui widget calls.
 #[proc_macro]
 pub fn den_template(input: TokenStream) -> TokenStream {
-    let input_str = input.to_string();
-    let template_path = input_str.trim().trim_matches('"');
+    let parsed = syn::parse_macro_input!(input as DenTemplateInput);
+    let template_path = parsed.path.value();
+    let has_self = parsed.has_self;
 
     let manifest_dir =
         std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
-    let base = std::path::Path::new(&manifest_dir).join("src").join(template_path);
+    let base = std::path::Path::new(&manifest_dir).join("src").join(&template_path);
 
     let html_path = base.with_extension("html");
     let scss_path = base.with_extension("scss");
 
-    let html = std::fs::read_to_string(&html_path)
-        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", html_path.display()));
-    let scss = std::fs::read_to_string(&scss_path)
-        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", scss_path.display()));
+    let html = match std::fs::read_to_string(&html_path) {
+        Ok(content) => content,
+        Err(e) => {
+            let msg = format!("Failed to read {}: {e}", html_path.display());
+            return syn::Error::new(parsed.path.span(), msg)
+                .to_compile_error()
+                .into();
+        }
+    };
+
+    let scss = match std::fs::read_to_string(&scss_path) {
+        Ok(content) => content,
+        Err(e) => {
+            let msg = format!("Failed to read {}: {e}", scss_path.display());
+            return syn::Error::new(parsed.path.span(), msg)
+                .to_compile_error()
+                .into();
+        }
+    };
 
     let styles = parse_scss(&scss);
     let elements = parse_html(&html);
-    let generated = generate_egui_code(&elements, &styles);
 
-    generated.into()
+    match generate_egui_code(&elements, &styles, has_self) {
+        Ok(tokens) => tokens.into(),
+        Err(msg) => syn::Error::new(parsed.path.span(), msg)
+            .to_compile_error()
+            .into(),
+    }
 }
 
 // ---------------------------------------------------------------------------
-// HTML parser (minimal, hand-rolled)
+// Macro input parsing with syn (Fix #2)
 // ---------------------------------------------------------------------------
+
+struct DenTemplateInput {
+    path: syn::LitStr,
+    has_self: bool,
+}
+
+impl Parse for DenTemplateInput {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let path: syn::LitStr = input.parse()?;
+        let has_self = if input.peek(syn::Token![,]) {
+            input.parse::<syn::Token![,]>()?;
+            input.parse::<syn::Token![self]>()?;
+            true
+        } else {
+            false
+        };
+        Ok(Self { path, has_self })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// HTML parser (minimal, hand-rolled, UTF-8 safe — Fix #5)
+// ---------------------------------------------------------------------------
+
+/// A segment of text content — either a literal string or a `{{ expr }}` interpolation.
+#[derive(Debug, Clone)]
+enum TextSegment {
+    Literal(String),
+    Expr(String),
+}
 
 #[derive(Debug)]
 struct HtmlElement {
     tag: String,
     classes: Vec<String>,
-    text: String,
+    segments: Vec<TextSegment>,
     children: Vec<HtmlElement>,
 }
 
+/// Map `this` to `self` only as a keyword, not inside identifiers. (Fix #4)
+/// `this.name` -> `self.name`, but `this_value` stays `this_value`.
+fn map_this_to_self(expr: &str) -> String {
+    let expr = expr.trim();
+    if expr == "this" {
+        return "self".to_string();
+    }
+
+    let mut result = String::with_capacity(expr.len());
+    let chars: Vec<char> = expr.chars().collect();
+    let mut i = 0;
+
+    while i < chars.len() {
+        if i + 4 <= chars.len() && chars[i..i + 4] == ['t', 'h', 'i', 's'] {
+            let before_ok = i == 0 || !(chars[i - 1].is_alphanumeric() || chars[i - 1] == '_');
+            let after_ok = i + 4 >= chars.len()
+                || chars[i + 4] == '.'
+                || !(chars[i + 4].is_alphanumeric() || chars[i + 4] == '_');
+
+            if before_ok && after_ok {
+                result.push_str("self");
+                i += 4;
+                continue;
+            }
+        }
+        result.push(chars[i]);
+        i += 1;
+    }
+
+    result
+}
+
+/// Parse raw text content into segments, splitting on `{{ expr }}` patterns.
+fn parse_text_segments(raw: &str) -> Vec<TextSegment> {
+    let mut segments = Vec::new();
+    let mut rest = raw;
+
+    while let Some(start) = rest.find("{{") {
+        let before = &rest[..start];
+        if !before.is_empty() {
+            segments.push(TextSegment::Literal(before.to_string()));
+        }
+        let after_open = &rest[start + 2..];
+        if let Some(end) = after_open.find("}}") {
+            let expr = after_open[..end].trim().to_string();
+            let expr = map_this_to_self(&expr);
+            if !expr.is_empty() {
+                segments.push(TextSegment::Expr(expr));
+            }
+            rest = &after_open[end + 2..];
+        } else {
+            // No closing }}, treat rest as literal
+            segments.push(TextSegment::Literal(rest.to_string()));
+            return segments;
+        }
+    }
+
+    if !rest.is_empty() {
+        segments.push(TextSegment::Literal(rest.to_string()));
+    }
+
+    segments
+}
+
+// All HTML parsing now operates on `Vec<char>` for proper UTF-8 support (Fix #5).
+
 fn parse_html(input: &str) -> Vec<HtmlElement> {
     let input = input.trim();
+    let chars: Vec<char> = input.chars().collect();
     let mut pos = 0;
-    let bytes = input.as_bytes();
     let mut elements = Vec::new();
 
-    while pos < bytes.len() {
-        skip_whitespace(bytes, &mut pos);
-        if pos >= bytes.len() {
+    while pos < chars.len() {
+        skip_ws(&chars, &mut pos);
+        if pos >= chars.len() {
             break;
         }
-        if bytes[pos] == b'<' {
-            if let Some(el) = parse_element(input, &mut pos) {
+        if chars[pos] == '<' {
+            if let Some(el) = parse_element_chars(&chars, &mut pos) {
                 elements.push(el);
             }
         } else {
@@ -66,119 +193,121 @@ fn parse_html(input: &str) -> Vec<HtmlElement> {
     elements
 }
 
-fn parse_element(input: &str, pos: &mut usize) -> Option<HtmlElement> {
-    let bytes = input.as_bytes();
-    if bytes[*pos] != b'<' {
+fn parse_element_chars(chars: &[char], pos: &mut usize) -> Option<HtmlElement> {
+    if chars[*pos] != '<' {
         return None;
     }
     *pos += 1; // skip '<'
 
     // Read tag name
-    skip_whitespace(bytes, pos);
-    let tag = read_identifier(bytes, pos);
+    skip_ws(chars, pos);
+    let tag = read_ident(chars, pos);
     if tag.is_empty() {
         return None;
     }
 
     // Read attributes
     let mut classes = Vec::new();
-    skip_whitespace(bytes, pos);
-    while *pos < bytes.len() && bytes[*pos] != b'>' && bytes[*pos] != b'/' {
-        let attr_name = read_identifier(bytes, pos);
-        skip_whitespace(bytes, pos);
-        if *pos < bytes.len() && bytes[*pos] == b'=' {
+    skip_ws(chars, pos);
+    while *pos < chars.len() && chars[*pos] != '>' && chars[*pos] != '/' {
+        let attr_name = read_ident(chars, pos);
+        skip_ws(chars, pos);
+        if *pos < chars.len() && chars[*pos] == '=' {
             *pos += 1; // skip '='
-            skip_whitespace(bytes, pos);
-            let value = read_quoted_value(bytes, pos);
+            skip_ws(chars, pos);
+            let value = read_quoted(chars, pos);
             if attr_name == "class" {
                 classes = value.split_whitespace().map(|s| s.to_string()).collect();
             }
         }
-        skip_whitespace(bytes, pos);
+        skip_ws(chars, pos);
     }
 
     // Skip self-closing or '>'
-    if *pos < bytes.len() && bytes[*pos] == b'/' {
+    if *pos < chars.len() && chars[*pos] == '/' {
         *pos += 1;
-        if *pos < bytes.len() && bytes[*pos] == b'>' {
+        if *pos < chars.len() && chars[*pos] == '>' {
             *pos += 1;
         }
         return Some(HtmlElement {
             tag,
             classes,
-            text: String::new(),
+            segments: Vec::new(),
             children: Vec::new(),
         });
     }
-    if *pos < bytes.len() && bytes[*pos] == b'>' {
+    if *pos < chars.len() && chars[*pos] == '>' {
         *pos += 1;
     }
 
     // Read content (text + children)
-    let mut text = String::new();
+    let mut raw_text = String::new();
     let mut children = Vec::new();
 
-    while *pos < bytes.len() {
-        if bytes[*pos] == b'<' {
-            // Check for closing tag
-            if *pos + 1 < bytes.len() && bytes[*pos + 1] == b'/' {
+    while *pos < chars.len() {
+        if chars[*pos] == '<' {
+            if *pos + 1 < chars.len() && chars[*pos + 1] == '/' {
                 // Closing tag — skip past '>'
-                while *pos < bytes.len() && bytes[*pos] != b'>' {
+                while *pos < chars.len() && chars[*pos] != '>' {
                     *pos += 1;
                 }
-                if *pos < bytes.len() {
+                if *pos < chars.len() {
                     *pos += 1; // skip '>'
                 }
                 break;
             } else {
-                // Child element
-                if let Some(child) = parse_element(input, pos) {
+                if let Some(child) = parse_element_chars(chars, pos) {
                     children.push(child);
                 }
             }
         } else {
-            text.push(bytes[*pos] as char);
+            raw_text.push(chars[*pos]);
             *pos += 1;
         }
     }
 
+    let trimmed = raw_text.trim().to_string();
+    let segments = parse_text_segments(&trimmed);
+
     Some(HtmlElement {
         tag,
         classes,
-        text: text.trim().to_string(),
+        segments,
         children,
     })
 }
 
-fn skip_whitespace(bytes: &[u8], pos: &mut usize) {
-    while *pos < bytes.len() && bytes[*pos].is_ascii_whitespace() {
+fn skip_ws(chars: &[char], pos: &mut usize) {
+    while *pos < chars.len() && chars[*pos].is_ascii_whitespace() {
         *pos += 1;
     }
 }
 
-fn read_identifier(bytes: &[u8], pos: &mut usize) -> String {
+fn read_ident(chars: &[char], pos: &mut usize) -> String {
     let start = *pos;
-    while *pos < bytes.len() && (bytes[*pos].is_ascii_alphanumeric() || bytes[*pos] == b'_' || bytes[*pos] == b'-') {
+    while *pos < chars.len()
+        && (chars[*pos].is_ascii_alphanumeric() || chars[*pos] == '_' || chars[*pos] == '-')
+    {
         *pos += 1;
     }
-    String::from_utf8_lossy(&bytes[start..*pos]).to_string()
+    chars[start..*pos].iter().collect()
 }
 
-fn read_quoted_value(bytes: &[u8], pos: &mut usize) -> String {
-    if *pos >= bytes.len() {
+fn read_quoted(chars: &[char], pos: &mut usize) -> String {
+    if *pos >= chars.len() {
         return String::new();
     }
-    let quote_char = bytes[*pos];
-    if quote_char != b'"' && quote_char != b'\'' {
-        return read_identifier(bytes, pos);
+    let quote_char = chars[*pos];
+    if quote_char != '"' && quote_char != '\'' {
+        return read_ident(chars, pos);
     }
     *pos += 1; // skip opening quote
     let start = *pos;
-    while *pos < bytes.len() && bytes[*pos] != quote_char {
+    while *pos < chars.len() && chars[*pos] != quote_char {
         *pos += 1;
     }
-    let val = String::from_utf8_lossy(&bytes[start..*pos]).to_string();
-    if *pos < bytes.len() {
+    let val: String = chars[start..*pos].iter().collect();
+    if *pos < chars.len() {
         *pos += 1; // skip closing quote
     }
     val
@@ -186,6 +315,7 @@ fn read_quoted_value(bytes: &[u8], pos: &mut usize) -> String {
 
 // ---------------------------------------------------------------------------
 // SCSS parser (minimal, hand-rolled)
+// SCSS identifiers are ASCII-only, so byte-level parsing is safe here.
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone)]
@@ -267,6 +397,22 @@ fn parse_scss(input: &str) -> HashMap<String, StyleRule> {
     styles
 }
 
+fn skip_whitespace(bytes: &[u8], pos: &mut usize) {
+    while *pos < bytes.len() && bytes[*pos].is_ascii_whitespace() {
+        *pos += 1;
+    }
+}
+
+fn read_identifier(bytes: &[u8], pos: &mut usize) -> String {
+    let start = *pos;
+    while *pos < bytes.len()
+        && (bytes[*pos].is_ascii_alphanumeric() || bytes[*pos] == b'_' || bytes[*pos] == b'-')
+    {
+        *pos += 1;
+    }
+    String::from_utf8_lossy(&bytes[start..*pos]).to_string()
+}
+
 fn read_css_identifier(bytes: &[u8], pos: &mut usize) -> String {
     let start = *pos;
     while *pos < bytes.len()
@@ -284,7 +430,6 @@ fn read_css_identifier(bytes: &[u8], pos: &mut usize) -> String {
 fn parse_hex_color(hex: &str) -> (u8, u8, u8) {
     let hex = hex.trim_start_matches('#');
     let hex = if hex.len() == 3 {
-        // Expand shorthand: #abc -> #aabbcc
         let mut expanded = String::with_capacity(6);
         for c in hex.chars() {
             expanded.push(c);
@@ -303,24 +448,88 @@ fn parse_hex_color(hex: &str) -> (u8, u8, u8) {
 
 // ---------------------------------------------------------------------------
 // Code generator: HTML + SCSS -> egui TokenStream
+// All functions return Result to propagate errors as compile_error! (Fix #3)
 // ---------------------------------------------------------------------------
 
 fn generate_egui_code(
     elements: &[HtmlElement],
     styles: &HashMap<String, StyleRule>,
-) -> proc_macro2::TokenStream {
-    let stmts: Vec<proc_macro2::TokenStream> =
-        elements.iter().map(|el| generate_element(el, styles)).collect();
-
-    quote! {
-        #( #stmts )*
+    has_self: bool,
+) -> Result<proc_macro2::TokenStream, String> {
+    let mut stmts = Vec::new();
+    for el in elements {
+        stmts.push(generate_element(el, styles, has_self)?);
     }
+
+    Ok(quote! {
+        #( #stmts )*
+    })
+}
+
+/// Build a token stream for the text content of an element.
+///
+/// If all segments are literals, produces a simple string literal.
+/// If there are expression segments (e.g. `{{ this.name }}`), produces a `format!()` call.
+/// Fields used in interpolation must implement `Display`.
+fn build_text_token_stream(
+    segments: &[TextSegment],
+    has_self: bool,
+) -> Result<Option<proc_macro2::TokenStream>, String> {
+    if segments.is_empty() {
+        return Ok(None);
+    }
+
+    let has_exprs = segments.iter().any(|s| matches!(s, TextSegment::Expr(_)));
+
+    if !has_exprs {
+        let full: String = segments
+            .iter()
+            .map(|s| match s {
+                TextSegment::Literal(l) => l.as_str(),
+                _ => "",
+            })
+            .collect();
+        if full.is_empty() {
+            return Ok(None);
+        }
+        return Ok(Some(quote! { #full }));
+    }
+
+    if !has_self {
+        return Err(
+            "Template uses {{ expr }} interpolation but `self` was not passed to den_template!. \
+             Use: den_template!(\"path\", self);"
+                .to_string(),
+        );
+    }
+
+    let mut fmt_string = String::new();
+    let mut fmt_args: Vec<proc_macro2::TokenStream> = Vec::new();
+
+    for seg in segments {
+        match seg {
+            TextSegment::Literal(lit) => {
+                let escaped = lit.replace('{', "{{").replace('}', "}}");
+                fmt_string.push_str(&escaped);
+            }
+            TextSegment::Expr(expr) => {
+                fmt_string.push_str("{}");
+                let expr_tokens: proc_macro2::TokenStream = expr
+                    .parse()
+                    .map_err(|e| format!("Invalid expression `{expr}`: {e}"))?;
+                fmt_args.push(expr_tokens);
+            }
+        }
+    }
+
+    Ok(Some(quote! { format!(#fmt_string, #( #fmt_args ),*) }))
 }
 
 fn generate_element(
     el: &HtmlElement,
     styles: &HashMap<String, StyleRule>,
-) -> proc_macro2::TokenStream {
+    has_self: bool,
+) -> Result<proc_macro2::TokenStream, String> {
     // Merge styles from all classes
     let mut color: Option<(u8, u8, u8)> = None;
     let mut font_size: Option<f32> = None;
@@ -349,20 +558,18 @@ fn generate_element(
     }
 
     // Generate children code
-    let children_code: Vec<proc_macro2::TokenStream> = el
-        .children
-        .iter()
-        .map(|child| generate_element(child, styles))
-        .collect();
+    let mut children_code = Vec::new();
+    for child in &el.children {
+        children_code.push(generate_element(child, styles, has_self)?);
+    }
 
-    // Build text widget with styles
-    let text = &el.text;
-    let has_text = !text.is_empty();
+    // Build text content from segments
+    let text_ts = build_text_token_stream(&el.segments, has_self)?;
     let has_children = !children_code.is_empty();
 
     // Build RichText with applied styles
-    let text_expr = if has_text {
-        let mut rt = quote! { egui::RichText::new(#text) };
+    let text_expr = if let Some(ts) = text_ts {
+        let mut rt = quote! { egui::RichText::new(#ts) };
         if let Some((r, g, b)) = color {
             rt = quote! { #rt.color(egui::Color32::from_rgb(#r, #g, #b)) };
         }
@@ -376,8 +583,6 @@ fn generate_element(
 
     // Generate based on tag
     let tag = el.tag.as_str();
-
-    // Wrap in frame if background or padding is set
     let needs_frame = background.is_some() || padding.is_some();
 
     let inner_code = match tag {
@@ -391,21 +596,19 @@ fn generate_element(
             }
         }
         _ => {
-            // Default: div, span, label, p, etc. -> ui.label or vertical group
+            // Fix #9: removed no-op empty element block
             let mut stmts = Vec::new();
             if let Some(rt) = text_expr {
                 stmts.push(quote! { ui.label(#rt); });
             }
-            if has_children {
-                for child in &children_code {
-                    stmts.push(child.clone());
-                }
+            for child in &children_code {
+                stmts.push(child.clone());
             }
             quote! { #( #stmts )* }
         }
     };
 
-    if needs_frame {
+    Ok(if needs_frame {
         let mut frame_expr = quote! { egui::Frame::default() };
         if let Some((r, g, b)) = background {
             frame_expr = quote! {
@@ -424,5 +627,5 @@ fn generate_element(
         }
     } else {
         inner_code
-    }
+    })
 }
