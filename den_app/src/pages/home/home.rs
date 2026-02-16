@@ -8,7 +8,7 @@ pub struct HomePage {
 impl Default for HomePage {
     fn default() -> Self {
         Self {
-            name: "Vini".to_string(),
+            name: "JOrge".to_string(),
             age: 25,
         }
     }

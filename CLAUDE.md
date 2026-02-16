@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What is Den
 
-Den is a Rust framework that compiles HTML + SCSS templates into native egui desktop GUI code at compile time via procedural macros. There is zero runtime template parsing — all processing happens during compilation.
+Den is a Rust framework that compiles HTML + SCSS templates into native egui desktop GUI code at compile time via procedural macros. Zero runtime template parsing — all processing happens during compilation.
 
 ## Build & Development Commands
 
@@ -13,16 +13,18 @@ cargo build                    # Build everything
 cargo run -p den_app           # Run the demo application
 cargo build -p den_macros      # Build only the proc macro crate
 cargo clippy                   # Lint
-make dev                       # Hot reload dev mode (watches den_app/src and den_macros/src)
+make dev                       # Hot reload dev mode (requires cargo-watch)
 ```
+
+`make dev` watches `den_app/src` and `den_macros/src`, excludes `den_macros/src/lib.rs` from triggers (to prevent rebuild loops), touches `lib.rs` to force recompilation, then runs the app.
 
 There are no tests currently.
 
 ## Architecture
 
-**Workspace structure**: Two crates in a Cargo workspace (resolver v3, edition 2024).
+**Workspace structure**: Two crates in a Cargo workspace (resolver v3, edition 2024, Rust 1.88+).
 
-- **`den_macros`** — Proc macro crate containing the entire compile-time pipeline in a single file (`src/lib.rs`). Exports `den_template!("path", self)`.
+- **`den_macros`** — Proc macro crate. Entire compile-time pipeline lives in a single file (`src/lib.rs`, ~2000 lines). Exports `den_template!`.
 - **`den_app`** — Example application using eframe/egui. Contains pages with `.html` + `.scss` template pairs.
 
 **Compile-time pipeline** (all in `den_macros/src/lib.rs`):
@@ -32,9 +34,32 @@ There are no tests currently.
 4. Styles merge onto elements by class name (last-wins for overlapping properties)
 5. Code generator emits egui Rust code via `quote!`
 
-**Template conventions**:
-- `{{ this.field }}` in HTML interpolates component state; `this` maps to `self` in generated code
-- SCSS properties map to egui APIs: `color` → `RichText::color()`, `font-size` → `RichText::size()`, `background` → `Frame::fill()`, `padding` → `Frame::inner_margin()`, `display: flex` → `ui.horizontal()`, `border` → `Frame::stroke()`, `border-radius` → `Frame::corner_radius()`, `width` → `ui.set_width()`
-- Supported HTML tags: `div`, `span`, `p`, `heading`/`h1`-`h3`
+All errors become `compile_error!` — users see IDE errors immediately.
 
-**Page pattern**: Each page is a struct with a `render(&self, ui: &mut egui::Ui)` method that calls `den_template!`. Pages live in `den_app/src/pages/<name>/` with `<name>.rs`, `<name>.html`, and `<name>.scss`.
+**Macro invocation**:
+- `den_template!("pages/home/home")` — without self, no interpolation or events
+- `den_template!("pages/home/home", self)` — with self, enables `{{ this.field }}` interpolation and `(click)` events
+
+**Template conventions**:
+- `{{ this.field }}` in HTML interpolates component state; `this` maps to `self` in generated code. Fields must implement `Display`. Using interpolation without `, self` in the macro call is a compile error.
+- `(click)="method_name()"` on any element binds a click event that calls `self.method_name()`. Requires `, self` in macro call.
+- SCSS `:hover` pseudo-selector is supported; uses egui's temp data store with deterministic element IDs for per-frame hover tracking.
+- Style inheritance: only `color` and `font-size` inherit from parent to child elements (not hover, not layout properties).
+
+**SCSS → egui property mapping**:
+
+| SCSS Property    | egui API                    | Values                           |
+|------------------|-----------------------------|----------------------------------|
+| `color`          | `RichText::color()`         | `#RRGGBB` or `#RGB`             |
+| `font-size`      | `RichText::size()`          | `24` or `24px`                   |
+| `background`     | `Frame::fill()`             | `#RRGGBB` or `#RGB`             |
+| `padding`        | `Frame::inner_margin()`     | `16` or `16px`                   |
+| `display: flex`  | `ui.horizontal()`           | only `flex` value supported      |
+| `border`         | `Frame::stroke()`           | `1px solid #RRGGBB`             |
+| `border-radius`  | `Frame::corner_radius()`    | `8` or `8px`                     |
+| `width`          | `ui.set_width()`            | `100%`, `50%`, `200px`, `auto`   |
+| `cursor: pointer`| `ctx.set_cursor_icon()`     | only in `:hover` blocks          |
+
+Supported HTML tags: `div`, `span`, `p`, `heading`/`h1`-`h3`. All map to `ui.label()` or `ui.heading()`.
+
+**Page pattern**: Each page is a struct with a `render(&mut self, ui: &mut egui::Ui)` method that calls `den_template!`. Pages live in `den_app/src/pages/<name>/` with `mod.rs`, `<name>.rs`, `<name>.html`, and `<name>.scss`. The `mod.rs` uses `#[allow(clippy::module_inception)]`.

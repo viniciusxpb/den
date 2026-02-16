@@ -382,6 +382,7 @@ struct StyleRule {
     border: Option<BorderStyle>,
     border_radius: Option<f32>,
     width: WidthValue,
+    cursor_pointer: bool,
     hover: Option<Box<StyleRule>>,
 }
 
@@ -396,6 +397,7 @@ impl StyleRule {
         if other.border.is_some() { self.border = other.border; }
         if other.border_radius.is_some() { self.border_radius = other.border_radius; }
         if other.width != WidthValue::Auto { self.width = other.width; }
+        if other.cursor_pointer { self.cursor_pointer = true; }
         if other.hover.is_some() { self.hover = other.hover.clone(); }
     }
 
@@ -553,6 +555,7 @@ fn parse_scss(input: &str) -> HashMap<String, StyleRule> {
                 "border" => rule.border = parse_border_value(&value),
                 "border-radius" => rule.border_radius = parse_size_value(&value),
                 "width" => rule.width = parse_width_value(&value),
+                "cursor" if value == "pointer" => rule.cursor_pointer = true,
                 _ => {}
             }
         }
@@ -892,6 +895,16 @@ fn generate_element(
                 hover_inner
             };
 
+            let cursor_code = if hovered_style.cursor_pointer {
+                quote! {
+                    if __den_is_hovered {
+                        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                    }
+                }
+            } else {
+                quote! {}
+            };
+
             quote! {
                 let __den_was_hovered = ui.data(|d| d.get_temp::<bool>(__den_id).unwrap_or(false));
                 let __den_scope = ui.scope(|ui| {
@@ -903,6 +916,7 @@ fn generate_element(
                 });
                 let __den_is_hovered = ui.rect_contains_pointer(__den_scope.response.rect);
                 ui.data_mut(|d| d.insert_temp(__den_id, __den_is_hovered));
+                #cursor_code
             }
         } else {
             // Click only, no hover — wrap in scope to capture rect
