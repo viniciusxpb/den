@@ -35,3 +35,19 @@ commit: ## Gera mensagem de commit com IA e commita
 	esac; \
 	git add -A && git commit -m "$$COMMIT_MSG" && \
 	echo "" && echo "\033[32mCommit criado com sucesso!\033[0m"
+
+push: ## Gera mensagem de commit com IA, commita e faz push
+	@git add -A
+	@DIFF=$$(git diff --cached); \
+	if [ -z "$$DIFF" ]; then \
+		echo "\033[33mNada para commitar.\033[0m"; \
+		exit 0; \
+	fi; \
+	MSG=$$(echo "$$DIFF" | claude -p --model haiku "Generate a short, descriptive commit message in English using conventional commit format (feat/fix/refactor/docs/chore: description). Max 72 chars. Return ONLY the message, no quotes, no explanation."); \
+	if [ -z "$$MSG" ]; then \
+		echo "\033[33mCould not generate message. Enter manually:\033[0m"; \
+		read -r MSG; \
+	fi; \
+	echo "\033[36mMessage:\033[0m $$MSG"; \
+	git commit -m "$$MSG"; \
+	git push -u origin HEAD
