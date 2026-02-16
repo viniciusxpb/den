@@ -26,9 +26,10 @@ pub fn den_template(input: TokenStream) -> TokenStream {
     let template_path = parsed.path.value();
     let has_self = parsed.has_self;
 
-    let manifest_dir =
-        std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
-    let base = std::path::Path::new(&manifest_dir).join("src").join(&template_path);
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
+    let base = std::path::Path::new(&manifest_dir)
+        .join("src")
+        .join(&template_path);
 
     let html_path = base.with_extension("html");
     let scss_path = base.with_extension("scss");
@@ -99,11 +100,32 @@ enum TextSegment {
 }
 
 #[derive(Debug)]
+enum TemplateNode {
+    Element(HtmlElement),
+    ForLoop(ForLoop),
+    IfChain(IfChain),
+}
+
+#[derive(Debug)]
+struct ForLoop {
+    each_var: String,
+    iterable_expr: String,
+    children: Vec<TemplateNode>,
+}
+
+#[derive(Debug)]
+struct IfChain {
+    condition: String,
+    then_children: Vec<TemplateNode>,
+    else_children: Vec<TemplateNode>,
+}
+
+#[derive(Debug)]
 struct HtmlElement {
     tag: String,
     classes: Vec<String>,
     segments: Vec<TextSegment>,
-    children: Vec<HtmlElement>,
+    children: Vec<TemplateNode>,
     on_click: Option<String>,
 }
 
@@ -173,11 +195,11 @@ fn parse_text_segments(raw: &str) -> Vec<TextSegment> {
 
 // All HTML parsing now operates on `Vec<char>` for proper UTF-8 support (Fix #5).
 
-fn parse_html(input: &str) -> Vec<HtmlElement> {
+fn parse_html(input: &str) -> Vec<TemplateNode> {
     let input = input.trim();
     let chars: Vec<char> = input.chars().collect();
     let mut pos = 0;
-    let mut elements = Vec::new();
+    let mut nodes = Vec::new();
 
     while pos < chars.len() {
         skip_ws(&chars, &mut pos);
@@ -185,14 +207,238 @@ fn parse_html(input: &str) -> Vec<HtmlElement> {
             break;
         }
         if chars[pos] == '<' {
-            if let Some(el) = parse_element_chars(&chars, &mut pos) {
-                elements.push(el);
+            if let Some(node) = parse_node(&chars, &mut pos) {
+                nodes.push(node);
             }
         } else {
             pos += 1;
         }
     }
-    elements
+    nodes
+}
+
+/// Peek at the tag name starting after '<' without advancing `pos`.
+fn peek_tag_name(chars: &[char], pos: usize) -> String {
+    let mut p = pos;
+    // skip '<'
+    if p < chars.len() && chars[p] == '<' {
+        p += 1;
+    }
+    while p < chars.len() && chars[p].is_ascii_whitespace() {
+        p += 1;
+    }
+    let start = p;
+    while p < chars.len()
+        && (chars[p].is_ascii_alphanumeric() || chars[p] == '_' || chars[p] == '-')
+    {
+        p += 1;
+    }
+    chars[start..p].iter().collect()
+}
+
+/// Dispatch to the appropriate parser based on tag name.
+fn parse_node(chars: &[char], pos: &mut usize) -> Option<TemplateNode> {
+    let tag = peek_tag_name(chars, *pos);
+    match tag.as_str() {
+        "for" => parse_for_node(chars, pos),
+        "if" => parse_if_node(chars, pos),
+        "else" => {
+            // Orphan <else> — should have been consumed by parse_if_node
+            eprintln!("Den: orphan <else> without preceding <if>, ignoring");
+            // Skip past the element
+            skip_past_closing_tag(chars, pos, "else");
+            None
+        }
+        _ => parse_element_chars(chars, pos).map(TemplateNode::Element),
+    }
+}
+
+/// Parse `<for each="var" in="expr">...children...</for>`
+fn parse_for_node(chars: &[char], pos: &mut usize) -> Option<TemplateNode> {
+    if chars[*pos] != '<' {
+        return None;
+    }
+    *pos += 1; // skip '<'
+    skip_ws(chars, pos);
+    let _tag = read_ident(chars, pos); // consume "for"
+
+    // Parse attributes: each="var" in="expr"
+    let mut each_var = None;
+    let mut in_expr = None;
+    skip_ws(chars, pos);
+    while *pos < chars.len() && chars[*pos] != '>' && chars[*pos] != '/' {
+        let attr_name = read_ident(chars, pos);
+        skip_ws(chars, pos);
+        if *pos < chars.len() && chars[*pos] == '=' {
+            *pos += 1; // skip '='
+            skip_ws(chars, pos);
+            let value = read_quoted(chars, pos);
+            match attr_name.as_str() {
+                "each" => each_var = Some(value),
+                "in" => in_expr = Some(map_this_to_self(&value)),
+                _ => eprintln!("Den: unknown attribute '{attr_name}' on <for>, ignoring"),
+            }
+        }
+        skip_ws(chars, pos);
+    }
+
+    // Skip '>'
+    if *pos < chars.len() && chars[*pos] == '>' {
+        *pos += 1;
+    }
+
+    let each_var = match each_var {
+        Some(v) => v,
+        None => {
+            eprintln!("Den: <for> missing 'each' attribute");
+            return None;
+        }
+    };
+    let iterable_expr = match in_expr {
+        Some(v) => v,
+        None => {
+            eprintln!("Den: <for> missing 'in' attribute");
+            return None;
+        }
+    };
+
+    // Parse children until </for>
+    let children = parse_children_nodes(chars, pos);
+
+    Some(TemplateNode::ForLoop(ForLoop {
+        each_var,
+        iterable_expr,
+        children,
+    }))
+}
+
+/// Parse `<if cond="expr">...children...</if>` optionally followed by `<else>...children...</else>`
+fn parse_if_node(chars: &[char], pos: &mut usize) -> Option<TemplateNode> {
+    if chars[*pos] != '<' {
+        return None;
+    }
+    *pos += 1; // skip '<'
+    skip_ws(chars, pos);
+    let _tag = read_ident(chars, pos); // consume "if"
+
+    // Parse attributes: cond="expr"
+    let mut condition = None;
+    skip_ws(chars, pos);
+    while *pos < chars.len() && chars[*pos] != '>' && chars[*pos] != '/' {
+        let attr_name = read_ident(chars, pos);
+        skip_ws(chars, pos);
+        if *pos < chars.len() && chars[*pos] == '=' {
+            *pos += 1; // skip '='
+            skip_ws(chars, pos);
+            let value = read_quoted(chars, pos);
+            match attr_name.as_str() {
+                "cond" => condition = Some(map_this_to_self(&value)),
+                _ => eprintln!("Den: unknown attribute '{attr_name}' on <if>, ignoring"),
+            }
+        }
+        skip_ws(chars, pos);
+    }
+
+    // Skip '>'
+    if *pos < chars.len() && chars[*pos] == '>' {
+        *pos += 1;
+    }
+
+    let condition = match condition {
+        Some(v) => v,
+        None => {
+            eprintln!("Den: <if> missing 'cond' attribute");
+            return None;
+        }
+    };
+
+    // Parse then-children until </if>
+    let then_children = parse_children_nodes(chars, pos);
+
+    // Peek ahead for <else>
+    let else_children = {
+        let saved_pos = *pos;
+        skip_ws(chars, pos);
+        if *pos < chars.len() && chars[*pos] == '<' {
+            let tag = peek_tag_name(chars, *pos);
+            if tag == "else" {
+                // Consume <else>...</else>
+                *pos += 1; // skip '<'
+                skip_ws(chars, pos);
+                let _tag = read_ident(chars, pos); // consume "else"
+                skip_ws(chars, pos);
+                // Skip '>'
+                if *pos < chars.len() && chars[*pos] == '>' {
+                    *pos += 1;
+                }
+                parse_children_nodes(chars, pos)
+            } else {
+                *pos = saved_pos;
+                Vec::new()
+            }
+        } else {
+            *pos = saved_pos;
+            Vec::new()
+        }
+    };
+
+    Some(TemplateNode::IfChain(IfChain {
+        condition,
+        then_children,
+        else_children,
+    }))
+}
+
+/// Parse child nodes until a closing tag is encountered (e.g. `</for>`, `</if>`, `</div>`).
+fn parse_children_nodes(chars: &[char], pos: &mut usize) -> Vec<TemplateNode> {
+    let mut children = Vec::new();
+    while *pos < chars.len() {
+        if chars[*pos] == '<' {
+            if *pos + 1 < chars.len() && chars[*pos + 1] == '/' {
+                // Closing tag — skip past '>'
+                while *pos < chars.len() && chars[*pos] != '>' {
+                    *pos += 1;
+                }
+                if *pos < chars.len() {
+                    *pos += 1; // skip '>'
+                }
+                break;
+            } else if let Some(node) = parse_node(chars, pos) {
+                children.push(node);
+            }
+        } else {
+            *pos += 1;
+        }
+    }
+    children
+}
+
+/// Skip past a closing tag like `</tagname>`.
+fn skip_past_closing_tag(chars: &[char], pos: &mut usize, _tag: &str) {
+    // Skip the opening '<'
+    if *pos < chars.len() && chars[*pos] == '<' {
+        *pos += 1;
+    }
+    // Skip tag name and attributes
+    while *pos < chars.len() && chars[*pos] != '>' {
+        *pos += 1;
+    }
+    if *pos < chars.len() {
+        *pos += 1; // skip '>'
+    }
+    // Now skip children until closing tag
+    while *pos < chars.len() {
+        if chars[*pos] == '<' && *pos + 1 < chars.len() && chars[*pos + 1] == '/' {
+            while *pos < chars.len() && chars[*pos] != '>' {
+                *pos += 1;
+            }
+            if *pos < chars.len() {
+                *pos += 1; // skip '>'
+            }
+            return;
+        }
+        *pos += 1;
+    }
 }
 
 fn parse_element_chars(chars: &[char], pos: &mut usize) -> Option<HtmlElement> {
@@ -281,8 +527,8 @@ fn parse_element_chars(chars: &[char], pos: &mut usize) -> Option<HtmlElement> {
                     *pos += 1; // skip '>'
                 }
                 break;
-            } else if let Some(child) = parse_element_chars(chars, pos) {
-                children.push(child);
+            } else if let Some(node) = parse_node(chars, pos) {
+                children.push(node);
             }
         } else {
             raw_text.push(chars[*pos]);
@@ -360,7 +606,10 @@ struct BorderStyle {
 
 impl Default for BorderStyle {
     fn default() -> Self {
-        Self { width: 1.0, color: (0, 0, 0) }
+        Self {
+            width: 1.0,
+            color: (0, 0, 0),
+        }
     }
 }
 
@@ -389,21 +638,44 @@ struct StyleRule {
 impl StyleRule {
     /// Merge another rule into this one (last-wins for set properties).
     fn merge_from(&mut self, other: &Self) {
-        if other.color.is_some() { self.color = other.color; }
-        if other.font_size.is_some() { self.font_size = other.font_size; }
-        if other.background.is_some() { self.background = other.background; }
-        if other.padding.is_some() { self.padding = other.padding; }
-        if other.display != DisplayMode::Block { self.display = other.display; }
-        if other.border.is_some() { self.border = other.border; }
-        if other.border_radius.is_some() { self.border_radius = other.border_radius; }
-        if other.width != WidthValue::Auto { self.width = other.width; }
-        if other.cursor_pointer { self.cursor_pointer = true; }
-        if other.hover.is_some() { self.hover = other.hover.clone(); }
+        if other.color.is_some() {
+            self.color = other.color;
+        }
+        if other.font_size.is_some() {
+            self.font_size = other.font_size;
+        }
+        if other.background.is_some() {
+            self.background = other.background;
+        }
+        if other.padding.is_some() {
+            self.padding = other.padding;
+        }
+        if other.display != DisplayMode::Block {
+            self.display = other.display;
+        }
+        if other.border.is_some() {
+            self.border = other.border;
+        }
+        if other.border_radius.is_some() {
+            self.border_radius = other.border_radius;
+        }
+        if other.width != WidthValue::Auto {
+            self.width = other.width;
+        }
+        if other.cursor_pointer {
+            self.cursor_pointer = true;
+        }
+        if other.hover.is_some() {
+            self.hover = other.hover.clone();
+        }
     }
 
     /// Whether this resolved style requires an egui Frame wrapper.
     fn needs_frame(&self) -> bool {
-        self.background.is_some() || self.padding.is_some() || self.border.is_some() || self.border_radius.is_some()
+        self.background.is_some()
+            || self.padding.is_some()
+            || self.border.is_some()
+            || self.border_radius.is_some()
     }
 
     /// Extract only inheritable CSS properties (color, font-size) for propagation to children.
@@ -540,7 +812,9 @@ fn parse_scss(input: &str) -> HashMap<String, StyleRule> {
             while pos < bytes.len() && bytes[pos] != b';' && bytes[pos] != b'}' {
                 pos += 1;
             }
-            let value = String::from_utf8_lossy(&bytes[start..pos]).trim().to_string();
+            let value = String::from_utf8_lossy(&bytes[start..pos])
+                .trim()
+                .to_string();
 
             if pos < bytes.len() && bytes[pos] == b';' {
                 pos += 1; // skip ';'
@@ -569,7 +843,10 @@ fn parse_scss(input: &str) -> HashMap<String, StyleRule> {
                 eprintln!("Den: unsupported pseudo-selector ':{p}', ignoring");
             }
             None => {
-                styles.entry(class_name).or_insert_with(StyleRule::default).merge_from(&rule);
+                styles
+                    .entry(class_name)
+                    .or_insert_with(StyleRule::default)
+                    .merge_from(&rule);
             }
         }
     }
@@ -637,21 +914,175 @@ fn parse_hex_color(hex: &str) -> Option<RgbColor> {
 // ---------------------------------------------------------------------------
 
 fn generate_egui_code(
-    elements: &[HtmlElement],
+    nodes: &[TemplateNode],
     styles: &HashMap<String, StyleRule>,
     has_self: bool,
     template_path: &str,
 ) -> Result<proc_macro2::TokenStream, String> {
     let inherited = StyleRule::default();
     let mut stmts = Vec::new();
-    for (i, el) in elements.iter().enumerate() {
+    for (i, node) in nodes.iter().enumerate() {
         let mut path = vec![i];
-        stmts.push(generate_element(el, styles, has_self, &inherited, template_path, &mut path)?);
+        stmts.push(generate_node(
+            node,
+            styles,
+            has_self,
+            &inherited,
+            template_path,
+            &mut path,
+            0,
+        )?);
     }
 
     Ok(quote! {
         #( #stmts )*
     })
+}
+
+/// Dispatch code generation based on node type.
+fn generate_node(
+    node: &TemplateNode,
+    styles: &HashMap<String, StyleRule>,
+    has_self: bool,
+    inherited: &StyleRule,
+    template_path: &str,
+    tree_path: &mut Vec<usize>,
+    loop_depth: usize,
+) -> Result<proc_macro2::TokenStream, String> {
+    match node {
+        TemplateNode::Element(el) => generate_element(
+            el,
+            styles,
+            has_self,
+            inherited,
+            template_path,
+            tree_path,
+            loop_depth,
+        ),
+        TemplateNode::ForLoop(fl) => generate_for_loop(
+            fl,
+            styles,
+            has_self,
+            inherited,
+            template_path,
+            tree_path,
+            loop_depth,
+        ),
+        TemplateNode::IfChain(ic) => generate_if_chain(
+            ic,
+            styles,
+            has_self,
+            inherited,
+            template_path,
+            tree_path,
+            loop_depth,
+        ),
+    }
+}
+
+/// Generate code for `<for each="var" in="expr">...children...</for>`.
+fn generate_for_loop(
+    fl: &ForLoop,
+    styles: &HashMap<String, StyleRule>,
+    has_self: bool,
+    inherited: &StyleRule,
+    template_path: &str,
+    tree_path: &mut Vec<usize>,
+    loop_depth: usize,
+) -> Result<proc_macro2::TokenStream, String> {
+    let var_ident: proc_macro2::TokenStream = fl
+        .each_var
+        .parse()
+        .map_err(|e| format!("Invalid loop variable '{}': {e}", fl.each_var))?;
+    let iter_expr: proc_macro2::TokenStream = fl
+        .iterable_expr
+        .parse()
+        .map_err(|e| format!("Invalid iterable expression '{}': {e}", fl.iterable_expr))?;
+
+    let idx_ident: proc_macro2::TokenStream = format!("__den_idx_{loop_depth}").parse().unwrap();
+
+    let mut children_code = Vec::new();
+    for (i, child) in fl.children.iter().enumerate() {
+        tree_path.push(i);
+        children_code.push(generate_node(
+            child,
+            styles,
+            has_self,
+            inherited,
+            template_path,
+            tree_path,
+            loop_depth + 1,
+        )?);
+        tree_path.pop();
+    }
+
+    Ok(quote! {
+        for (#idx_ident, #var_ident) in (#iter_expr).iter().enumerate() {
+            #( #children_code )*
+        }
+    })
+}
+
+/// Generate code for `<if cond="expr">...then...</if>` with optional `<else>...else...</else>`.
+fn generate_if_chain(
+    ic: &IfChain,
+    styles: &HashMap<String, StyleRule>,
+    has_self: bool,
+    inherited: &StyleRule,
+    template_path: &str,
+    tree_path: &mut Vec<usize>,
+    loop_depth: usize,
+) -> Result<proc_macro2::TokenStream, String> {
+    let cond_expr: proc_macro2::TokenStream = ic
+        .condition
+        .parse()
+        .map_err(|e| format!("Invalid condition '{}': {e}", ic.condition))?;
+
+    let mut then_code = Vec::new();
+    for (i, child) in ic.then_children.iter().enumerate() {
+        tree_path.push(i);
+        then_code.push(generate_node(
+            child,
+            styles,
+            has_self,
+            inherited,
+            template_path,
+            tree_path,
+            loop_depth,
+        )?);
+        tree_path.pop();
+    }
+
+    if ic.else_children.is_empty() {
+        Ok(quote! {
+            if #cond_expr {
+                #( #then_code )*
+            }
+        })
+    } else {
+        let mut else_code = Vec::new();
+        for (i, child) in ic.else_children.iter().enumerate() {
+            tree_path.push(i);
+            else_code.push(generate_node(
+                child,
+                styles,
+                has_self,
+                inherited,
+                template_path,
+                tree_path,
+                loop_depth,
+            )?);
+            tree_path.pop();
+        }
+
+        Ok(quote! {
+            if #cond_expr {
+                #( #then_code )*
+            } else {
+                #( #else_code )*
+            }
+        })
+    }
 }
 
 /// Generate a deterministic ID for a hover element based on template path,
@@ -771,6 +1202,7 @@ fn generate_element(
     inherited: &StyleRule,
     template_path: &str,
     tree_path: &mut Vec<usize>,
+    loop_depth: usize,
 ) -> Result<proc_macro2::TokenStream, String> {
     // Start from inherited styles, then merge this element's own classes on top
     let mut resolved = inherited.inheritable();
@@ -785,7 +1217,15 @@ fn generate_element(
     let mut children_code = Vec::new();
     for (i, child) in el.children.iter().enumerate() {
         tree_path.push(i);
-        children_code.push(generate_element(child, styles, has_self, &child_inherited, template_path, tree_path)?);
+        children_code.push(generate_node(
+            child,
+            styles,
+            has_self,
+            &child_inherited,
+            template_path,
+            tree_path,
+            loop_depth,
+        )?);
         tree_path.pop();
     }
 
@@ -799,9 +1239,7 @@ fn generate_element(
                        children_code: &[proc_macro2::TokenStream],
                        tag: &str|
      -> proc_macro2::TokenStream {
-        let text_expr = text_ts
-            .as_ref()
-            .map(|ts| build_rich_text_expr(ts, style));
+        let text_expr = text_ts.as_ref().map(|ts| build_rich_text_expr(ts, style));
 
         let inner = match tag {
             "heading" | "h1" | "h2" | "h3" => {
@@ -950,9 +1388,21 @@ fn generate_element(
             quote! {}
         };
 
+        let id_expr = if loop_depth > 0 {
+            // Inside a loop: XOR compile-time hash with runtime loop indices for uniqueness
+            let mut salt = quote! { 0u64 };
+            for d in 0..loop_depth {
+                let idx: proc_macro2::TokenStream = format!("__den_idx_{d}").parse().unwrap();
+                salt = quote! { (#salt).wrapping_mul(31).wrapping_add(#idx as u64) };
+            }
+            quote! { egui::Id::new(#element_id ^ #salt) }
+        } else {
+            quote! { egui::Id::new(#element_id) }
+        };
+
         Ok(quote! {
             {
-                let __den_id = egui::Id::new(#element_id);
+                let __den_id = #id_expr;
                 #render_code
                 #click_code
             }

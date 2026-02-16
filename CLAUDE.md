@@ -46,6 +46,12 @@ All errors become `compile_error!` — users see IDE errors immediately.
 - SCSS `:hover` pseudo-selector is supported; uses egui's temp data store with deterministic element IDs for per-frame hover tracking.
 - Style inheritance: only `color` and `font-size` inherit from parent to child elements (not hover, not layout properties).
 
+**Control flow**:
+- `<for each="item" in="this.items">...children...</for>` — iterates over a collection. Generates `for (idx, item) in self.items.iter().enumerate()`. The loop variable (`item`) is available in `{{ item }}` or `{{ item.field }}` inside the body. Hover/click elements inside loops get unique IDs per iteration via runtime index salting.
+- `<if cond="this.flag">...then...</if>` — conditional rendering. Generates `if self.flag { ... }`.
+- `<if>` can be followed by `<else>...children...</else>` for if/else branching.
+- Both `<for>` and `<if>` are transparent for styling — they pass inherited styles through to children unchanged.
+
 **SCSS → egui property mapping**:
 
 | SCSS Property    | egui API                    | Values                           |
