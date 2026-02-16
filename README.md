@@ -115,14 +115,89 @@ ui.label(
 
 Zero runtime cost. The template is gone after compilation — it's just egui calls.
 
+## Features
+
+### Data Interpolation
+
+Use `{{ this.field }}` to bind component state into your templates. Fields must implement `Display`.
+
+```html
+<div class="greeting">Hello {{ this.name }}, you are {{ this.age }} years old!</div>
+```
+
+```rust
+pub struct HomePage {
+    pub name: String,
+    pub age: u32,
+}
+
+impl HomePage {
+    pub fn render(&mut self, ui: &mut egui::Ui) {
+        den_macros::den_template!("pages/home/home", self);
+    }
+}
+```
+
+### Event Binding
+
+Bind click events with `(click)="method_name()"`:
+
+```html
+<div class="button" (click)="on_button_click()">Click me</div>
+```
+
+### Conditional Rendering
+
+Use `<if>` and `<else>` for conditional UI:
+
+```html
+<if cond="this.logged_in">
+    <div class="welcome">Welcome back!</div>
+</if>
+<else>
+    <div class="login-prompt">Please log in.</div>
+</else>
+```
+
+### Loop Rendering
+
+Use `<for>` to iterate over collections:
+
+```html
+<for each="item" in="this.items">
+    <div class="item">{{ item }}</div>
+</for>
+```
+
+### Hover States
+
+SCSS `:hover` pseudo-selector works out of the box:
+
+```scss
+.button {
+    background: #16213e;
+    padding: 8;
+}
+
+.button:hover {
+    background: #e94560;
+    cursor: pointer;
+}
+```
+
 ## Supported Properties
 
-| SCSS Property | Maps To                          | Example          |
-|---------------|----------------------------------|------------------|
-| `color`       | `RichText::color()`              | `#e94560`        |
-| `font-size`   | `RichText::size()`               | `24` or `24px`   |
-| `background`  | `Frame::fill()`                  | `#1a1a2e`        |
-| `padding`     | `Frame::inner_margin()`          | `16` or `16px`   |
+| SCSS Property    | Maps To                    | Example              |
+|------------------|----------------------------|----------------------|
+| `color`          | `RichText::color()`        | `#e94560`            |
+| `font-size`      | `RichText::size()`         | `24` or `24px`       |
+| `background`     | `Frame::fill()`            | `#1a1a2e`            |
+| `padding`        | `Frame::inner_margin()`    | `16` or `16px`       |
+| `display: flex`  | `ui.horizontal()`          | `display: flex`      |
+| `border`         | `Frame::stroke()`          | `1px solid #e94560`  |
+| `border-radius`  | `Frame::corner_radius()`   | `8` or `8px`         |
+| `width`          | `ui.set_width()`           | `100%`, `200px`      |
+| `cursor: pointer`| `CursorIcon::PointingHand` | in `:hover` blocks   |
 
 ## Supported HTML Tags
 
@@ -130,18 +205,22 @@ Zero runtime cost. The template is gone after compilation — it's just egui cal
 |------------------------------|------------------|
 | `<div>`, `<span>`, `<p>`    | `ui.label()`     |
 | `<heading>`, `<h1>`–`<h3>`  | `ui.heading()`   |
+| `<for>`                      | `for` loop       |
+| `<if>` / `<else>`           | `if` / `else`    |
 
 ## Roadmap
 
-Den is in early prototype stage. Here's what's coming:
+Den is in early prototype stage. Here's what's done and what's coming:
 
+- [x] `{{ this.field }}` data interpolation
+- [x] `(click)="method()"` event binding
+- [x] `:hover` pseudo-selector with cursor support
+- [x] `display: flex`, `border`, `border-radius`, `width` CSS properties
+- [x] `<for each="item" in="this.list">` loop rendering
+- [x] `<if cond="this.flag">` / `<else>` conditional rendering
 - [ ] `<horizontal>` and `<vertical>` layout containers
-- [ ] `<button on:click="self.method()">` event binding
-- [ ] `{{ self.field }}` data interpolation
-- [ ] `<input bind="self.field" />` two-way data binding
+- [ ] `<input bind="this.field" />` two-way data binding
 - [ ] Nested SCSS selectors (`.parent { .child { } }`)
-- [ ] `<for item in="self.list">` loop rendering
-- [ ] `<if cond="self.flag">` conditional rendering
 - [ ] Component system with props
 - [ ] Hot reload in development
 
