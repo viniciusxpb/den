@@ -16,6 +16,13 @@ pub fn generate_element(
     if el.bind_expr.is_some() {
         return generate_input_element(el, ctx);
     }
+    if el.tag == "input" {
+        return Err(
+            "Den: <input> requires a bind attribute. \
+             Use: <input bind=\"self.field\" />"
+                .to_string(),
+        );
+    }
 
     let visual = &el.visual;
 

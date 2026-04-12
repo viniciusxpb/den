@@ -20,6 +20,15 @@ pub fn generate_input_element(
         );
     }
 
+    // (click) em <input> não é suportado em v1
+    if el.on_click.is_some() {
+        return Err(
+            "Den: <input> does not support (click) events in v1. \
+             Use the bind attribute for two-way data binding."
+                .to_string(),
+        );
+    }
+
     let bind_expr = el.bind_expr.as_ref().unwrap(); // safe: caller verificou is_some()
     let visual = &el.visual;
 
@@ -88,8 +97,8 @@ pub fn generate_input_element(
     };
 
     // Filho Auto de flex: limita largura ao share calculado pelo pai
-    let prev_parent_is_flex = ctx.parent_is_flex;
-    if prev_parent_is_flex && visual.width == WidthValue::Auto {
+    let is_flex_auto_child = ctx.parent_is_flex && visual.width == WidthValue::Auto;
+    if is_flex_auto_child {
         return Ok(quote! {
             ui.allocate_ui_with_layout(
                 egui::vec2(__den_flex_share, ui.available_height()),
