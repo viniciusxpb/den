@@ -203,43 +203,32 @@ impl DenVisual {
         self.hover_override.is_some()
     }
 
+    /// Merge outro visual neste (last-wins pra propriedades definidas).
+    /// Ponto único de merge — adicionar nova propriedade CSS aqui só.
+    pub fn merge_from(&mut self, other: &Self) {
+        if other.color.is_some() { self.color = other.color; }
+        if other.font_size.is_some() { self.font_size = other.font_size; }
+        if other.background.is_some() { self.background = other.background; }
+        if other.padding.is_some() { self.padding = other.padding; }
+        if other.display != DisplayMode::Block { self.display = other.display; }
+        if other.border.is_some() { self.border = other.border; }
+        if other.border_radius.is_some() { self.border_radius = other.border_radius; }
+        if other.width != WidthValue::Auto { self.width = other.width; }
+        if other.cursor_pointer { self.cursor_pointer = true; }
+    }
+
     /// Resolve o visual final em estado hover (base + overrides).
     pub fn resolve_hover(&self) -> Self {
         let mut hovered = self.clone();
         if let Some(h) = &self.hover_override {
-            if h.color.is_some() {
-                hovered.color = h.color;
-            }
-            if h.font_size.is_some() {
-                hovered.font_size = h.font_size;
-            }
-            if h.background.is_some() {
-                hovered.background = h.background;
-            }
-            if h.padding.is_some() {
-                hovered.padding = h.padding;
-            }
-            if h.display != DisplayMode::Block {
-                hovered.display = h.display;
-            }
-            if h.border.is_some() {
-                hovered.border = h.border;
-            }
-            if h.border_radius.is_some() {
-                hovered.border_radius = h.border_radius;
-            }
-            if h.width != WidthValue::Auto {
-                hovered.width = h.width;
-            }
-            if h.cursor_pointer {
-                hovered.cursor_pointer = true;
-            }
+            hovered.merge_from(h);
         }
         hovered.hover_override = None;
         hovered
     }
 
     /// Extrai só propriedades herdáveis pra propagar pros filhos.
+    #[allow(dead_code)] // PENDING.md — usado pelo scale system futuro
     pub fn inheritable(&self) -> Self {
         Self {
             color: self.color,

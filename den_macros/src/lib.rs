@@ -9,7 +9,7 @@ use proc_macro::TokenStream;
 /// Macro que carrega um par de templates HTML + SCSS e gera código egui.
 ///
 /// Uso:
-/// ```rust
+/// ```rust,ignore
 /// // Sem data binding:
 /// den_template!("pages/home/home");
 ///

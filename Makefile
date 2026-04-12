@@ -1,4 +1,5 @@
-.PHONY: dev review commit push help
+.DEFAULT_GOAL := help
+.PHONY: dev review yoink commit push help
 
 dev: ## Hot reload (requires cargo-watch)
 	cargo watch -w den_app/src -w den_macros/src -i den_macros/src/lib.rs \
@@ -7,6 +8,10 @@ dev: ## Hot reload (requires cargo-watch)
 review: ## Copia diff + prompt de code review para o clipboard
 	@{ printf 'Antes de tudo procure boas práticas para Rust e egui, depois encarne um dev Rust sênior. Faça um code review das alterações abaixo de uma aplicação que usa proc macros para compilar HTML + SCSS em código egui nativo em compile time. Seja chato com: magic numbers, variáveis sem nome descritivo, unwrap() sem justificativa, e warnings do clippy.\n\n'; git diff HEAD; } | xclip -selection clipboard
 	@printf '\033[32mDiff copiado para o clipboard com prompt de review.\033[0m\n'
+
+yoink: ## Copia o diff do último commit para o clipboard
+	@git diff HEAD~1 HEAD | xclip -selection clipboard
+	@printf '\033[32mDiff do último commit copiado.\033[0m\n'
 
 commit: ## Gera mensagem de commit com IA e commita (interativo)
 	@git diff --quiet HEAD && git diff --cached --quiet && [ -z "$$(git ls-files --others --exclude-standard)" ] \

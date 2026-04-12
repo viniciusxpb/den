@@ -19,3 +19,31 @@ pub fn parse_hex_color(hex: &str) -> Option<RgbColor> {
     let b = u8::from_str_radix(&expanded[4..6], 16).ok()?;
     Some((r, g, b))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_rrggbb() {
+        assert_eq!(parse_hex_color("#e94560"), Some((233, 69, 96)));
+    }
+
+    #[test]
+    fn parses_rgb_shorthand() {
+        assert_eq!(parse_hex_color("#fff"), Some((255, 255, 255)));
+        assert_eq!(parse_hex_color("#000"), Some((0, 0, 0)));
+        assert_eq!(parse_hex_color("#f0a"), Some((255, 0, 170)));
+    }
+
+    #[test]
+    fn parses_without_hash() {
+        assert_eq!(parse_hex_color("ff0000"), Some((255, 0, 0)));
+    }
+
+    #[test]
+    fn returns_none_on_invalid() {
+        assert_eq!(parse_hex_color("#zzzzzz"), None);
+        assert_eq!(parse_hex_color("#12"), None);
+    }
+}

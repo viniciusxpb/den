@@ -59,3 +59,74 @@ pub fn parse_text_segments(raw: &str) -> Vec<TextSegment> {
     }
     segments
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- map_this_to_self ---
+
+    #[test]
+    fn maps_this_dot_field() {
+        assert_eq!(map_this_to_self("this.name"), "self.name");
+    }
+
+    #[test]
+    fn maps_bare_this() {
+        assert_eq!(map_this_to_self("this"), "self");
+    }
+
+    #[test]
+    fn does_not_map_this_prefix_in_ident() {
+        assert_eq!(map_this_to_self("this_value"), "this_value");
+    }
+
+    #[test]
+    fn does_not_map_this_suffix_in_ident() {
+        assert_eq!(map_this_to_self("not_this"), "not_this");
+    }
+
+    #[test]
+    fn maps_this_in_expression() {
+        assert_eq!(map_this_to_self("this.items.len()"), "self.items.len()");
+    }
+
+    // --- parse_text_segments ---
+
+    #[test]
+    fn pure_literal() {
+        let segs = parse_text_segments("hello world");
+        assert!(matches!(&segs[..], [TextSegment::Literal(s)] if s == "hello world"));
+    }
+
+    #[test]
+    fn pure_expression() {
+        let segs = parse_text_segments("{{ this.name }}");
+        assert!(matches!(&segs[..], [TextSegment::Expr(e)] if e == "self.name"));
+    }
+
+    #[test]
+    fn literal_then_expr() {
+        let segs = parse_text_segments("Hello, {{ this.name }}!");
+        assert_eq!(segs.len(), 3);
+        assert!(matches!(&segs[0], TextSegment::Literal(s) if s == "Hello, "));
+        assert!(matches!(&segs[1], TextSegment::Expr(e) if e == "self.name"));
+        assert!(matches!(&segs[2], TextSegment::Literal(s) if s == "!"));
+    }
+
+    #[test]
+    fn multiple_expressions() {
+        let segs = parse_text_segments("{{ this.a }} - {{ this.b }}");
+        assert_eq!(segs.len(), 3);
+        assert!(matches!(&segs[0], TextSegment::Expr(e) if e == "self.a"));
+        assert!(matches!(&segs[1], TextSegment::Literal(s) if s == " - "));
+        assert!(matches!(&segs[2], TextSegment::Expr(e) if e == "self.b"));
+    }
+
+    #[test]
+    fn unclosed_braces_treated_as_literal() {
+        let segs = parse_text_segments("{{ oops");
+        assert_eq!(segs.len(), 1);
+        assert!(matches!(&segs[0], TextSegment::Literal(_)));
+    }
+}
