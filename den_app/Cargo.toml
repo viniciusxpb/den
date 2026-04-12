@@ -11,6 +11,10 @@ path = "src/main.rs"
 name = "preview"
 path = "src/bin/preview.rs"
 
+[[bin]]
+name = "style_editor"
+path = "src/bin/style_editor.rs"
+
 [dependencies]
 den_macros = { path = "../den_macros" }
 eframe = "0.33"
