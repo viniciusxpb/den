@@ -43,6 +43,8 @@ pub const PORT_GLOW_OFFSET: f32 = 2.0;
 pub const PORT_GLOW_STROKE: f32 = 0.5;
 pub const PORT_GLOW_OPACITY: f32 = 0.3;
 pub const PORT_FILL_OPACITY: f32 = 0.9;
+/// Raio da área clicável dos ports (maior que o visual pra facilitar o clique).
+pub const PORT_HIT_RADIUS: f32 = 12.0;
 pub const PORT_LABEL_OFFSET_Y: f32 = 4.0;
 
 // -- Fields ---------------------------------------------------------------

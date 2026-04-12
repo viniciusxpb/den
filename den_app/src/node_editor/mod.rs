@@ -14,6 +14,7 @@ impl NodeEditorCanvas {
             wires: demo::demo_wires(),
             scale: 1.0,
             drag: None,
+            wire_drag: None,
         }
     }
 }

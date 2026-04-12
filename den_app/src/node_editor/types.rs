@@ -11,6 +11,17 @@ pub struct DragState {
     pub offset: egui::Vec2,
 }
 
+/// Estado de um wire drag em andamento (arraste de port → cursor).
+#[derive(Debug)]
+pub struct WireDragState {
+    /// Id do node de origem.
+    pub from_node_id: String,
+    /// Nome do port de saída sendo arrastado.
+    pub from_port_name: String,
+    /// Tipo do port (determina a cor da bezier temporária).
+    pub port_type: PortType,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PortType {
     Exec,
