@@ -400,6 +400,9 @@ fn write_back(file: &mut ScssFile) {
 
     match std::fs::write(&file.path, &content) {
         Ok(()) => {
+            // Re-parseia pra atualizar os byte offsets com base no conteúdo novo.
+            // Sem isso, uma segunda edição usa offsets do conteúdo anterior → panic.
+            file.classes = parse_scss_for_editing(&content);
             file.raw_content = content;
             file.dirty = false;
         }
