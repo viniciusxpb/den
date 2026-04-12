@@ -43,8 +43,33 @@ fn peek_tag_name(chars: &[char], pos: usize) -> String {
     chars[start..p].iter().collect()
 }
 
+/// Salta um comentário HTML `<!-- ... -->`, avançando `pos` até após `-->`.
+fn skip_comment(chars: &[char], pos: &mut usize) {
+    // pos está em '<'; pula '<!--'
+    *pos += 4;
+    while *pos + 2 < chars.len() {
+        if chars[*pos] == '-' && chars[*pos + 1] == '-' && chars[*pos + 2] == '>' {
+            *pos += 3;
+            return;
+        }
+        *pos += 1;
+    }
+    *pos = chars.len(); // sem fechamento: consome o resto
+}
+
 /// Dispatch para o parser correto baseado no nome da tag.
 fn parse_node(chars: &[char], pos: &mut usize) -> Option<RawNode> {
+    // Salta comentários HTML <!-- ... -->
+    if *pos + 3 < chars.len()
+        && chars[*pos] == '<'
+        && chars[*pos + 1] == '!'
+        && chars[*pos + 2] == '-'
+        && chars[*pos + 3] == '-'
+    {
+        skip_comment(chars, pos);
+        return None;
+    }
+
     let tag = peek_tag_name(chars, *pos);
     match tag.as_str() {
         "for" => parse_for_node(chars, pos),
