@@ -8,8 +8,7 @@
     font-size: 20;
 }
 
-.display__flex{
-    color: #FFFFFF;
+.display__flex {
     display: flex;
     border: 1px solid #000000;
     border-radius: 8;
@@ -22,10 +21,66 @@
     border: 1px solid #16213e;
     border-radius: 4;
     padding: 8;
+    color: #ffffff;
 }
 
 .button:hover {
     background: #e94560;
     border: 1px solid #e94560;
     cursor: pointer;
+}
+
+.section-dark {
+    background: #0f3460;
+    padding: 16;
+    border-radius: 8;
+    width: 100%;
+}
+
+.section-light {
+    background: #f0f0f0;
+    padding: 16;
+    border-radius: 8;
+    width: 100%;
+}
+
+.section-title {
+    color: #ffffff;
+    font-size: 22;
+}
+
+.section-title-dark {
+    color: #0f3460;
+    font-size: 22;
+}
+
+.card {
+    background: #16213e;
+    border: 1px solid #e94560;
+    border-radius: 6;
+    padding: 12;
+}
+
+.card:hover {
+    background: #1a1a2e;
+    border: 1px solid #ffffff;
+}
+
+.card-title {
+    color: #e94560;
+    font-size: 16;
+}
+
+.card-body {
+    color: #aaaaaa;
+    font-size: 13;
+}
+
+.card-flat {
+    background: #e0e0e0;
+    border-radius: 4;
+    padding: 10;
+    color: #333333;
+    font-size: 14;
+    width: 100%;
 }

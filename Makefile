@@ -1,9 +1,9 @@
 .DEFAULT_GOAL := help
 .PHONY: dev review yoink commit push help
 
-dev: ## Hot reload (requires cargo-watch)
+dev: ## Hot reload + preview HTML (requires cargo-watch)
 	cargo watch -w den_app/src -w den_macros/src -i den_macros/src/lib.rs \
-		-s 'touch den_macros/src/lib.rs && cargo run -p den_app'
+		-s 'touch den_macros/src/lib.rs && cargo run --bin preview && cargo run -p den_app'
 
 review: ## Copia diff + prompt de code review para o clipboard
 	@{ printf 'Antes de tudo procure boas práticas para Rust e egui, depois encarne um dev Rust sênior. Faça um code review das alterações abaixo de uma aplicação que usa proc macros para compilar HTML + SCSS em código egui nativo em compile time. Seja chato com: magic numbers, variáveis sem nome descritivo, unwrap() sem justificativa, e warnings do clippy.\n\n'; git diff HEAD; } | xclip -selection clipboard

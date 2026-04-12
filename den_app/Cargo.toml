@@ -3,6 +3,14 @@ name = "den_app"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "den_app"
+path = "src/main.rs"
+
+[[bin]]
+name = "preview"
+path = "src/bin/preview.rs"
+
 [dependencies]
 den_macros = { path = "../den_macros" }
 eframe = "0.33"
