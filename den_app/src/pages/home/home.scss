@@ -1,182 +1,295 @@
-// ── Paleta ────────────────────────────────────────────
-$primary:     #0f3460;
-$accent:      #e94560;
-$bg-dark:     #1a1a2e;
-$bg-card:     #16213e;
-$bg-light:    #f0f0f0;
-$bg-flat:     #e0e0e0;
-$text-white:  #ffffff;
+// -- Paleta ----------------------------------------------------
+$navy:        #0f3460;
+$crimson:     #e94560;
+$midnight:    #1a1a2e;
+$card-dark:   #16213e;
+$smoke:       #f0f0f0;
+$steel:       #e0e0e0;
+$white:       #ffffff;
+$text-light:  #ffffff;
 $text-muted:  #aaaaaa;
 $text-dark:   #333333;
-$border-dark: #000000;
-// ──────────────────────────────────────────────────────
+$green:       #27ae60;
+$red:         #c0392b;
+// --------------------------------------------------------------
 
-.title {
-    color: #768ab5;
-    font-size: 28;
+// -- Hero ------------------------------------------------------
+
+.hero-title {
+    color: $navy;
+    font-size: 32;
 }
 
-.greeting {
-    color: #e94560;
+.hero-subtitle {
+    color: $text-muted;
+    font-size: 16;
+    padding: 4;
+}
+
+// -- Sections --------------------------------------------------
+
+.section-header {
+    color: $navy;
     font-size: 20;
 }
 
-.display__flex {
-    color: #ffffff;
-    display: flex;
-    border: 1px solid #000000;
-    border-radius: 8;
-    background: #1a1a2e;
-    width: 100%;
+.section-header-light {
+    color: $white;
+    font-size: 20;
 }
 
-.button {
-    background: #16213e;
-    border: 1px solid #16213e;
-    border-radius: 4;
-    padding: 8;
-    color: #ffffff;
-}
+// -- Cards -----------------------------------------------------
 
-.button:hover {
-    background: #e94560;
-    border: 1px solid #e94560;
-    cursor: pointer;
-}
-
-.section-dark {
-    background: #0f3460;
-    padding: 16;
-    border-radius: 8;
-    width: 46%;
-}
-
-.section-light {
-    background: #f0f0f0;
+.card-light {
+    background: $smoke;
     padding: 16;
     border-radius: 8;
     width: 100%;
 }
 
-.section-title {
-    color: #ffffff;
-    font-size: 22;
-}
-
-.section-title-dark {
-    color: #0f3460;
-    font-size: 22;
-}
-
-.card {
-    background: #16213e;
-    border: 1px solid #e94560;
-    border-radius: 6;
-    padding: 12;
-}
-
-.card:hover {
-    background: #1a1a2e;
-    border: 1px solid #ffffff;
-}
-
-.card-title {
-    color: #e94560;
-    font-size: 16;
-}
-
-.card-body {
-    color: #aaaaaa;
-    font-size: 13;
-}
-
-.card-flat {
-    background: #e0e0e0;
-    border-radius: 4;
-    padding: 10;
-    color: #333333;
-    font-size: 14;
+.card-dark {
+    background: $navy;
+    padding: 16;
+    border-radius: 8;
     width: 100%;
 }
 
-// ── Sandbox ───────────────────────────────────────────
-// Variáveis locais pra evitar repetição nas classes sandbox.
-// (Den ainda não suporta @extend/@mixin — extrair quando tiver)
-$sb-bg:     #1e1e2e;
-$sb-border: #555555;
-$sb-child:  #2a3a5a;
-$sb-accent: #3a5a9a;
+// -- Inputs ----------------------------------------------------
 
-.sandbox-block {
-    background: $sb-bg;
-    border: 1px solid $sb-border;
-    padding: 8;
-    color: $text-white;
-    font-size: 13;
+.input-group {
+    padding: 4;
 }
 
-.sandbox-full {
-    background: $sb-bg;
-    border: 1px solid $sb-border;
-    padding: 8;
-    color: $text-white;
-    font-size: 13;
-    width: 100%;
-}
-
-.sandbox-fixed {
-    background: $sb-bg;
-    border: 1px solid $sb-border;
-    padding: 8;
-    color: $text-white;
-    font-size: 13;
-    width: 200;
-}
-
-.sandbox-flex {
-    background: $sb-bg;
-    border: 1px solid $sb-border;
-    padding: 8;
-    color: $text-white;
-    font-size: 13;
-    display: flex;
-}
-
-.sandbox-label {
+.label-muted {
     color: $text-muted;
     font-size: 11;
 }
 
-.sandbox-child {
-    background: $sb-child;
-    border: 1px solid $sb-accent;
-    padding: 6;
-    color: $text-white;
+.input {
+    background: $white;
+    border: 1px solid $crimson;
+    border-radius: 4;
+    padding: 8;
+    color: $text-dark;
+    font-size: 14;
+    width: 100%;
+}
+
+.preview-box {
+    background: $steel;
+    border-radius: 4;
+    padding: 10;
+    width: 100%;
+}
+
+.preview-text {
+    color: $text-dark;
+    font-size: 14;
+}
+
+// -- Buttons ---------------------------------------------------
+
+.btn-primary {
+    background: $crimson;
+    border: 1px solid $crimson;
+    border-radius: 4;
+    padding: 10;
+    color: $white;
+    font-size: 13;
+}
+
+.btn-primary:hover {
+    background: #c0392b;
+    border: 1px solid #c0392b;
+    cursor: pointer;
+}
+
+.btn-danger {
+    background: $card-dark;
+    border: 1px solid $crimson;
+    border-radius: 4;
+    padding: 10;
+    color: $crimson;
+    font-size: 13;
+}
+
+.btn-danger:hover {
+    background: $crimson;
+    color: $white;
+    cursor: pointer;
+}
+
+.btn-ghost {
+    background: $card-dark;
+    border: 1px solid $text-muted;
+    border-radius: 4;
+    padding: 10;
+    color: $text-muted;
+    font-size: 13;
+}
+
+.btn-ghost:hover {
+    border: 1px solid $white;
+    color: $white;
+    cursor: pointer;
+}
+
+// -- Status ----------------------------------------------------
+
+.status-on {
+    color: $green;
+    font-size: 14;
+    padding: 8;
+    background: #1e3a2a;
+    border: 1px solid $green;
+    border-radius: 4;
+}
+
+.status-off {
+    color: $red;
+    font-size: 14;
+    padding: 8;
+    background: #3a1e1e;
+    border: 1px solid $red;
+    border-radius: 4;
+}
+
+// -- Feature Cards ---------------------------------------------
+
+.feature-card {
+    background: $card-dark;
+    border: 1px solid $crimson;
+    border-radius: 6;
+    padding: 12;
+}
+
+.feature-card:hover {
+    background: $midnight;
+    border: 1px solid $white;
+}
+
+.feature-title {
+    color: $crimson;
+    font-size: 16;
+}
+
+.feature-body {
+    color: $text-muted;
     font-size: 12;
 }
 
-.sandbox-child-full {
-    background: $sb-child;
-    border: 1px solid $sb-accent;
+// -- Tags ------------------------------------------------------
+
+.tag {
+    background: $navy;
+    border: 1px solid $crimson;
+    border-radius: 12;
     padding: 6;
-    color: $text-white;
+    color: $white;
+    font-size: 12;
+}
+
+.tag:hover {
+    background: $crimson;
+    cursor: pointer;
+}
+
+// -- Color Swatches --------------------------------------------
+
+.swatch-navy {
+    background: $navy;
+    border-radius: 6;
+    padding: 12;
+    color: $white;
+    font-size: 11;
+}
+
+.swatch-crimson {
+    background: $crimson;
+    border-radius: 6;
+    padding: 12;
+    color: $white;
+    font-size: 11;
+}
+
+.swatch-midnight {
+    background: $midnight;
+    border-radius: 6;
+    padding: 12;
+    color: $white;
+    font-size: 11;
+}
+
+.swatch-steel {
+    background: $steel;
+    border-radius: 6;
+    padding: 12;
+    color: $text-dark;
+    font-size: 11;
+}
+
+.swatch-smoke {
+    background: $smoke;
+    border: 1px solid $text-muted;
+    border-radius: 6;
+    padding: 12;
+    color: $text-dark;
+    font-size: 11;
+}
+
+// -- Width Bars ------------------------------------------------
+
+.bar-full {
+    background: $navy;
+    border-radius: 4;
+    padding: 8;
+    color: $white;
     font-size: 12;
     width: 100%;
 }
 
-.sandbox-item {
-    background: $sb-child;
-    border: 1px solid $sb-accent;
-    padding: 6;
-    color: $text-white;
+.bar-half {
+    background: $crimson;
+    border-radius: 4;
+    padding: 8;
+    color: $white;
+    font-size: 12;
+    width: 50%;
+}
+
+.bar-fixed {
+    background: $card-dark;
+    border: 1px solid $crimson;
+    border-radius: 4;
+    padding: 8;
+    color: $white;
+    font-size: 12;
+    width: 200;
+}
+
+.bar-auto {
+    background: $steel;
+    border-radius: 4;
+    padding: 8;
+    color: $text-dark;
     font-size: 12;
 }
 
-.sandbox-item-full {
-    background: $sb-child;
-    border: 1px solid $sb-accent;
-    padding: 6;
-    color: $text-white;
-    font-size: 12;
+// -- Display Flex ----------------------------------------------
+
+.display__flex {
+    display: flex;
     width: 100%;
+}
+
+// -- Footer ----------------------------------------------------
+
+.footer {
+    padding: 16;
+    width: 100%;
+}
+
+.footer-text {
+    color: $text-muted;
+    font-size: 11;
 }
