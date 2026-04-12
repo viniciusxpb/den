@@ -1,0 +1,101 @@
+// ============================================================================
+// SCSS types
+// ============================================================================
+
+use std::collections::HashMap;
+
+pub type RgbColor = (u8, u8, u8);
+
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub enum DisplayMode {
+    #[default]
+    Block,
+    Flex,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct BorderStyle {
+    pub width: f32,
+    pub color: RgbColor,
+}
+
+impl Default for BorderStyle {
+    fn default() -> Self {
+        Self {
+            width: 1.0,
+            color: (0, 0, 0),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub enum WidthValue {
+    #[default]
+    Auto,
+    Percent(f32),
+    Px(f32),
+}
+
+/// Regra de estilo bruta, output do SCSS parser.
+#[derive(Debug, Clone, Default)]
+pub struct StyleRule {
+    pub color: Option<RgbColor>,
+    pub font_size: Option<f32>,
+    pub background: Option<RgbColor>,
+    pub padding: Option<f32>,
+    pub display: DisplayMode,
+    pub border: Option<BorderStyle>,
+    pub border_radius: Option<f32>,
+    pub width: WidthValue,
+    pub cursor_pointer: bool,
+    pub hover: Option<Box<StyleRule>>,
+}
+
+impl StyleRule {
+    /// Merge outra regra nesta (last-wins pra propriedades definidas).
+    pub fn merge_from(&mut self, other: &Self) {
+        if other.color.is_some() {
+            self.color = other.color;
+        }
+        if other.font_size.is_some() {
+            self.font_size = other.font_size;
+        }
+        if other.background.is_some() {
+            self.background = other.background;
+        }
+        if other.padding.is_some() {
+            self.padding = other.padding;
+        }
+        if other.display != DisplayMode::Block {
+            self.display = other.display;
+        }
+        if other.border.is_some() {
+            self.border = other.border;
+        }
+        if other.border_radius.is_some() {
+            self.border_radius = other.border_radius;
+        }
+        if other.width != WidthValue::Auto {
+            self.width = other.width;
+        }
+        if other.cursor_pointer {
+            self.cursor_pointer = true;
+        }
+        if other.hover.is_some() {
+            self.hover = other.hover.clone();
+        }
+    }
+
+    /// Extrai só propriedades herdáveis (color, font-size) pra propagar pros filhos.
+    /// Hover NÃO é herdável.
+    pub fn inheritable(&self) -> Self {
+        Self {
+            color: self.color,
+            font_size: self.font_size,
+            ..Default::default()
+        }
+    }
+}
+
+/// Mapa de classe CSS → StyleRule.
+pub type StyleMap = HashMap<String, StyleRule>;

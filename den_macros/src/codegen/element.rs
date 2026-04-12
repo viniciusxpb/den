@@ -1,48 +1,11 @@
-use crate::types::{DenElement, DenNode, DenVisual, DisplayMode, WidthValue};
+use crate::types::{DenElement, DenVisual, DisplayMode, WidthValue};
 use super::{generate_node, CodegenCtx};
+use super::click::{translate_click_arg, generate_style_struct};
+use super::flex::{collect_flex_children_info, build_flex_layout};
 use super::frame::{build_frame_expr, build_rich_text_expr};
 use super::text::build_text_token_stream;
 use quote::quote;
 use std::hash::{Hash, Hasher};
-
-/// Info sobre um filho direto de um flex container, usada pra gerar
-/// o cálculo de largura por filho em runtime.
-struct FlexChildInfo {
-    /// Layout index deste filho (pra mapear no LayoutTable).
-    layout_index: usize,
-    /// Regra de largura declarada no SCSS.
-    width: WidthValue,
-}
-
-/// Coleta layout index + width de filhos DIRETOS de um flex container.
-/// Usa `walk_den_nodes` (fonte única de verdade pra DFS) e filtra por
-/// `parent_index == parent_idx` pra pegar só filhos diretos.
-///
-/// LIMITAÇÃO: `IfChain` contribui filhos de AMBOS os branches pro `auto_count`.
-/// Em runtime só um branch executa, então `__den_flex_share` é calculado pra
-/// mais filhos do que estão visíveis. Resultado: filhos ficam mais estreitos
-/// do que deveriam quando `<if>` está dentro de `<div display:flex>`.
-/// Fix futuro: calcular `__den_flex_share` em runtime contando filhos renderizados.
-fn collect_flex_children_info(
-    children: &[DenNode],
-    parent_idx: usize,
-    layout_index: &mut usize,
-) -> Vec<FlexChildInfo> {
-    let mut infos = Vec::new();
-
-    // walk_den_nodes avança o counter pra todos os descendentes,
-    // mas só coletamos os que são filhos diretos (parent == parent_idx).
-    crate::types::walk_den_nodes(children, parent_idx, layout_index, &mut |el, idx, parent| {
-        if parent == parent_idx {
-            infos.push(FlexChildInfo {
-                layout_index: idx,
-                width: el.visual.width,
-            });
-        }
-    });
-
-    infos
-}
 
 pub fn generate_element(
     el: &DenElement,
@@ -270,12 +233,6 @@ pub fn generate_element(
 
     // Se este elemento é um filho Auto dentro de um flex container,
     // limita sua largura ao share calculado pelo pai (__den_flex_share).
-    //
-    // Usa allocate_ui_with_layout com Layout::top_down pra que:
-    // 1. O sub-UI tenha layout vertical — texto faz wrap em vez de estender.
-    //    (ui.horizontal() herda layout horizontal; sem isso, labels estendem
-    //     infinitamente e overflow persiste.)
-    // 2. max_rect do sub-UI = __den_flex_share — Frame e filhos respeitam.
     if is_flex_auto_child {
         element_code = quote! {
             ui.allocate_ui_with_layout(
@@ -297,7 +254,7 @@ fn build_inner(
     children_code: &[proc_macro2::TokenStream],
     tag: &str,
     layout_index: usize,
-    flex_info: Option<&[FlexChildInfo]>,
+    flex_info: Option<&[super::flex::FlexChildInfo]>,
 ) -> proc_macro2::TokenStream {
     let text_expr = text_ts.as_ref().map(|ts| build_rich_text_expr(ts, visual));
 
@@ -329,19 +286,9 @@ fn build_inner(
         inner
     };
 
-    // Larguras explícitas (Px/Percent): layout system resolveu em CSS pixels,
-    // multiplica pelo scale pra converter pra pixels físicos do egui.
-    //
     // Percent: usa ui.available_width() inline — já desconta padding do frame pai.
-    //   O layout system NÃO sabe sobre padding, então sizes[i] pra Percent
-    //   seria a largura total do pai (sem desconto), causando overflow.
-    //
     // Px: usa layout system — valor fixo, independente de padding.
-    //   O layout system serve aqui pra flex distribution (saber quais
-    //   filhos são fixos vs auto).
-    //
     // Auto: não força largura — deixa o egui decidir pelo conteúdo.
-    //   EXCETO filhos diretos de flex: usam __den_flex_share (calculado pelo pai).
     match visual.width {
         WidthValue::Percent(pct) => quote! {
             ui.set_width(ui.available_width() * #pct);
@@ -354,149 +301,6 @@ fn build_inner(
             #inner
         },
         WidthValue::Auto => inner,
-    }
-}
-
-/// Gera o layout horizontal (flex) com distribuição de largura por filho.
-///
-/// egui's `ui.horizontal()` não limita a largura dos filhos — conteúdo largo
-/// transborda o container. CSS resolve com `flex-shrink: 1` (default). Aqui
-/// simulamos calculando `__den_flex_share` em runtime: o espaço restante
-/// (depois de filhos Px/Percent) dividido igualmente entre filhos Auto.
-/// Cada filho Auto é envolvido em `ui.allocate_ui(__den_flex_share, ...)`
-/// no `generate_element` (via `is_flex_auto_child`).
-fn build_flex_layout(
-    inner: proc_macro2::TokenStream,
-    flex_info: Option<&[FlexChildInfo]>,
-) -> proc_macro2::TokenStream {
-    let Some(infos) = flex_info else {
-        return quote! { ui.horizontal(|ui| { #inner }); };
-    };
-
-    let auto_count = infos.iter().filter(|i| i.width == WidthValue::Auto).count();
-
-    if auto_count == 0 {
-        return quote! { ui.horizontal(|ui| { #inner }); };
-    }
-
-    // Espaço fixo consumido por filhos Px/Percent.
-    let mut fixed_terms = Vec::new();
-    for info in infos {
-        match info.width {
-            WidthValue::Px(_) => {
-                let idx = info.layout_index;
-                fixed_terms.push(quote! {
-                    __den_layout.sizes[#idx].unwrap_or(0.0) * __den_scale
-                });
-            }
-            WidthValue::Percent(pct) => {
-                fixed_terms.push(quote! {
-                    __den_flex_total * #pct
-                });
-            }
-            WidthValue::Auto => {}
-        }
-    }
-
-    let fixed_sum = if fixed_terms.is_empty() {
-        quote! { 0.0f32 }
-    } else {
-        let mut acc = fixed_terms[0].clone();
-        for term in &fixed_terms[1..] {
-            acc = quote! { #acc + #term };
-        }
-        acc
-    };
-
-    let auto_count_lit = auto_count;
-    // LIMITAÇÃO: gaps calculados em compile time. Se IfChain dentro do flex
-    // tiver branches com quantidade diferente de filhos, o gap count em runtime
-    // pode diferir. Mesmo edge case que o auto_count acima.
-    let spacing_gaps = infos.len().saturating_sub(1);
-
-    quote! {
-        ui.horizontal(|ui| {
-            let __den_flex_total = ui.available_width();
-            let __den_flex_item_spacing = ui.spacing().item_spacing.x;
-            let __den_flex_fixed_sum = #fixed_sum;
-            let __den_flex_spacing_total = __den_flex_item_spacing * #spacing_gaps as f32;
-            let __den_flex_share = ((__den_flex_total - __den_flex_fixed_sum - __den_flex_spacing_total) / #auto_count_lit as f32).max(0.0);
-            #inner
-        });
-    }
-}
-
-
-/// Traduz um argumento de click pra TokenStream.
-/// - `idx` → `__den_idx_N` (variável de índice do loop mais interno)
-/// - `style` → `__den_element_style` (struct gerado a partir do DenVisual)
-/// - qualquer outra expressão → passa direto pro rustc resolver
-fn translate_click_arg(
-    arg: &str,
-    ctx: &CodegenCtx,
-) -> Result<proc_macro2::TokenStream, String> {
-    let arg = arg.trim();
-    if arg == "idx" && ctx.loop_depth > 0 {
-        let idx_var = format!("__den_idx_{}", ctx.loop_depth - 1);
-        return idx_var.parse().map_err(|e| format!("Internal error: {e}"));
-    }
-    if arg == "style" {
-        return Ok(quote! { __den_element_style });
-    }
-    arg.parse().map_err(|e| format!("Invalid click argument '{arg}': {e}"))
-}
-
-/// Gera `let __den_element_style = DenElementStyle { ... }` a partir do DenVisual.
-/// Valores são literais baked em compile time a partir do SCSS resolvido.
-fn generate_style_struct(visual: &DenVisual) -> proc_macro2::TokenStream {
-    let color = match visual.color {
-        Some((r, g, b)) => quote! { Some((#r, #g, #b)) },
-        None => quote! { None },
-    };
-    let background = match visual.background {
-        Some((r, g, b)) => quote! { Some((#r, #g, #b)) },
-        None => quote! { None },
-    };
-    let font_size = match visual.font_size {
-        Some(v) => quote! { Some(#v) },
-        None => quote! { None },
-    };
-    let padding = match visual.padding {
-        Some(v) => quote! { Some(#v) },
-        None => quote! { None },
-    };
-    let border_radius = match visual.border_radius {
-        Some(v) => quote! { Some(#v) },
-        None => quote! { None },
-    };
-    let (border_width, border_color) = match visual.border {
-        Some(b) => {
-            let w = b.width;
-            let (r, g, b) = b.color;
-            (quote! { Some(#w) }, quote! { Some((#r, #g, #b)) })
-        }
-        None => (quote! { None }, quote! { None }),
-    };
-    let (width_px, width_percent) = match visual.width {
-        crate::types::WidthValue::Px(v) => (quote! { Some(#v) }, quote! { None }),
-        crate::types::WidthValue::Percent(v) => (quote! { None }, quote! { Some(#v) }),
-        crate::types::WidthValue::Auto => (quote! { None }, quote! { None }),
-    };
-    let is_flex = visual.display == crate::types::DisplayMode::Flex;
-
-    quote! {
-        let __den_element_style = den_layout::DenElementStyle {
-            color: #color,
-            background: #background,
-            font_size: #font_size,
-            padding: #padding,
-            border_radius: #border_radius,
-            border_width: #border_width,
-            border_color: #border_color,
-            width_px: #width_px,
-            width_percent: #width_percent,
-            is_flex: #is_flex,
-        };
     }
 }
 

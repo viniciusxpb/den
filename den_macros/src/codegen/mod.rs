@@ -1,5 +1,7 @@
+mod click;
 mod control_flow;
 mod element;
+mod flex;
 mod frame;
 mod text;
 
