@@ -1,98 +1,92 @@
-<h1 class="hero-title">Den Framework</h1>
-<div class="hero-subtitle">HTML + SCSS - Native Desktop GUI</div>
+<div class="outer">
 
-<!-- INPUT SECTION - two-way binding showcase -->
-
-<div dev class="card-light">
-    <h1 class="section-header">Two-Way Binding</h1>
-    <div class="display__flex">
-        <div class="input-group">
-            <div class="label-muted">Name</div>
-            <input bind="self.name" placeholder="Your name..." class="input" />
-        </div>
-        <div class="input-group">
-            <div class="label-muted">Message</div>
-            <input bind="self.message" placeholder="Say something..." class="input" />
-        </div>
+    <!-- Hero -->
+    <div class="hero">
+        <div class="hero-title">Den Framework</div>
+        <div class="hero-sub">Write templates. Compile to native. Ship fast.</div>
     </div>
-    <div class="preview-box">
-        <div class="preview-text">Hello {{ self.name }}! You said: "{{ self.message }}"</div>
-    </div>
-</div>
 
-<!-- INTERACTIVE - click events + conditional rendering -->
-
-<div dev class="card-dark">
-    <h1 class="section-header-light">Interactive Controls</h1>
+    <!-- Stats Row -->
     <div class="display__flex">
-        <div dev class="btn-primary" (click)="toggle_status()">Toggle Status</div>
-        <div dev class="btn-danger" (click)="increment_count()">Count: {{ self.count }}</div>
-        <div dev class="btn-ghost" (click)="reset()">Reset All</div>
-    </div>
-    <if cond="self.active">
-        <div class="status-on">Status: Active</div>
-    </if>
-    <else>
-        <div class="status-off">Status: Inactive</div>
-    </else>
-</div>
-
-<!-- FEATURE CARDS - flex layout with hover -->
-
-<div dev class="card-dark">
-    <h1 class="section-header-light">Features</h1>
-    <div class="display__flex">
-        <div class="feature-card">
-            <h1 class="feature-title">Compile-Time</h1>
-            <div class="feature-body">Zero runtime parsing. Templates become native Rust code at build time.</div>
+        <div class="stat-card">
+            <div class="stat-label">CLICKS</div>
+            <div class="stat-val-blue">{{ self.count }}</div>
         </div>
-        <div class="feature-card">
-            <h1 class="feature-title">Type Safe</h1>
-            <div class="feature-body">Template errors are compiler errors. Catch mistakes before you ship.</div>
+        <div class="stat-card">
+            <div class="stat-label">STATUS</div>
+            <if cond="self.active">
+                <div class="stat-val-green">Active</div>
+            </if>
+            <else>
+                <div class="stat-val-red">Inactive</div>
+            </else>
         </div>
-        <div class="feature-card">
-            <h1 class="feature-title">Two-Way Bind</h1>
-            <div class="feature-body">Input fields bind directly to struct fields. No signals, no callbacks.</div>
+        <div class="stat-card">
+            <div class="stat-label">TAGS</div>
+            <div class="stat-val-orange">5</div>
         </div>
     </div>
-</div>
 
-<!-- DYNAMIC LIST - for loop rendering -->
-
-<div dev class="card-light">
-    <h1 class="section-header">Tag List</h1>
+    <!-- Controls -->
     <div class="display__flex">
-        <for each="tag" in="self.tags">
-            <div class="tag">{{ tag }}</div>
-        </for>
+        <div dev class="btn-blue" (click)="increment_count()">Increment</div>
+        <div dev class="btn-green" (click)="toggle_status()">Toggle</div>
+        <div dev class="btn-dim" (click)="reset()">Reset</div>
     </div>
-</div>
 
-<!-- COLOR PALETTE - width percentages + colors -->
+    <!-- Input + Live Preview -->
+    <div class="input-section">
+        <div class="section-label">Live preview</div>
+        <div class="display__flex">
+            <div class="input-col">
+                <div class="input-label">Name</div>
+                <input bind="self.name" placeholder="Your name..." class="text-input" />
+            </div>
+            <div class="input-col">
+                <div class="input-label">Message</div>
+                <input bind="self.message" placeholder="Type here..." class="text-input" />
+            </div>
+        </div>
+        <div class="preview-box">
+            <div class="preview-text">Hello {{ self.name }} — "{{ self.message }}"</div>
+        </div>
+    </div>
 
-<div dev class="card-light">
-    <h1 class="section-header">Color Palette</h1>
+    <!-- Feature Cards -->
     <div class="display__flex">
-        <div class="swatch-navy">Navy</div>
-        <div class="swatch-crimson">Crimson</div>
-        <div class="swatch-midnight">Midnight</div>
-        <div class="swatch-steel">Steel</div>
-        <div class="swatch-smoke">Smoke</div>
+        <div class="feat-card">
+            <div class="feat-title">Compile-time</div>
+            <div class="feat-body">Zero runtime. Templates become native Rust at build.</div>
+        </div>
+        <div class="feat-card">
+            <div class="feat-title">Type safe</div>
+            <div class="feat-body">Template errors are compiler errors. IDE catches them.</div>
+        </div>
+        <div class="feat-card">
+            <div class="feat-title">Two-way bind</div>
+            <div class="feat-body">Inputs bind to fields. No signals, no boilerplate.</div>
+        </div>
     </div>
-</div>
 
-<!-- WIDTH SHOWCASE - fixed, percent, auto -->
+    <!-- Dynamic Tags -->
+    <div class="tags-box">
+        <div class="section-label">Dynamic tags</div>
+        <div class="display__flex">
+            <for each="tag" in="self.tags">
+                <div class="tag">{{ tag }}</div>
+            </for>
+        </div>
+    </div>
 
-<div dev class="card-light">
-    <h1 class="section-header">Width System</h1>
-    <div class="bar-full">width: 100%</div>
-    <div class="bar-half">width: 50%</div>
-    <div class="bar-fixed">width: 200px</div>
-    <div class="bar-auto">auto (content-sized)</div>
-</div>
+    <!-- Width System -->
+    <div class="bar-100">100%</div>
+    <div class="bar-75">75%</div>
+    <div class="bar-50">50%</div>
+    <div class="bar-25">25%</div>
 
-<!-- FOOTER -->
+    <!-- Footer -->
+    <div class="footer">
+        <div class="footer-text">Den v0.1.0</div>
+    </div>
 
-<div class="footer">
-    <div class="footer-text">Built with Den v0.1.0 - by {{ self.name }}</div>
 </div>
