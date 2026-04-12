@@ -9,6 +9,22 @@
 /// Índice do body na lista. Sempre 0.
 pub const BODY_INDEX: usize = 0;
 
+/// Propriedades visuais de um elemento Den, extraídas em compile time.
+/// Passado como argumento quando o handler usa a keyword `style`.
+#[derive(Debug, Clone, Default)]
+pub struct DenElementStyle {
+    pub color: Option<(u8, u8, u8)>,
+    pub background: Option<(u8, u8, u8)>,
+    pub font_size: Option<f32>,
+    pub padding: Option<f32>,
+    pub border_radius: Option<f32>,
+    pub border_width: Option<f32>,
+    pub border_color: Option<(u8, u8, u8)>,
+    pub width_px: Option<f32>,
+    pub width_percent: Option<f32>,
+    pub is_flex: bool,
+}
+
 /// Como a largura foi declarada no SCSS.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum WidthRule {

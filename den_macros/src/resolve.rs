@@ -43,10 +43,21 @@ fn resolve_element(el: &RawElement, styles: &StyleMap, inherited: &StyleRule) ->
         .map(|c| resolve_node(c, styles, &child_inherited))
         .collect();
 
+    // Parseia on_click em func_name + args
+    let (on_click, on_click_args) = match &el.on_click {
+        Some(raw) => {
+            let (name, args) = crate::parse::text::parse_click_call(raw);
+            (Some(name), args)
+        }
+        None => (None, vec![]),
+    };
+
     DenNode::Element(DenElement {
         tag: el.tag.clone(),
         classes: el.classes.clone(),
-        on_click: el.on_click.clone(),
+        on_click,
+        on_click_args,
+        den_bind: el.den_bind.clone(),
         segments: el.segments.clone(),
         children,
         visual,

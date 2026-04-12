@@ -30,7 +30,11 @@ pub struct RawElement {
     pub classes: Vec<String>,
     pub segments: Vec<TextSegment>,
     pub children: Vec<RawNode>,
+    /// Expressão completa do click handler (e.g. "on_edit(user.id)").
+    /// Parseada em func_name + args no resolve.
     pub on_click: Option<String>,
+    /// Variável vinculada por `den-bind="var"`. Usada pra auto-clone de args.
+    pub den_bind: Option<String>,
 }
 
 #[derive(Debug)]
@@ -251,7 +255,12 @@ pub enum DenNode {
 pub struct DenElement {
     pub tag: String,
     pub classes: Vec<String>,
+    /// Nome da função do click handler (sem args, sem parens).
     pub on_click: Option<String>,
+    /// Argumentos parseados do click handler (e.g. ["user.id", "user.name"]).
+    pub on_click_args: Vec<String>,
+    /// Variável vinculada por `den-bind="var"`.
+    pub den_bind: Option<String>,
     pub segments: Vec<TextSegment>,
     pub children: Vec<DenNode>,
     pub visual: DenVisual,

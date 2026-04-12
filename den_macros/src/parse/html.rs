@@ -1,5 +1,5 @@
 use crate::types::{RawElement, RawForLoop, RawIfChain, RawNode};
-use super::text::{map_this_to_self, parse_text_segments};
+use super::text::parse_text_segments;
 
 // Toda a lógica de parsing HTML opera em `Vec<char>` para suporte correto a UTF-8.
 
@@ -79,7 +79,7 @@ fn parse_for_node(chars: &[char], pos: &mut usize) -> Option<RawNode> {
             let value = read_quoted(chars, pos);
             match attr_name.as_str() {
                 "each" => each_var = Some(value),
-                "in" => in_expr = Some(map_this_to_self(&value)),
+                "in" => in_expr = Some(value),
                 _ => eprintln!("Den: unknown attribute '{attr_name}' on <for>, ignoring"),
             }
         }
@@ -133,7 +133,7 @@ fn parse_if_node(chars: &[char], pos: &mut usize) -> Option<RawNode> {
             skip_ws(chars, pos);
             let value = read_quoted(chars, pos);
             match attr_name.as_str() {
-                "cond" => condition = Some(map_this_to_self(&value)),
+                "cond" => condition = Some(value),
                 _ => eprintln!("Den: unknown attribute '{attr_name}' on <if>, ignoring"),
             }
         }
@@ -247,6 +247,7 @@ fn parse_element_chars(chars: &[char], pos: &mut usize) -> Option<RawElement> {
 
     let mut classes = Vec::new();
     let mut on_click = None;
+    let mut den_bind = None;
     skip_ws(chars, pos);
     while *pos < chars.len() && chars[*pos] != '>' && chars[*pos] != '/' {
         if chars[*pos] == '(' {
@@ -260,9 +261,10 @@ fn parse_element_chars(chars: &[char], pos: &mut usize) -> Option<RawElement> {
                 *pos += 1;
                 skip_ws(chars, pos);
                 let raw_value = read_quoted(chars, pos);
-                let func_name = map_this_to_self(raw_value.trim_end_matches("()"));
                 if event_name == "click" {
-                    on_click = Some(func_name);
+                    // Armazena a expressão inteira (e.g. "on_edit(user.id)")
+                    // Parsing em func_name + args é feito no resolve.
+                    on_click = Some(raw_value);
                 } else {
                     eprintln!("Den: unsupported event '({event_name})', ignoring");
                 }
@@ -276,6 +278,8 @@ fn parse_element_chars(chars: &[char], pos: &mut usize) -> Option<RawElement> {
                 let value = read_quoted(chars, pos);
                 if attr_name == "class" {
                     classes = value.split_whitespace().map(|s| s.to_string()).collect();
+                } else if attr_name == "den-bind" {
+                    den_bind = Some(value);
                 }
             }
         }
@@ -294,6 +298,7 @@ fn parse_element_chars(chars: &[char], pos: &mut usize) -> Option<RawElement> {
             segments: Vec::new(),
             children: Vec::new(),
             on_click,
+            den_bind,
         });
     }
     if *pos < chars.len() && chars[*pos] == '>' {
@@ -331,6 +336,7 @@ fn parse_element_chars(chars: &[char], pos: &mut usize) -> Option<RawElement> {
         segments,
         children,
         on_click,
+        den_bind,
     })
 }
 

@@ -97,14 +97,57 @@ pub fn generate_element(
     let has_click = el.on_click.is_some();
     let needs_interaction = has_hover || has_click;
 
-    // Constrói o call do click handler
-    let click_call = if let Some(func_name) = &el.on_click {
-        let tokens: proc_macro2::TokenStream = format!("self.{func_name}()")
-            .parse()
-            .map_err(|e| format!("Invalid function name '{func_name}': {e}"))?;
-        Some(tokens)
+    // Constrói o call do click handler + clones de argumentos
+    let (click_call, click_clone_stmts) = if let Some(func_name) = &el.on_click {
+        if !el.on_click_args.is_empty() {
+            // Tem args → requer den-bind
+            if el.den_bind.is_none() {
+                return Err(format!(
+                    "Den: (click)=\"{func_name}({})\" has arguments but no den-bind attribute. \
+                     Add den-bind=\"...\" to the element.",
+                    el.on_click_args.join(", ")
+                ));
+            }
+
+            // Gera clones dos argumentos antes do render (resolve borrow conflicts)
+            let mut clones = Vec::new();
+            let mut arg_idents = Vec::new();
+            for (i, arg) in el.on_click_args.iter().enumerate() {
+                let var_name = format!("__den_click_arg_{i}");
+                let var_ident: proc_macro2::TokenStream = var_name.parse()
+                    .map_err(|e| format!("Internal error building click arg ident: {e}"))?;
+                let arg_expr = translate_click_arg(arg, ctx)?;
+
+                // style não precisa de clone (já é owned), outros sim
+                if arg.trim() == "style" {
+                    clones.push(quote! { let #var_ident = #arg_expr; });
+                } else {
+                    clones.push(quote! { let #var_ident = (#arg_expr).clone(); });
+                }
+                arg_idents.push(var_ident);
+            }
+
+            let func_ident: proc_macro2::TokenStream = format!("self.{func_name}")
+                .parse()
+                .map_err(|e| format!("Invalid function name '{func_name}': {e}"))?;
+            let call = quote! { #func_ident(#(#arg_idents),*) };
+            (Some(call), clones)
+        } else {
+            // Sem args — comportamento original
+            let tokens: proc_macro2::TokenStream = format!("self.{func_name}()")
+                .parse()
+                .map_err(|e| format!("Invalid function name '{func_name}': {e}"))?;
+            (Some(tokens), vec![])
+        }
     } else {
-        None
+        (None, vec![])
+    };
+
+    // Se args contém "style", gera o DenElementStyle struct
+    let style_stmt = if el.on_click_args.iter().any(|a| a.trim() == "style") {
+        generate_style_struct(&el.visual)
+    } else {
+        quote! {}
     };
 
     let flex_info_ref = flex_children_info.as_deref();
@@ -202,6 +245,8 @@ pub fn generate_element(
 
         quote! {
             {
+                #style_stmt
+                #( #click_clone_stmts )*
                 let __den_id = #id_expr;
                 #render_code
                 #click_code
@@ -381,6 +426,79 @@ fn build_flex_layout(
     }
 }
 
+
+/// Traduz um argumento de click pra TokenStream.
+/// - `idx` → `__den_idx_N` (variável de índice do loop mais interno)
+/// - `style` → `__den_element_style` (struct gerado a partir do DenVisual)
+/// - qualquer outra expressão → passa direto pro rustc resolver
+fn translate_click_arg(
+    arg: &str,
+    ctx: &CodegenCtx,
+) -> Result<proc_macro2::TokenStream, String> {
+    let arg = arg.trim();
+    if arg == "idx" && ctx.loop_depth > 0 {
+        let idx_var = format!("__den_idx_{}", ctx.loop_depth - 1);
+        return idx_var.parse().map_err(|e| format!("Internal error: {e}"));
+    }
+    if arg == "style" {
+        return Ok(quote! { __den_element_style });
+    }
+    arg.parse().map_err(|e| format!("Invalid click argument '{arg}': {e}"))
+}
+
+/// Gera `let __den_element_style = DenElementStyle { ... }` a partir do DenVisual.
+/// Valores são literais baked em compile time a partir do SCSS resolvido.
+fn generate_style_struct(visual: &DenVisual) -> proc_macro2::TokenStream {
+    let color = match visual.color {
+        Some((r, g, b)) => quote! { Some((#r, #g, #b)) },
+        None => quote! { None },
+    };
+    let background = match visual.background {
+        Some((r, g, b)) => quote! { Some((#r, #g, #b)) },
+        None => quote! { None },
+    };
+    let font_size = match visual.font_size {
+        Some(v) => quote! { Some(#v) },
+        None => quote! { None },
+    };
+    let padding = match visual.padding {
+        Some(v) => quote! { Some(#v) },
+        None => quote! { None },
+    };
+    let border_radius = match visual.border_radius {
+        Some(v) => quote! { Some(#v) },
+        None => quote! { None },
+    };
+    let (border_width, border_color) = match visual.border {
+        Some(b) => {
+            let w = b.width;
+            let (r, g, b) = b.color;
+            (quote! { Some(#w) }, quote! { Some((#r, #g, #b)) })
+        }
+        None => (quote! { None }, quote! { None }),
+    };
+    let (width_px, width_percent) = match visual.width {
+        crate::types::WidthValue::Px(v) => (quote! { Some(#v) }, quote! { None }),
+        crate::types::WidthValue::Percent(v) => (quote! { None }, quote! { Some(#v) }),
+        crate::types::WidthValue::Auto => (quote! { None }, quote! { None }),
+    };
+    let is_flex = visual.display == crate::types::DisplayMode::Flex;
+
+    quote! {
+        let __den_element_style = den_layout::DenElementStyle {
+            color: #color,
+            background: #background,
+            font_size: #font_size,
+            padding: #padding,
+            border_radius: #border_radius,
+            border_width: #border_width,
+            border_color: #border_color,
+            width_px: #width_px,
+            width_percent: #width_percent,
+            is_flex: #is_flex,
+        };
+    }
+}
 
 fn den_element_id(
     template_path: &str,

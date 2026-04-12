@@ -51,3 +51,26 @@ Quando o usuário edita um valor no style editor (ex: slider de cor numa proprie
 Isso é um comportamento intencional por ora (o usuário pode intencionalmente querer "desconectar" do token), mas também apaga variáveis sem aviso quando o usuário apenas arrasta e solta no mesmo valor.
 
 **Fix futuro**: comparar `to_scss_string()` com o valor original do arquivo antes de emitir. Se o resultado resolvido for igual ao original resolvido, manter a string original (com variável). Só substituir quando o valor mudou de fato.
+
+---
+
+## Borrow conflict: `<for>` + `(click)` com `&mut self`
+
+`<for each="user" in="self.users">` gera `for (_, user) in self.users.iter()` que faz borrow imutável de `self`. Se o click handler dentro do loop chama `self.on_edit(...)` (borrow mutável), o borrow checker reclama.
+
+O clone dos argumentos via `den-bind` resolve o conflito dos DADOS (o clone captura o valor antes do `&mut self`), mas NÃO resolve o conflito do ITERADOR — `self.users.iter()` mantém o borrow ativo durante todo o loop body.
+
+Problema pré-existente: handlers sem args dentro de `<for>` (`(click)="toggle()"`) têm o mesmo conflito.
+
+**Fix futuro**: coletar os items antes do loop quando o `<for>` contém `(click)`:
+
+```rust
+// Ao invés de:
+for (idx, user) in self.users.iter().enumerate() { self.on_edit(...); }
+
+// Gerar:
+let __den_items: Vec<_> = self.users.iter().enumerate().collect();
+for (idx, user) in __den_items { self.on_edit(...); }
+```
+
+O Vec temporário libera o borrow de `self.users` antes do loop body. Custo: uma alocação por frame. Alternativa: indexar por posição (`self.users[idx]`) ao invés de iterar por referência.
