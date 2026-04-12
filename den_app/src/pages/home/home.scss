@@ -12,89 +12,89 @@ $border-dark: #000000;
 // ──────────────────────────────────────────────────────
 
 .title {
-    color: $primary;
+    color: #768ab5;
     font-size: 28;
 }
 
 .greeting {
-    color: $accent;
+    color: #e94560;
     font-size: 20;
 }
 
 .display__flex {
-    color: $text-white;
+    color: #ffffff;
     display: flex;
-    border: 1px solid $border-dark;
+    border: 1px solid #000000;
     border-radius: 8;
-    background: $bg-dark;
+    background: #1a1a2e;
     width: 100%;
 }
 
 .button {
-    background: $bg-card;
-    border: 1px solid $bg-card;
+    background: #16213e;
+    border: 1px solid #16213e;
     border-radius: 4;
     padding: 8;
-    color: $text-white;
+    color: #ffffff;
 }
 
 .button:hover {
-    background: $accent;
-    border: 1px solid $accent;
+    background: #e94560;
+    border: 1px solid #e94560;
     cursor: pointer;
 }
 
 .section-dark {
-    background: $primary;
+    background: #0f3460;
     padding: 16;
     border-radius: 8;
     width: 100%;
 }
 
 .section-light {
-    background: $bg-light;
+    background: #f0f0f0;
     padding: 16;
     border-radius: 8;
     width: 100%;
 }
 
 .section-title {
-    color: $text-white;
+    color: #ffffff;
     font-size: 22;
 }
 
 .section-title-dark {
-    color: $primary;
+    color: #0f3460;
     font-size: 22;
 }
 
 .card {
-    background: $bg-card;
-    border: 1px solid $accent;
+    background: #16213e;
+    border: 1px solid #e94560;
     border-radius: 6;
     padding: 12;
 }
 
 .card:hover {
-    background: $bg-dark;
-    border: 1px solid $text-white;
+    background: #1a1a2e;
+    border: 1px solid #ffffff;
 }
 
 .card-title {
-    color: $accent;
+    color: #e94560;
     font-size: 16;
 }
 
 .card-body {
-    color: $text-muted;
+    color: #aaaaaa;
     font-size: 13;
 }
 
 .card-flat {
-    background: $bg-flat;
+    background: #e0e0e0;
     border-radius: 4;
     padding: 10;
-    color: $text-dark;
+    color: #333333;
     font-size: 14;
     width: 100%;
 }
