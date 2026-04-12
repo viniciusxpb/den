@@ -200,7 +200,7 @@ fn build_inner(
             #inner
         },
         WidthValue::Px(px) => quote! {
-            ui.set_width(#px);
+            ui.set_width(#px * __den_scale);
             #inner
         },
         WidthValue::Auto => inner,

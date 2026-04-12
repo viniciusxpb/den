@@ -19,7 +19,7 @@ impl Default for HomePage {
 }
 
 impl HomePage {
-    pub fn render(&mut self, ui: &mut egui::Ui) {
+    pub fn render(&mut self, ui: &mut egui::Ui, __den_scale: f32) {
         den_macros::den_template!("pages/home/home", self);
     }
 
