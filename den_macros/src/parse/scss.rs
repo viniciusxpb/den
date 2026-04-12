@@ -1,9 +1,11 @@
 use crate::types::{BorderStyle, DisplayMode, StyleMap, StyleRule, WidthValue};
 use super::color::parse_hex_color;
+use std::collections::HashMap;
 
 // SCSS identifiers são ASCII-only, então parsing byte-level é seguro aqui.
 
 pub fn parse_scss(input: &str) -> StyleMap {
+    let vars = collect_variables(input);
     let mut styles = StyleMap::new();
     let input = input.trim();
     let bytes = input.as_bytes();
@@ -13,6 +15,15 @@ pub fn parse_scss(input: &str) -> StyleMap {
         skip_whitespace(bytes, &mut pos);
         if pos >= bytes.len() {
             break;
+        }
+
+        // Pula declarações de variáveis ($var: value;)
+        if bytes[pos] == b'$' {
+            while pos < bytes.len() && bytes[pos] != b';' && bytes[pos] != b'\n' {
+                pos += 1;
+            }
+            if pos < bytes.len() { pos += 1; }
+            continue;
         }
 
         if bytes[pos] != b'.' {
@@ -65,10 +76,11 @@ pub fn parse_scss(input: &str) -> StyleMap {
             while pos < bytes.len() && bytes[pos] != b';' && bytes[pos] != b'}' {
                 pos += 1;
             }
-            let value = std::str::from_utf8(&bytes[start..pos])
+            let raw = std::str::from_utf8(&bytes[start..pos])
                 .unwrap_or("")
                 .trim()
                 .to_string();
+            let value = resolve_vars(&raw, &vars);
 
             if pos < bytes.len() && bytes[pos] == b';' {
                 pos += 1;
@@ -103,6 +115,53 @@ pub fn parse_scss(input: &str) -> StyleMap {
     }
 
     styles
+}
+
+/// Coleta todas as declarações `$nome: valor;` do SCSS.
+fn collect_variables(input: &str) -> HashMap<String, String> {
+    let mut vars = HashMap::new();
+    let bytes = input.as_bytes();
+    let mut pos = 0;
+
+    while pos < bytes.len() {
+        skip_whitespace(bytes, &mut pos);
+        if pos >= bytes.len() { break; }
+
+        if bytes[pos] == b'$' {
+            pos += 1; // skip '$'
+            let name = read_identifier(bytes, &mut pos);
+            skip_whitespace(bytes, &mut pos);
+            if pos < bytes.len() && bytes[pos] == b':' {
+                pos += 1; // skip ':'
+                skip_whitespace(bytes, &mut pos);
+                let start = pos;
+                while pos < bytes.len() && bytes[pos] != b';' && bytes[pos] != b'\n' {
+                    pos += 1;
+                }
+                let value = std::str::from_utf8(&bytes[start..pos])
+                    .unwrap_or("")
+                    .trim()
+                    .to_string();
+                if !name.is_empty() && !value.is_empty() {
+                    vars.insert(name, value);
+                }
+            }
+        }
+        pos += 1;
+    }
+    vars
+}
+
+/// Substitui referências `$nome` pelos valores resolvidos.
+fn resolve_vars(value: &str, vars: &HashMap<String, String>) -> String {
+    if !value.contains('$') {
+        return value.to_string();
+    }
+    let mut result = value.to_string();
+    for (name, val) in vars {
+        result = result.replace(&format!("${name}"), val);
+    }
+    result
 }
 
 fn parse_size_value(value: &str) -> Option<f32> {

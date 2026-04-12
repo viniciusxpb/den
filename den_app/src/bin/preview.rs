@@ -53,12 +53,16 @@ fn main() {
     let output = generate_preview_html(&all_css, &all_components);
     let out_path = preview_dir.join("index.html");
     fs::write(&out_path, &output).expect("Failed to write preview/index.html");
+    let already_exists = out_path.exists();
+    fs::write(&out_path, &output).expect("Failed to write preview/index.html");
     println!("preview: {} componente(s) → {}", all_components.len(), out_path.display());
 
-    std::process::Command::new("xdg-open")
-        .arg(&out_path)
-        .spawn()
-        .ok();
+    if !already_exists {
+        std::process::Command::new("xdg-open")
+            .arg(&out_path)
+            .spawn()
+            .ok();
+    }
 }
 
 // ============================================================================
@@ -88,15 +92,51 @@ fn find_template_pairs(dir: &Path) -> Vec<(PathBuf, PathBuf)> {
 // ============================================================================
 
 /// Converte SCSS do Den pra CSS válido.
-/// A única diferença real é que Den aceita números sem unidade (font-size: 24)
-/// onde CSS exige px (font-size: 24px).
+/// - Resolve variáveis `$nome: valor` e substitui referências
+/// - Adiciona `px` a valores numéricos sem unidade
+/// - Remove as linhas de declaração de variáveis do output
 fn scss_to_css(scss: &str) -> String {
+    let vars = collect_scss_vars(scss);
     let mut out = String::new();
     for line in scss.lines() {
-        out.push_str(&add_px_to_unitless(line));
+        let trimmed = line.trim();
+        // Pula declarações de variáveis — não são CSS válido
+        if trimmed.starts_with('$') {
+            continue;
+        }
+        let resolved = resolve_scss_vars(line, &vars);
+        out.push_str(&add_px_to_unitless(&resolved));
         out.push('\n');
     }
     out
+}
+
+fn collect_scss_vars(scss: &str) -> std::collections::HashMap<String, String> {
+    let mut vars = std::collections::HashMap::new();
+    for line in scss.lines() {
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix('$') {
+            if let Some(colon) = rest.find(':') {
+                let name = rest[..colon].trim().to_string();
+                let value = rest[colon + 1..].trim().trim_end_matches(';').trim().to_string();
+                if !name.is_empty() && !value.is_empty() {
+                    vars.insert(name, value);
+                }
+            }
+        }
+    }
+    vars
+}
+
+fn resolve_scss_vars(line: &str, vars: &std::collections::HashMap<String, String>) -> String {
+    if !line.contains('$') {
+        return line.to_string();
+    }
+    let mut result = line.to_string();
+    for (name, val) in vars {
+        result = result.replace(&format!("${name}"), val);
+    }
+    result
 }
 
 /// Propriedades CSS que precisam de unidade px quando o valor for número puro.
@@ -275,16 +315,29 @@ fn convert_element(chars: &[char], start: usize) -> (String, usize) {
     let mut classes = String::new();
     skip_ws(chars, &mut pos);
     while pos < chars.len() && chars[pos] != '>' && chars[pos] != '/' {
-        let attr = read_ident(chars, &mut pos);
-        skip_ws(chars, &mut pos);
-        if attr == "class" && pos < chars.len() && chars[pos] == '=' {
+        if pos < chars.len() && chars[pos] == '(' {
+            // Event binding: (click)="funcao()" — consome inteiro e ignora
             pos += 1;
-            classes = read_quoted(chars, &mut pos);
-        } else if attr == "dev" {
-            // ignora
-        } else if pos < chars.len() && chars[pos] == '=' {
-            pos += 1;
-            read_quoted(chars, &mut pos);
+            read_ident(chars, &mut pos);
+            if pos < chars.len() && chars[pos] == ')' { pos += 1; }
+            skip_ws(chars, &mut pos);
+            if pos < chars.len() && chars[pos] == '=' {
+                pos += 1;
+                skip_ws(chars, &mut pos);
+                read_quoted(chars, &mut pos);
+            }
+        } else {
+            let attr = read_ident(chars, &mut pos);
+            skip_ws(chars, &mut pos);
+            if attr == "class" && pos < chars.len() && chars[pos] == '=' {
+                pos += 1;
+                classes = read_quoted(chars, &mut pos);
+            } else if attr == "dev" {
+                // ignora
+            } else if pos < chars.len() && chars[pos] == '=' {
+                pos += 1;
+                read_quoted(chars, &mut pos);
+            }
         }
         skip_ws(chars, &mut pos);
     }

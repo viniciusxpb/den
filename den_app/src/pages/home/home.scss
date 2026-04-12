@@ -1,86 +1,100 @@
+// ── Paleta ────────────────────────────────────────────
+$primary:     #0f3460;
+$accent:      #e94560;
+$bg-dark:     #1a1a2e;
+$bg-card:     #16213e;
+$bg-light:    #f0f0f0;
+$bg-flat:     #e0e0e0;
+$text-white:  #ffffff;
+$text-muted:  #aaaaaa;
+$text-dark:   #333333;
+$border-dark: #000000;
+// ──────────────────────────────────────────────────────
+
 .title {
-    color: #0f3460;
+    color: $primary;
     font-size: 28;
 }
 
 .greeting {
-    color: #e94560;
+    color: $accent;
     font-size: 20;
 }
 
 .display__flex {
+    color: $text-white;
     display: flex;
-    border: 1px solid #000000;
+    border: 1px solid $border-dark;
     border-radius: 8;
-    background: #1a1a2e;
+    background: $bg-dark;
     width: 100%;
 }
 
 .button {
-    background: #16213e;
-    border: 1px solid #16213e;
+    background: $bg-card;
+    border: 1px solid $bg-card;
     border-radius: 4;
     padding: 8;
-    color: #ffffff;
+    color: $text-white;
 }
 
 .button:hover {
-    background: #e94560;
-    border: 1px solid #e94560;
+    background: $accent;
+    border: 1px solid $accent;
     cursor: pointer;
 }
 
 .section-dark {
-    background: #0f3460;
+    background: $primary;
     padding: 16;
     border-radius: 8;
     width: 100%;
 }
 
 .section-light {
-    background: #f0f0f0;
+    background: $bg-light;
     padding: 16;
     border-radius: 8;
     width: 100%;
 }
 
 .section-title {
-    color: #ffffff;
+    color: $text-white;
     font-size: 22;
 }
 
 .section-title-dark {
-    color: #0f3460;
+    color: $primary;
     font-size: 22;
 }
 
 .card {
-    background: #16213e;
-    border: 1px solid #e94560;
+    background: $bg-card;
+    border: 1px solid $accent;
     border-radius: 6;
     padding: 12;
 }
 
 .card:hover {
-    background: #1a1a2e;
-    border: 1px solid #ffffff;
+    background: $bg-dark;
+    border: 1px solid $text-white;
 }
 
 .card-title {
-    color: #e94560;
+    color: $accent;
     font-size: 16;
 }
 
 .card-body {
-    color: #aaaaaa;
+    color: $text-muted;
     font-size: 13;
 }
 
 .card-flat {
-    background: #e0e0e0;
+    background: $bg-flat;
     border-radius: 4;
     padding: 10;
-    color: #333333;
+    color: $text-dark;
     font-size: 14;
     width: 100%;
 }
