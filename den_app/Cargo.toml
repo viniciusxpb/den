@@ -3,7 +3,20 @@ name = "den_app"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "den_app"
+path = "src/main.rs"
+
+[[bin]]
+name = "preview"
+path = "src/bin/preview.rs"
+
+[[bin]]
+name = "style_editor"
+path = "src/bin/style_editor.rs"
+
 [dependencies]
 den_macros = { path = "../den_macros" }
+den_layout = { path = "../den_layout" }
 eframe = "0.33"
 env_logger = "0.11"

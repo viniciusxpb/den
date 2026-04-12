@@ -10,10 +10,71 @@
     <div class="title">Please log in.</div>
 </else>
 
-<div class="button" (click)="on_button_click()">Toggle Login</div>
+<div dev class="button" (click)="on_button_click()">Toggle Login</div>
 
 <div class="display__flex">
     <for each="item" in="this.items">
         <div class="button">{{ item }}</div>
     </for>
+</div>
+
+<div dev class="section-dark">
+    <h1 class="section-title">Features</h1>
+    <div class="display__flex">
+        <div class="card">
+            <h1 class="card-title">Zero Runtime</h1>
+            <div class="card-body">Templates compiled at build time. No parsing overhead at runtime.</div>
+        </div>
+        <div class="card">
+            <h1 class="card-title">Native Speed</h1>
+            <div class="card-body">Runs as a native binary. Starts instantly, no VM or browser engine.</div>
+        </div>
+        <div class="card">
+            <h1 class="card-title">Type Safe</h1>
+            <div class="card-body">Template errors are compiler errors. Catch mistakes before you ship.</div>
+        </div>
+    </div>
+</div>
+
+<div dev class="section-light">
+    <h1 class="section-title-dark">About</h1>
+    <div class="card-flat">Den is a Rust framework that compiles HTML + SCSS templates into native egui desktop GUI code at compile time via procedural macros.</div>
+    <div class="card-flat">Built by {{ this.name }} — currently version 0.1.0.</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SANDBOX — casos de teste de layout
+     ═══════════════════════════════════════════════════════════════ -->
+
+<!-- Caso 1: sem largura explícita — deve preencher o pai (block) -->
+<div dev class="sandbox-block">
+    <div class="sandbox-label">block — sem width</div>
+    <div class="sandbox-child">filho sem width</div>
+</div>
+
+<!-- Caso 2: width 100% explícito -->
+<div dev class="sandbox-full">
+    <div class="sandbox-label">width: 100%</div>
+    <div class="sandbox-child-full">filho com width: 100%</div>
+</div>
+
+<!-- Caso 3: width fixo em px -->
+<div dev class="sandbox-fixed">
+    <div class="sandbox-label">width: 200px</div>
+    <div class="sandbox-child">filho dentro de 200px</div>
+</div>
+
+<!-- Caso 4: display flex com filhos content-sized -->
+<div dev class="sandbox-flex">
+    <div class="sandbox-label">display: flex — filhos content-sized</div>
+    <div class="sandbox-item">item a</div>
+    <div class="sandbox-item">item b</div>
+    <div class="sandbox-item">item c longo</div>
+</div>
+
+<!-- Caso 5: flex com filho 100% — deve preencher o flex container -->
+<div dev class="sandbox-flex">
+    <div class="sandbox-label">display: flex — um filho com width: 100%</div>
+    <div class="sandbox-item-full">filho full</div>
+    <div class="sandbox-item">item normal</div>
 </div>

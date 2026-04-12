@@ -1,5 +1,18 @@
+// ── Paleta ────────────────────────────────────────────
+$primary:     #0f3460;
+$accent:      #e94560;
+$bg-dark:     #1a1a2e;
+$bg-card:     #16213e;
+$bg-light:    #f0f0f0;
+$bg-flat:     #e0e0e0;
+$text-white:  #ffffff;
+$text-muted:  #aaaaaa;
+$text-dark:   #333333;
+$border-dark: #000000;
+// ──────────────────────────────────────────────────────
+
 .title {
-    color: #0f3460;
+    color: #768ab5;
     font-size: 28;
 }
 
@@ -8,8 +21,8 @@
     font-size: 20;
 }
 
-.display__flex{
-    color: #FFFFFF;
+.display__flex {
+    color: #ffffff;
     display: flex;
     border: 1px solid #000000;
     border-radius: 8;
@@ -22,10 +35,148 @@
     border: 1px solid #16213e;
     border-radius: 4;
     padding: 8;
+    color: #ffffff;
 }
 
 .button:hover {
     background: #e94560;
     border: 1px solid #e94560;
     cursor: pointer;
+}
+
+.section-dark {
+    background: #0f3460;
+    padding: 16;
+    border-radius: 8;
+    width: 46%;
+}
+
+.section-light {
+    background: #f0f0f0;
+    padding: 16;
+    border-radius: 8;
+    width: 100%;
+}
+
+.section-title {
+    color: #ffffff;
+    font-size: 22;
+}
+
+.section-title-dark {
+    color: #0f3460;
+    font-size: 22;
+}
+
+.card {
+    background: #16213e;
+    border: 1px solid #e94560;
+    border-radius: 6;
+    padding: 12;
+}
+
+.card:hover {
+    background: #1a1a2e;
+    border: 1px solid #ffffff;
+}
+
+.card-title {
+    color: #e94560;
+    font-size: 16;
+}
+
+.card-body {
+    color: #aaaaaa;
+    font-size: 13;
+}
+
+.card-flat {
+    background: #e0e0e0;
+    border-radius: 4;
+    padding: 10;
+    color: #333333;
+    font-size: 14;
+    width: 100%;
+}
+
+// ── Sandbox ───────────────────────────────────────────
+// Variáveis locais pra evitar repetição nas classes sandbox.
+// (Den ainda não suporta @extend/@mixin — extrair quando tiver)
+$sb-bg:     #1e1e2e;
+$sb-border: #555555;
+$sb-child:  #2a3a5a;
+$sb-accent: #3a5a9a;
+
+.sandbox-block {
+    background: $sb-bg;
+    border: 1px solid $sb-border;
+    padding: 8;
+    color: $text-white;
+    font-size: 13;
+}
+
+.sandbox-full {
+    background: $sb-bg;
+    border: 1px solid $sb-border;
+    padding: 8;
+    color: $text-white;
+    font-size: 13;
+    width: 100%;
+}
+
+.sandbox-fixed {
+    background: $sb-bg;
+    border: 1px solid $sb-border;
+    padding: 8;
+    color: $text-white;
+    font-size: 13;
+    width: 200;
+}
+
+.sandbox-flex {
+    background: $sb-bg;
+    border: 1px solid $sb-border;
+    padding: 8;
+    color: $text-white;
+    font-size: 13;
+    display: flex;
+}
+
+.sandbox-label {
+    color: $text-muted;
+    font-size: 11;
+}
+
+.sandbox-child {
+    background: $sb-child;
+    border: 1px solid $sb-accent;
+    padding: 6;
+    color: $text-white;
+    font-size: 12;
+}
+
+.sandbox-child-full {
+    background: $sb-child;
+    border: 1px solid $sb-accent;
+    padding: 6;
+    color: $text-white;
+    font-size: 12;
+    width: 100%;
+}
+
+.sandbox-item {
+    background: $sb-child;
+    border: 1px solid $sb-accent;
+    padding: 6;
+    color: $text-white;
+    font-size: 12;
+}
+
+.sandbox-item-full {
+    background: $sb-child;
+    border: 1px solid $sb-accent;
+    padding: 6;
+    color: $text-white;
+    font-size: 12;
+    width: 100%;
 }
