@@ -14,13 +14,9 @@ struct FlexChildInfo {
     width: WidthValue,
 }
 
-/// Coleta layout index + width de filhos diretos de um flex container.
-/// ForLoop e IfChain são transparentes — seus filhos internos participam
-/// da distribuição flex (mas com contagem dinâmica, tratados como Auto).
-///
-/// INVARIANTE: esta função DEVE caminhar na mesma ordem DFS que
-/// `collect_flat_entries` em `codegen/mod.rs` e `generate_element` em `element.rs`.
-/// Se adicionar um novo `DenNode` variant, atualizar as TRÊS.
+/// Coleta layout index + width de filhos DIRETOS de um flex container.
+/// Usa `walk_den_nodes` (fonte única de verdade pra DFS) e filtra por
+/// `parent_index == parent_idx` pra pegar só filhos diretos.
 ///
 /// LIMITAÇÃO: `IfChain` contribui filhos de AMBOS os branches pro `auto_count`.
 /// Em runtime só um branch executa, então `__den_flex_share` é calculado pra
@@ -29,55 +25,23 @@ struct FlexChildInfo {
 /// Fix futuro: calcular `__den_flex_share` em runtime contando filhos renderizados.
 fn collect_flex_children_info(
     children: &[DenNode],
+    parent_idx: usize,
     layout_index: &mut usize,
 ) -> Vec<FlexChildInfo> {
     let mut infos = Vec::new();
-    for child in children {
-        match child {
-            DenNode::Element(el) => {
-                let idx = *layout_index;
-                *layout_index += 1;
-                infos.push(FlexChildInfo {
-                    layout_index: idx,
-                    width: el.visual.width,
-                });
-                // Pula os filhos recursivamente pra avançar o layout_index,
-                // mas não os coleta — só filhos diretos do flex participam.
-                skip_descendants(&el.children, layout_index);
-            }
-            DenNode::ForLoop(fl) => {
-                // ForLoop é transparente: seus filhos internos são filhos do flex.
-                // Mas a contagem é dinâmica, então tratamos cada template filho
-                // como Auto pra fins de distribuição.
-                infos.extend(collect_flex_children_info(&fl.children, layout_index));
-            }
-            DenNode::IfChain(ic) => {
-                // IfChain: both branches contribute
-                infos.extend(collect_flex_children_info(&ic.then_children, layout_index));
-                infos.extend(collect_flex_children_info(&ic.else_children, layout_index));
-            }
-        }
-    }
-    infos
-}
 
-/// Avança layout_index por todos os descendentes sem coletar info.
-///
-/// INVARIANTE: mesma ordem DFS que `collect_flat_entries` e `generate_element`.
-fn skip_descendants(children: &[DenNode], layout_index: &mut usize) {
-    for child in children {
-        match child {
-            DenNode::Element(el) => {
-                *layout_index += 1;
-                skip_descendants(&el.children, layout_index);
-            }
-            DenNode::ForLoop(fl) => skip_descendants(&fl.children, layout_index),
-            DenNode::IfChain(ic) => {
-                skip_descendants(&ic.then_children, layout_index);
-                skip_descendants(&ic.else_children, layout_index);
-            }
+    // walk_den_nodes avança o counter pra todos os descendentes,
+    // mas só coletamos os que são filhos diretos (parent == parent_idx).
+    crate::types::walk_den_nodes(children, parent_idx, layout_index, &mut |el, idx, parent| {
+        if parent == parent_idx {
+            infos.push(FlexChildInfo {
+                layout_index: idx,
+                width: el.visual.width,
+            });
         }
-    }
+    });
+
+    infos
 }
 
 pub fn generate_element(
@@ -108,7 +72,7 @@ pub fn generate_element(
     // não interferir com a geração real dos filhos.
     let flex_children_info = if visual.display == DisplayMode::Flex {
         let mut peek_index = ctx.layout_index;
-        Some(collect_flex_children_info(&el.children, &mut peek_index))
+        Some(collect_flex_children_info(&el.children, my_layout_index, &mut peek_index))
     } else {
         None
     };
