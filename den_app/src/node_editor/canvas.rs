@@ -40,13 +40,6 @@ impl NodeEditorCanvas {
         let canvas_rect = response.rect;
         let s = self.scale;
 
-        // Pan: middle-click drag → cursor grabbing + atualiza pan_offset
-        if response.dragged_by(egui::PointerButton::Middle) {
-            ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
-            let delta = response.drag_delta();
-            self.pan_offset.x += delta.x / s;
-            self.pan_offset.y += delta.y / s;
-        }
         // Scroll sem Ctrl → pan vertical/horizontal (Ctrl+scroll é zoom, tratado em main.rs)
         let scroll = ui.ctx().input(|i| {
             if !i.modifiers.ctrl { i.raw_scroll_delta } else { egui::Vec2::ZERO }
@@ -172,9 +165,10 @@ impl NodeEditorCanvas {
             }
         }
 
-        // Node drag move (só se NÃO estiver em wire drag)
+        // Drag move: node drag OU pan do canvas (fundo vazio)
         if response.dragged() && self.wire_drag.is_none() {
             if let Some(ref drag) = self.drag {
+                // Node drag
                 if let Some(mouse_pos) = response.interact_pointer_pos() {
                     let canvas_x = (mouse_pos.x - effective_origin.x) / s;
                     let canvas_y = (mouse_pos.y - effective_origin.y) / s;
@@ -186,6 +180,11 @@ impl NodeEditorCanvas {
                         node.y = new_y;
                     }
                 }
+            } else {
+                // Fundo vazio → pan
+                let delta = response.drag_delta();
+                self.pan_offset.x += delta.x / s;
+                self.pan_offset.y += delta.y / s;
             }
         }
 
