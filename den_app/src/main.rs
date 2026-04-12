@@ -1,10 +1,17 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app_config;
+mod node_editor;
 mod pages;
 
 use eframe::egui;
+use node_editor::NodeEditorCanvas;
 use pages::HomePage;
+
+enum ActiveView {
+    Home,
+    NodeEditor,
+}
 
 fn main() -> eframe::Result {
     env_logger::init();
@@ -27,14 +34,18 @@ fn main() -> eframe::Result {
 
 struct DenApp {
     home: HomePage,
+    node_editor: NodeEditorCanvas,
     scale: f32,
+    active_view: ActiveView,
 }
 
 impl DenApp {
     fn new() -> Self {
         Self {
             home: HomePage::default(),
+            node_editor: NodeEditorCanvas::new(),
             scale: app_config::DEFAULT_SCALE,
+            active_view: ActiveView::Home,
         }
     }
 
@@ -71,7 +82,15 @@ impl DenApp {
 
 impl eframe::App for DenApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Atalhos de teclado
+        // F2: toggle view
+        if ctx.input(|i| i.key_pressed(egui::Key::F2)) {
+            self.active_view = match self.active_view {
+                ActiveView::Home => ActiveView::NodeEditor,
+                ActiveView::NodeEditor => ActiveView::Home,
+            };
+        }
+
+        // Zoom global (funciona em qualquer view)
         if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(egui::Key::Equals)) {
             self.scale = (self.scale + app_config::SCALE_STEP).min(app_config::MAX_SCALE);
         }
@@ -81,7 +100,6 @@ impl eframe::App for DenApp {
         if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(egui::Key::Num0)) {
             self.scale = app_config::DEFAULT_SCALE;
         }
-        // Ctrl+scroll: zoom com roda do mouse
         let scroll_delta = ctx.input(|i| {
             if i.modifiers.ctrl { i.raw_scroll_delta.y } else { 0.0 }
         });
@@ -92,9 +110,17 @@ impl eframe::App for DenApp {
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                self.home.render(ui, self.scale);
-            });
+            match self.active_view {
+                ActiveView::Home => {
+                    egui::ScrollArea::vertical().show(ui, |ui| {
+                        self.home.render(ui, self.scale);
+                    });
+                }
+                ActiveView::NodeEditor => {
+                    self.node_editor.scale = self.scale;
+                    self.node_editor.render(ui);
+                }
+            }
         });
 
         self.render_zoom_controls(ctx);

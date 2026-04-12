@@ -1,8 +1,8 @@
 use eframe::egui;
 
 pub const APP_TITLE: &str = "Den";
-pub const WINDOW_WIDTH: f32 = 400.0;
-pub const WINDOW_HEIGHT: f32 = 300.0;
+pub const WINDOW_WIDTH: f32 = 1200.0;
+pub const WINDOW_HEIGHT: f32 = 800.0;
 
 /// Zoom padrão (100%)
 pub const DEFAULT_SCALE: f32 = 1.0;
