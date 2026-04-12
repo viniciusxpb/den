@@ -1,8 +1,7 @@
 .DEFAULT_GOAL := help
 .PHONY: dev preview review yoink commit push help
 
-dev: ## Hot reload + style editor (requires cargo-watch)
-	cargo run --bin style_editor &
+dev: ## Hot reload (requires cargo-watch)
 	cargo watch -w den_app/src -w den_macros/src -i den_macros/src/lib.rs \
 		-s 'touch den_macros/src/lib.rs && cargo run --bin den_app'
 

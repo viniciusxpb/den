@@ -17,5 +17,6 @@ path = "src/bin/style_editor.rs"
 
 [dependencies]
 den_macros = { path = "../den_macros" }
+den_layout = { path = "../den_layout" }
 eframe = "0.33"
 env_logger = "0.11"

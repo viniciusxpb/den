@@ -41,3 +41,40 @@
     <div class="card-flat">Den is a Rust framework that compiles HTML + SCSS templates into native egui desktop GUI code at compile time via procedural macros.</div>
     <div class="card-flat">Built by {{ this.name }} — currently version 0.1.0.</div>
 </div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SANDBOX — casos de teste de layout
+     ═══════════════════════════════════════════════════════════════ -->
+
+<!-- Caso 1: sem largura explícita — deve preencher o pai (block) -->
+<div dev class="sandbox-block">
+    <div class="sandbox-label">block — sem width</div>
+    <div class="sandbox-child">filho sem width</div>
+</div>
+
+<!-- Caso 2: width 100% explícito -->
+<div dev class="sandbox-full">
+    <div class="sandbox-label">width: 100%</div>
+    <div class="sandbox-child-full">filho com width: 100%</div>
+</div>
+
+<!-- Caso 3: width fixo em px -->
+<div dev class="sandbox-fixed">
+    <div class="sandbox-label">width: 200px</div>
+    <div class="sandbox-child">filho dentro de 200px</div>
+</div>
+
+<!-- Caso 4: display flex com filhos content-sized -->
+<div dev class="sandbox-flex">
+    <div class="sandbox-label">display: flex — filhos content-sized</div>
+    <div class="sandbox-item">item a</div>
+    <div class="sandbox-item">item b</div>
+    <div class="sandbox-item">item c longo</div>
+</div>
+
+<!-- Caso 5: flex com filho 100% — deve preencher o flex container -->
+<div dev class="sandbox-flex">
+    <div class="sandbox-label">display: flex — um filho com width: 100%</div>
+    <div class="sandbox-item-full">filho full</div>
+    <div class="sandbox-item">item normal</div>
+</div>

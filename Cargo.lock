@@ -782,10 +782,15 @@ checksum = "f27ae1dd37df86211c42e150270f82743308803d90a6f6e6651cd730d5e1732f"
 name = "den_app"
 version = "0.1.0"
 dependencies = [
+ "den_layout",
  "den_macros",
  "eframe",
  "env_logger",
 ]
+
+[[package]]
+name = "den_layout"
+version = "0.1.0"
 
 [[package]]
 name = "den_macros"

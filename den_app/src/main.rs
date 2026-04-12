@@ -83,7 +83,9 @@ impl eframe::App for DenApp {
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            self.home.render(ui, self.scale);
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                self.home.render(ui, self.scale);
+            });
         });
 
         self.render_zoom_controls(ctx);
