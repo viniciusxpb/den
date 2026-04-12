@@ -90,12 +90,5 @@ pub fn demo_nodes() -> Vec<NodeData> {
 }
 
 pub fn demo_wires() -> Vec<WireData> {
-    vec![
-        WireData { from_node: "hermes".into(), from_port: "next".into(), to_node: "atlas".into(), to_port: "exec".into(), wire_type: PortType::Exec },
-        WireData { from_node: "hermes".into(), from_port: "response".into(), to_node: "atlas".into(), to_port: "value".into(), wire_type: PortType::Data },
-        WireData { from_node: "hermes".into(), from_port: "next".into(), to_node: "argus".into(), to_port: "watch".into(), wire_type: PortType::Exec },
-        WireData { from_node: "atlas".into(), from_port: "state".into(), to_node: "athena".into(), to_port: "state".into(), wire_type: PortType::Data },
-        WireData { from_node: "argus".into(), from_port: "metrics".into(), to_node: "athena".into(), to_port: "metrics".into(), wire_type: PortType::Data },
-        WireData { from_node: "argus".into(), from_port: "alert".into(), to_node: "athena".into(), to_port: "exec".into(), wire_type: PortType::Exec },
-    ]
+    vec![]
 }

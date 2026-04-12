@@ -69,6 +69,14 @@ pub const WIRE_OPACITY: f32 = 0.6;
 pub const WIRE_MIN_TENSION: f32 = 80.0;
 pub const WIRE_TENSION_RATIO: f32 = 0.5;
 
+// -- Wire snap highlight --------------------------------------------------
+/// Raio do anel de highlight quando cursor está sobre port compatível durante wire drag.
+pub const PORT_SNAP_HIGHLIGHT_RADIUS: f32 = 10.0;
+/// Espessura do stroke do highlight.
+pub const PORT_SNAP_HIGHLIGHT_STROKE: f32 = 1.5;
+/// Opacidade do highlight (multiplicada na cor do wire).
+pub const PORT_SNAP_HIGHLIGHT_OPACITY: f32 = 0.8;
+
 // -- Colors: node ---------------------------------------------------------
 pub const NODE_BG: egui::Color32 = egui::Color32::from_rgb(20, 20, 37);
 pub const NODE_BORDER: egui::Color32 = egui::Color32::from_rgb(42, 42, 74);
@@ -83,7 +91,6 @@ pub const PORT_OUTPUT: egui::Color32 = egui::Color32::from_rgb(233, 69, 96);
 // -- Colors: wires --------------------------------------------------------
 pub const WIRE_EXEC: egui::Color32 = PORT_EXEC;
 pub const WIRE_DATA: egui::Color32 = PORT_DATA;
-pub const WIRE_DEFAULT: egui::Color32 = PORT_INPUT;
 
 // -- Colors: accent per node type -----------------------------------------
 pub const ACCENT_BLUE: egui::Color32 = egui::Color32::from_rgb(79, 195, 247);

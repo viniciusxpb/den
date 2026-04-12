@@ -1,6 +1,8 @@
 use eframe::egui;
 use super::{theme, types::*};
 
+/// Calcula a altura total do node em CSS pixels (sem scale).
+/// Considera header, ports (max entre inputs e outputs), seção de fields (se houver) e padding.
 pub fn calculate_node_height(node: &NodeData) -> f32 {
     let port_rows = node.inputs.len().max(node.outputs.len());
     let field_rows = node.fields.len();
@@ -17,6 +19,9 @@ pub fn calculate_node_height(node: &NodeData) -> f32 {
         + theme::BODY_PAD_BOTTOM
 }
 
+/// Renderiza um node completo: shadow, body, header, accent line, title, subtitle,
+/// separator, input ports (esquerda), output ports (direita) e fields.
+/// `canvas_origin` é o canto top-left do canvas em screen coords.
 pub fn draw_node(
     painter: &egui::Painter,
     node: &NodeData,
@@ -132,6 +137,8 @@ pub fn draw_node(
     }
 }
 
+/// Sub-rotina de `draw_node`: desenha o dashed separator e as field rows com value boxes.
+/// `base_y` é a posição Y em screen coords onde a seção de fields começa (abaixo dos ports).
 fn draw_fields(
     painter: &egui::Painter,
     node: &NodeData,
@@ -194,6 +201,8 @@ fn draw_fields(
     }
 }
 
+/// Desenha uma linha tracejada entre `from` e `to`.
+/// `dash_len` e `gap_len` estão em screen pixels (já escalados pelo caller).
 fn draw_dashed_line(
     painter: &egui::Painter,
     from: egui::Pos2,
@@ -213,6 +222,9 @@ fn draw_dashed_line(
     }
 }
 
+/// Desenha o shape de um port em `center` (screen coords).
+/// `Exec` → triângulo apontando para fora; `Output` → diamante; `Data`/`Input` → círculo com glow.
+/// `is_output` controla a direção do triângulo Exec.
 fn draw_port(
     painter: &egui::Painter,
     center: egui::Pos2,
@@ -267,6 +279,7 @@ fn draw_port(
     }
 }
 
+/// Mapeia `PortType` para sua cor de tema (PORT_EXEC, PORT_DATA, PORT_INPUT, PORT_OUTPUT).
 fn port_color(port_type: PortType) -> egui::Color32 {
     match port_type {
         PortType::Exec => theme::PORT_EXEC,

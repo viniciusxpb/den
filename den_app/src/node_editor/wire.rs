@@ -1,6 +1,9 @@
 use eframe::egui;
 use super::{theme, types::*};
 
+/// Retorna a posição screen-space de um port em um node.
+/// `is_output = true` → borda direita do node; `false` → borda esquerda.
+/// Retorna `None` se `port_name` não for encontrado na lista correspondente.
 pub fn get_port_position(
     node: &NodeData,
     port_name: &str,
@@ -28,6 +31,8 @@ pub fn get_port_position(
     ))
 }
 
+/// Desenha uma bezier cúbica entre dois ports conectados por `wire`.
+/// Cor determinada por `wire.wire_type`. Retorna sem desenhar se algum node ou port não for encontrado.
 pub fn draw_wire(
     painter: &egui::Painter,
     wire: &WireData,
@@ -47,7 +52,8 @@ pub fn draw_wire(
     let wire_color = match wire.wire_type {
         PortType::Exec => theme::WIRE_EXEC,
         PortType::Data => theme::WIRE_DATA,
-        _ => theme::WIRE_DEFAULT,
+        PortType::Input => theme::PORT_INPUT,
+        PortType::Output => theme::PORT_OUTPUT,
     };
 
     let dx = (to_pos.x - from_pos.x).abs();

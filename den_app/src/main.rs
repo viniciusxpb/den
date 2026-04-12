@@ -114,6 +114,9 @@ impl eframe::App for DenApp {
         }
         if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(egui::Key::Num0)) {
             *active_scale = app_config::DEFAULT_SCALE;
+            if let ActiveView::NodeEditor = self.active_view {
+                self.node_editor.pan_offset = egui::Vec2::ZERO;
+            }
         }
         let scroll_delta = ctx.input(|i| {
             if i.modifiers.ctrl { i.raw_scroll_delta.y } else { 0.0 }

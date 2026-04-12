@@ -6,6 +6,7 @@ mod types;
 mod wire;
 
 pub use canvas::NodeEditorCanvas;
+use eframe::egui;
 
 impl NodeEditorCanvas {
     pub fn new() -> Self {
@@ -15,6 +16,7 @@ impl NodeEditorCanvas {
             scale: 1.0,
             drag: None,
             wire_drag: None,
+            pan_offset: egui::Vec2::ZERO,
         }
     }
 }
