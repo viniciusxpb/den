@@ -81,6 +81,15 @@ impl eframe::App for DenApp {
         if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(egui::Key::Num0)) {
             self.scale = app_config::DEFAULT_SCALE;
         }
+        // Ctrl+scroll: zoom com roda do mouse
+        let scroll_delta = ctx.input(|i| {
+            if i.modifiers.ctrl { i.raw_scroll_delta.y } else { 0.0 }
+        });
+        if scroll_delta != 0.0 {
+            let steps = (scroll_delta / 50.0).clamp(-1.0, 1.0);
+            self.scale = (self.scale + steps * app_config::SCALE_STEP)
+                .clamp(app_config::MIN_SCALE, app_config::MAX_SCALE);
+        }
 
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
