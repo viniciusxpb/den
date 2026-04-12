@@ -1,5 +1,16 @@
 use eframe::egui;
 
+/// Estado de um drag em andamento. None = nada sendo arrastado.
+#[derive(Debug)]
+pub struct DragState {
+    /// Id do node sendo arrastado.
+    pub node_id: String,
+    /// Offset entre o ponto de clique e o origin (x,y) do node,
+    /// em CSS pixels (unscaled). Garante que o node não "teleporta"
+    /// pro cursor ao iniciar o drag.
+    pub offset: egui::Vec2,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PortType {
     Exec,

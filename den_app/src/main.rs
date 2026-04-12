@@ -50,6 +50,11 @@ impl DenApp {
     }
 
     fn render_zoom_controls(&mut self, ctx: &egui::Context) {
+        let mut current_scale = match self.active_view {
+            ActiveView::Home => self.scale,
+            ActiveView::NodeEditor => self.node_editor.scale,
+        };
+
         egui::Area::new(egui::Id::new("den_zoom_controls"))
             .anchor(egui::Align2::RIGHT_BOTTOM, egui::vec2(-16.0, -16.0))
             .order(egui::Order::Foreground)
@@ -61,22 +66,27 @@ impl DenApp {
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
                             if ui.small_button("−").clicked() {
-                                self.scale = (self.scale - app_config::SCALE_STEP)
+                                current_scale = (current_scale - app_config::SCALE_STEP)
                                     .max(app_config::MIN_SCALE);
                             }
-                            let pct = (self.scale * 100.0).round() as u32;
+                            let pct = (current_scale * 100.0).round() as u32;
                             ui.label(
                                 egui::RichText::new(format!("{pct}%"))
                                     .color(egui::Color32::WHITE)
                                     .size(12.0),
                             );
                             if ui.small_button("+").clicked() {
-                                self.scale = (self.scale + app_config::SCALE_STEP)
+                                current_scale = (current_scale + app_config::SCALE_STEP)
                                     .min(app_config::MAX_SCALE);
                             }
                         });
                     });
             });
+
+        match self.active_view {
+            ActiveView::Home => self.scale = current_scale,
+            ActiveView::NodeEditor => self.node_editor.scale = current_scale,
+        }
     }
 }
 
@@ -90,25 +100,31 @@ impl eframe::App for DenApp {
             };
         }
 
-        // Zoom global (funciona em qualquer view)
+        // Zoom: roteia pro scale da view ativa
+        let active_scale = match self.active_view {
+            ActiveView::Home => &mut self.scale,
+            ActiveView::NodeEditor => &mut self.node_editor.scale,
+        };
+
         if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(egui::Key::Equals)) {
-            self.scale = (self.scale + app_config::SCALE_STEP).min(app_config::MAX_SCALE);
+            *active_scale = (*active_scale + app_config::SCALE_STEP).min(app_config::MAX_SCALE);
         }
         if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(egui::Key::Minus)) {
-            self.scale = (self.scale - app_config::SCALE_STEP).max(app_config::MIN_SCALE);
+            *active_scale = (*active_scale - app_config::SCALE_STEP).max(app_config::MIN_SCALE);
         }
         if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(egui::Key::Num0)) {
-            self.scale = app_config::DEFAULT_SCALE;
+            *active_scale = app_config::DEFAULT_SCALE;
         }
         let scroll_delta = ctx.input(|i| {
             if i.modifiers.ctrl { i.raw_scroll_delta.y } else { 0.0 }
         });
         if scroll_delta != 0.0 {
-            let steps = (scroll_delta / 50.0).clamp(-1.0, 1.0);
-            self.scale = (self.scale + steps * app_config::SCALE_STEP)
+            let steps = (scroll_delta / app_config::SCROLL_SENSITIVITY).clamp(-1.0, 1.0);
+            *active_scale = (*active_scale + steps * app_config::SCALE_STEP)
                 .clamp(app_config::MIN_SCALE, app_config::MAX_SCALE);
         }
 
+        // Render
         egui::CentralPanel::default().show(ctx, |ui| {
             match self.active_view {
                 ActiveView::Home => {
@@ -117,7 +133,6 @@ impl eframe::App for DenApp {
                     });
                 }
                 ActiveView::NodeEditor => {
-                    self.node_editor.scale = self.scale;
                     self.node_editor.render(ui);
                 }
             }

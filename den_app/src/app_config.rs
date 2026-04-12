@@ -12,6 +12,8 @@ pub const MIN_SCALE: f32 = 0.5;
 pub const MAX_SCALE: f32 = 3.0;
 /// Incremento por clique de +/-
 pub const SCALE_STEP: f32 = 0.1;
+/// Sensibilidade do scroll pra zoom (delta_pixels / SENSITIVITY = steps)
+pub const SCROLL_SENSITIVITY: f32 = 50.0;
 
 pub fn default_visuals() -> egui::Visuals {
     egui::Visuals::light()
