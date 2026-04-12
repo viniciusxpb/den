@@ -9,12 +9,13 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// Largura da janela egui em pixels (deve coincidir com `app_config::WINDOW_WIDTH`).
+/// Largura da janela egui em pixels (deve coincidir com `app_config::WINDOW_WIDTH` = 1200).
 ///
 /// Usada pra que `width: 100%` nos componentes do preview resolva relativo ao
 /// mesmo espaço disponível que o app nativo enxerga. Atualizar aqui se o
 /// tamanho padrão da janela mudar.
-const EGUI_WINDOW_WIDTH: u32 = 400;
+#[allow(dead_code)]
+const EGUI_WINDOW_WIDTH: u32 = 1200;
 
 fn main() {
     let manifest = std::env::var("CARGO_MANIFEST_DIR")
@@ -59,7 +60,6 @@ fn main() {
 
     let output = generate_preview_html(&all_css, &all_components);
     let out_path = preview_dir.join("index.html");
-    fs::write(&out_path, &output).expect("Failed to write preview/index.html");
     let already_exists = out_path.exists();
     fs::write(&out_path, &output).expect("Failed to write preview/index.html");
     println!("preview: {} componente(s) → {}", all_components.len(), out_path.display());
@@ -132,6 +132,7 @@ fn scss_to_css(scss: &str) -> String {
     out
 }
 
+// DUPLICAÇÃO: lógica idêntica a parse/scss.rs. Extrair pra den_core quando criado. Ver PENDING.md.
 fn collect_scss_vars(scss: &str) -> std::collections::HashMap<String, String> {
     let mut vars = std::collections::HashMap::new();
     for line in scss.lines() {

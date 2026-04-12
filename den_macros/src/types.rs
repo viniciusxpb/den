@@ -12,7 +12,7 @@ use std::collections::HashMap;
 #[derive(Debug, Clone)]
 pub enum TextSegment {
     Literal(String),
-    /// Expressão já com `this` mapeado pra `self`.
+    /// Expressão passada direto do template (templates usam `self.` diretamente).
     Expr(String),
 }
 
@@ -209,6 +209,9 @@ impl DenVisual {
 
     /// Merge outro visual neste (last-wins pra propriedades definidas).
     /// Ponto único de merge — adicionar nova propriedade CSS aqui só.
+    ///
+    /// INVARIANTE: esta função DEVE ser atualizada junto com StyleRule::merge_from
+    /// quando adicionar nova propriedade CSS.
     pub fn merge_from(&mut self, other: &Self) {
         if other.color.is_some() { self.color = other.color; }
         if other.font_size.is_some() { self.font_size = other.font_size; }
@@ -232,7 +235,7 @@ impl DenVisual {
     }
 
     /// Extrai só propriedades herdáveis pra propagar pros filhos.
-    #[allow(dead_code)] // PENDING.md — usado pelo scale system futuro
+    #[allow(dead_code)] // Reservado para propagação de scale no resolve. O scale system atual entra no codegen. Ver PENDING.md.
     pub fn inheritable(&self) -> Self {
         Self {
             color: self.color,

@@ -113,10 +113,10 @@ All errors become `compile_error!` -- you see them in your IDE immediately.
 
 ### Data Interpolation
 
-Use `{{ this.field }}` to bind component state. Fields must implement `Display`.
+Use `{{ self.field }}` to bind component state. Fields must implement `Display`.
 
 ```html
-<div class="greeting">Hello {{ this.name }}, you are {{ this.age }} years old!</div>
+<div class="greeting">Hello {{ self.name }}, you are {{ self.age }} years old!</div>
 ```
 
 ```rust
@@ -145,7 +145,7 @@ Bind click events with `(click)="method_name()"`:
 Use `<if>` and `<else>` for conditional UI:
 
 ```html
-<if cond="this.logged_in">
+<if cond="self.logged_in">
     <div class="welcome">Welcome back!</div>
 </if>
 <else>
@@ -158,7 +158,7 @@ Use `<if>` and `<else>` for conditional UI:
 Use `<for>` to iterate over collections:
 
 ```html
-<for each="item" in="this.items">
+<for each="item" in="self.items">
     <div class="item">{{ item }}</div>
 </for>
 ```
@@ -313,19 +313,19 @@ make push       # AI-generated commit + push
 
 ## Roadmap
 
-- [x] `{{ this.field }}` data interpolation
+- [x] `{{ self.field }}` data interpolation
 - [x] `(click)="method()"` event binding
 - [x] `:hover` pseudo-selector with cursor support
 - [x] `display: flex`, `border`, `border-radius`, `width` CSS properties
-- [x] `<for each="item" in="this.list">` loop rendering
-- [x] `<if cond="this.flag">` / `<else>` conditional rendering
+- [x] `<for each="item" in="self.list">` loop rendering
+- [x] `<if cond="self.flag">` / `<else>` conditional rendering
 - [x] SCSS variables (`$var: value`)
 - [x] Zoom / scale system (50%--300%)
 - [x] Layout system with iterative width resolution
 - [x] HTML preview generator (`make preview`)
 - [x] Live style editor with visual controls
 - [x] Modular architecture (parse / resolve / codegen)
-- [ ] `<input bind="this.field" />` two-way data binding
+- [ ] `<input bind="self.field" />` two-way data binding
 - [ ] Root `<panel>` element mapping to egui CentralPanel
 - [ ] Nested SCSS selectors (`.parent { .child { } }`)
 - [ ] Component system with props

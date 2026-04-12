@@ -565,6 +565,7 @@ fn classify_value(prop: &str, raw: &str) -> PropertyValue {
     }
 }
 
+// DUPLICAÇÃO: lógica idêntica a parse/scss.rs. Extrair pra den_core quando criado. Ver PENDING.md.
 fn collect_scss_vars(content: &str) -> HashMap<String, String> {
     let mut vars = HashMap::new();
     for line in content.lines() {
