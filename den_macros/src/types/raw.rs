@@ -29,6 +29,11 @@ pub struct RawElement {
     pub on_click: Option<String>,
     /// Variável vinculada por `den-bind="var"`. Usada pra auto-clone de args.
     pub den_bind: Option<String>,
+    /// Expressão de binding bidirecional (e.g. "self.name").
+    /// Presente só em `<input bind="...">`.
+    pub bind_expr: Option<String>,
+    /// Texto placeholder para inputs.
+    pub placeholder: Option<String>,
 }
 
 #[derive(Debug)]

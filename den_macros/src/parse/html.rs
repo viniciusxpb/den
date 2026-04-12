@@ -248,6 +248,8 @@ fn parse_element_chars(chars: &[char], pos: &mut usize) -> Option<RawElement> {
     let mut classes = Vec::new();
     let mut on_click = None;
     let mut den_bind = None;
+    let mut bind_expr = None;
+    let mut placeholder = None;
     skip_ws(chars, pos);
     while *pos < chars.len() && chars[*pos] != '>' && chars[*pos] != '/' {
         if chars[*pos] == '(' {
@@ -280,15 +282,23 @@ fn parse_element_chars(chars: &[char], pos: &mut usize) -> Option<RawElement> {
                     classes = value.split_whitespace().map(|s| s.to_string()).collect();
                 } else if attr_name == "den-bind" {
                     den_bind = Some(value);
+                } else if attr_name == "bind" {
+                    bind_expr = Some(value);
+                } else if attr_name == "placeholder" {
+                    placeholder = Some(value);
                 }
             }
         }
         skip_ws(chars, pos);
     }
 
-    // Self-closing
-    if *pos < chars.len() && chars[*pos] == '/' {
-        *pos += 1;
+    // Self-closing explícito (`/>`) ou void element (`input` é sempre self-closing)
+    let is_void = tag == "input";
+    if (*pos < chars.len() && chars[*pos] == '/') || is_void {
+        // Consome `/>` ou apenas `>` (void element)
+        if *pos < chars.len() && chars[*pos] == '/' {
+            *pos += 1;
+        }
         if *pos < chars.len() && chars[*pos] == '>' {
             *pos += 1;
         }
@@ -299,6 +309,8 @@ fn parse_element_chars(chars: &[char], pos: &mut usize) -> Option<RawElement> {
             children: Vec::new(),
             on_click,
             den_bind,
+            bind_expr,
+            placeholder,
         });
     }
     if *pos < chars.len() && chars[*pos] == '>' {
@@ -337,6 +349,8 @@ fn parse_element_chars(chars: &[char], pos: &mut usize) -> Option<RawElement> {
         children,
         on_click,
         den_bind,
+        bind_expr,
+        placeholder,
     })
 }
 
@@ -374,4 +388,68 @@ fn read_quoted(chars: &[char], pos: &mut usize) -> String {
         *pos += 1;
     }
     val
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::RawNode;
+
+    #[test]
+    fn input_bind_parsed() {
+        let nodes = parse_html(r#"<input bind="self.name" placeholder="Nome" class="inp" />"#);
+        assert_eq!(nodes.len(), 1);
+        if let RawNode::Element(el) = &nodes[0] {
+            assert_eq!(el.tag, "input");
+            assert_eq!(el.bind_expr.as_deref(), Some("self.name"));
+            assert_eq!(el.placeholder.as_deref(), Some("Nome"));
+            assert_eq!(el.classes, vec!["inp"]);
+            assert!(el.children.is_empty());
+        } else {
+            panic!("expected Element");
+        }
+    }
+
+    #[test]
+    fn input_without_bind_has_none() {
+        let nodes = parse_html(r#"<input class="inp" />"#);
+        assert_eq!(nodes.len(), 1);
+        if let RawNode::Element(el) = &nodes[0] {
+            assert_eq!(el.tag, "input");
+            assert!(el.bind_expr.is_none());
+            assert!(el.placeholder.is_none());
+        } else {
+            panic!("expected Element");
+        }
+    }
+
+    #[test]
+    fn input_is_void_element() {
+        // `<input>` sem `/>` deve ser tratado como self-closing (sem filhos)
+        let nodes = parse_html(r#"<input bind="self.x">"#);
+        assert_eq!(nodes.len(), 1);
+        if let RawNode::Element(el) = &nodes[0] {
+            assert!(el.children.is_empty());
+        } else {
+            panic!("expected Element");
+        }
+    }
+
+    #[test]
+    fn input_inside_div() {
+        let nodes = parse_html(r#"<div class="form"><input bind="self.email" /></div>"#);
+        assert_eq!(nodes.len(), 1);
+        if let RawNode::Element(div) = &nodes[0] {
+            assert_eq!(div.tag, "div");
+            assert_eq!(div.children.len(), 1);
+            if let RawNode::Element(input) = &div.children[0] {
+                assert_eq!(input.tag, "input");
+                assert_eq!(input.bind_expr.as_deref(), Some("self.email"));
+            } else {
+                panic!("expected input Element");
+            }
+        } else {
+            panic!("expected div Element");
+        }
+    }
 }

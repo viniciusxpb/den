@@ -61,6 +61,8 @@ fn resolve_element(el: &RawElement, styles: &StyleMap, inherited: &StyleRule) ->
         segments: el.segments.clone(),
         children,
         visual,
+        bind_expr: el.bind_expr.clone(),
+        placeholder: el.placeholder.clone(),
     })
 }
 

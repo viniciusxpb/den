@@ -3,6 +3,7 @@ use super::{generate_node, CodegenCtx};
 use super::click::{translate_click_arg, generate_style_struct};
 use super::flex::{collect_flex_children_info, build_flex_layout};
 use super::frame::{build_frame_expr, build_rich_text_expr};
+use super::input::generate_input_element;
 use super::text::build_text_token_stream;
 use quote::quote;
 use std::hash::{Hash, Hasher};
@@ -11,6 +12,11 @@ pub fn generate_element(
     el: &DenElement,
     ctx: &mut CodegenCtx,
 ) -> Result<proc_macro2::TokenStream, String> {
+    // Input element — branch separado, sem hover/click
+    if el.bind_expr.is_some() {
+        return generate_input_element(el, ctx);
+    }
+
     let visual = &el.visual;
 
     // Valida uso de (click) sem self

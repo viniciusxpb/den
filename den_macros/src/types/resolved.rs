@@ -117,6 +117,11 @@ pub struct DenElement {
     pub segments: Vec<TextSegment>,
     pub children: Vec<DenNode>,
     pub visual: DenVisual,
+    /// Expressão de binding bidirecional (e.g. "self.name").
+    /// Presente só em `<input bind="...">`.
+    pub bind_expr: Option<String>,
+    /// Texto placeholder para inputs.
+    pub placeholder: Option<String>,
 }
 
 /// ForLoop resolvido. Transparente visualmente.
