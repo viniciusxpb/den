@@ -9,6 +9,13 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// Largura da janela egui em pixels (deve coincidir com `app_config::WINDOW_WIDTH`).
+///
+/// Usada pra que `width: 100%` nos componentes do preview resolva relativo ao
+/// mesmo espaço disponível que o app nativo enxerga. Atualizar aqui se o
+/// tamanho padrão da janela mudar.
+const EGUI_WINDOW_WIDTH: u32 = 400;
+
 fn main() {
     let manifest = std::env::var("CARGO_MANIFEST_DIR")
         .unwrap_or_else(|_| ".".to_string());
@@ -105,8 +112,22 @@ fn scss_to_css(scss: &str) -> String {
             continue;
         }
         let resolved = resolve_scss_vars(line, &vars);
-        out.push_str(&add_px_to_unitless(&resolved));
+        let converted = add_px_to_unitless(&resolved);
+        out.push_str(&converted);
         out.push('\n');
+
+        // Compatibilidade egui: `ui.horizontal()` não faz stretch nos filhos e
+        // usa item_spacing.x (~8px) entre eles. O CSS padrão de `display: flex`
+        // faz align-items:stretch e gap:0, o que não bate com o comportamento egui.
+        if converted.trim().trim_end_matches(';').trim() == "display: flex" {
+            let indent: String = line.chars().take_while(|c| c.is_whitespace()).collect();
+            out.push_str(&format!(
+                "{indent}align-items: flex-start; /* egui: filhos têm altura do conteúdo */\n"
+            ));
+            out.push_str(&format!(
+                "{indent}gap: 8px; /* egui item_spacing.x padrão */\n"
+            ));
+        }
     }
     out
 }
@@ -483,9 +504,15 @@ body {{
   margin-bottom: 8px;
 }}
 .den-preview-component {{
-  border: 1px dashed #333;
-  padding: 12px;
+  /* Simula a janela egui: mesma largura, background e padding do CentralPanel. */
+  /* width: 100% nos filhos resolve relativo a este container — igual ao app nativo. */
+  width: {EGUI_WINDOW_WIDTH}px;
+  min-height: 40px;
+  background: #f4f4f4;  /* egui Visuals::light() approximate */
+  padding: 8px;          /* CentralPanel default inner margin */
+  border: 2px solid #555;
   border-radius: 4px;
+  overflow: hidden;
 }}
 .den-placeholder {{
   background: #2a2a3e;
