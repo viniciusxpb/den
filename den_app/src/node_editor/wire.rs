@@ -1,3 +1,5 @@
+//! Renderização de wires (bezier cúbica entre ports).
+
 use eframe::egui;
 use super::{theme, types::*};
 

@@ -1,3 +1,5 @@
+//! Constantes visuais do node editor. Zero magic numbers.
+
 use eframe::egui;
 
 // -- Background & Grid ---------------------------------------------------
@@ -16,7 +18,9 @@ pub const HEADER_HEIGHT: f32 = 44.0;
 pub const HEADER_PATCH_HEIGHT: f32 = 8.0;
 pub const ACCENT_LINE_HEIGHT: f32 = 3.0;
 pub const ACCENT_COVER_HEIGHT: f32 = 2.0;
+/// Posição Y do título relativa ao topo do node (CSS pixels).
 pub const TITLE_OFFSET_Y: f32 = 20.0;
+/// Posição Y do subtítulo relativa ao topo do node (CSS pixels).
 pub const SUBTITLE_OFFSET_Y: f32 = 36.0;
 
 // -- Node: body -----------------------------------------------------------
@@ -45,6 +49,8 @@ pub const PORT_GLOW_OPACITY: f32 = 0.3;
 pub const PORT_FILL_OPACITY: f32 = 0.9;
 /// Raio da área clicável dos ports (maior que o visual pra facilitar o clique).
 pub const PORT_HIT_RADIUS: f32 = 12.0;
+/// Nudge vertical do label do port. `Align2::LEFT_TOP` precisa de um
+/// ajuste pra alinhar visualmente com o centro do shape do port.
 pub const PORT_LABEL_OFFSET_Y: f32 = 4.0;
 
 // -- Fields ---------------------------------------------------------------

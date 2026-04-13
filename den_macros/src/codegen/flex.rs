@@ -1,3 +1,5 @@
+//! Distribuição de largura em containers `display: flex`.
+
 use crate::types::{DenNode, WidthValue};
 use quote::quote;
 

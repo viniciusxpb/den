@@ -120,6 +120,7 @@ pub fn parse_scss(input: &str) -> StyleMap {
 }
 
 /// Coleta todas as declarações `$nome: valor;` do SCSS.
+// DUPLICAÇÃO: lógica similar em preview.rs e style_editor.rs. Extrair pra den_core. Ver PENDING.md.
 fn collect_variables(input: &str) -> HashMap<String, String> {
     let mut vars = HashMap::new();
     let bytes = input.as_bytes();

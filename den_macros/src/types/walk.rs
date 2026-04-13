@@ -1,6 +1,4 @@
-// ============================================================================
-// DFS genérico — fonte única de verdade pra ordem de travessia
-// ============================================================================
+//! DFS genérico sobre a árvore DenNode. Fonte única de verdade pra ordem de travessia.
 
 use super::resolved::*;
 

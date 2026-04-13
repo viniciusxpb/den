@@ -74,3 +74,25 @@ for (idx, user) in __den_items { self.on_edit(...); }
 ```
 
 O Vec temporário libera o borrow de `self.users` antes do loop body. Custo: uma alocação por frame. Alternativa: indexar por posição (`self.users[idx]`) ao invés de iterar por referência.
+
+---
+
+## `PortType` mistura direção e semântica — types.rs
+
+`PortType` tem 4 variantes: `Exec`, `Data`, `Input`, `Output`. As primeiras duas são tipos de dados (o que flui pelo wire). As últimas duas são direções (por onde entra/sai). O snap check em `canvas.rs` faz `port_type == wd.port_type`, o que significa que um port `PortType::Input` só conecta com outro `PortType::Input` — semanticamente errado.
+
+**Fix futuro**: separar em `direction: PortDirection { Input, Output }` + `data_type: PortDataType { Exec, Data }`. O snap check compararia só `data_type`, e `direction` determinaria o lado do node (esquerda/direita).
+
+---
+
+## Node IDs como String — types.rs
+
+`NodeData::id`, `WireData::from_node`, etc. são `String`. Cada frame faz `.find(|n| n.id == ...)` com comparação de string. Com 4 nodes é irrelevante, mas escala mal.
+
+**Fix futuro**: migrar pra `u64` ou `usize`. Eliminaria `.clone()` nos drag handlers e aceleraria hit tests.
+
+---
+
+## `build_inner` com 7 parâmetros — codegen/element.rs
+
+Tá no limite. Próxima propriedade CSS nova que exigir mais um parâmetro deve triggar a criação de `BuildInnerCtx`.

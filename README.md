@@ -279,12 +279,14 @@ den/
 │   └── src/
 │       ├── lib.rs           # Entry point (~60 lines)
 │       ├── input.rs         # Macro input parsing (syn)
-│       ├── types.rs         # Shared types (RawNode, DenNode, DenVisual, StyleRule)
+│       ├── types/           # Shared types (RawNode, DenNode, DenVisual, StyleRule)
+│       │   ├── raw.rs, style.rs, resolved.rs, walk.rs
 │       ├── resolve.rs       # Phase 2: style resolution
 │       ├── parse/           # Phase 1: HTML + SCSS parsers
 │       │   ├── html.rs, scss.rs, text.rs, color.rs
 │       └── codegen/         # Phase 3: egui code generation
-│           ├── element.rs, control_flow.rs, frame.rs, text.rs
+│           ├── element.rs, click.rs, flex.rs, input.rs
+│           ├── control_flow.rs, frame.rs, text.rs
 ├── den_layout/              # Runtime layout system
 │   └── src/lib.rs           # LayoutTable, iterative width resolution
 └── den_app/                 # Application crate
@@ -325,7 +327,7 @@ make push       # AI-generated commit + push
 - [x] HTML preview generator (`make preview`)
 - [x] Live style editor with visual controls
 - [x] Modular architecture (parse / resolve / codegen)
-- [ ] `<input bind="self.field" />` two-way data binding
+- [x] `<input bind="self.field" />` two-way data binding
 - [ ] Root `<panel>` element mapping to egui CentralPanel
 - [ ] Nested SCSS selectors (`.parent { .child { } }`)
 - [ ] Component system with props

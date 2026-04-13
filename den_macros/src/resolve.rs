@@ -1,3 +1,5 @@
+//! Fase 2 do pipeline: resolve estilos e constrói DenNode com DenVisual.
+
 use crate::types::{
     DenElement, DenForLoop, DenIfChain, DenNode, DenVisual, RawElement, RawForLoop, RawIfChain,
     RawNode, StyleMap, StyleRule,

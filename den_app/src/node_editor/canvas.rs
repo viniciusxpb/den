@@ -1,3 +1,5 @@
+//! Canvas principal: render, drag, wire drag, hit testing, pan e grid.
+
 use eframe::egui;
 use super::{theme, types::*, node, wire};
 
@@ -254,8 +256,7 @@ impl NodeEditorCanvas {
     /// Checa se (x, y) em CSS pixels está sobre algum output port.
     /// Retorna (node_id, port_name, port_type) se encontrou.
     fn hit_test_output_port(&self, x: f32, y: f32) -> Option<(String, String, PortType)> {
-        let hit_r = theme::PORT_HIT_RADIUS;
-        let hit_r_sq = hit_r * hit_r;
+        let hit_r_sq = theme::PORT_HIT_RADIUS * theme::PORT_HIT_RADIUS;
         for node in self.nodes.iter().rev() {
             for (i, port) in node.outputs.iter().enumerate() {
                 let port_x = node.x + theme::NODE_WIDTH;

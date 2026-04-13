@@ -1,3 +1,5 @@
+//! Geração de código pra elementos HTML regulares e containers flex.
+
 use crate::types::{DenElement, DenVisual, DisplayMode, WidthValue};
 use super::{generate_node, CodegenCtx};
 use super::click::{translate_click_arg, generate_style_struct};
@@ -332,6 +334,12 @@ fn build_inner(
     }
 }
 
+/// Gera um ID estável para um elemento dentro de uma mesma compilação.
+///
+/// Usa `DefaultHasher` que NÃO é determinístico entre compilações diferentes,
+/// mas isso é aceitável porque o ID é usado apenas dentro de um mesmo frame
+/// do egui (hover state via `data_mut`). Se o binário for recompilado, os IDs
+/// mudam mas o estado transiente do egui também reseta.
 fn den_element_id(
     template_path: &str,
     tree_path: &[usize],

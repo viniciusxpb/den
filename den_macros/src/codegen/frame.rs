@@ -1,3 +1,5 @@
+//! Construção de expressões `egui::Frame` e `egui::RichText` a partir de DenVisual.
+
 use crate::types::DenVisual;
 use quote::quote;
 

@@ -1,3 +1,5 @@
+//! Parsing da invocação `den_template!("path", self)` via syn.
+
 use syn::parse::{Parse, ParseStream};
 
 pub struct DenTemplateInput {

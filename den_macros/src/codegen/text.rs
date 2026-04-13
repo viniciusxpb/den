@@ -1,3 +1,5 @@
+//! Construção de TokenStream pra conteúdo de texto (literais e interpolação).
+
 use crate::types::TextSegment;
 use quote::quote;
 

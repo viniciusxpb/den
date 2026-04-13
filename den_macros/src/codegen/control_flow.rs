@@ -1,3 +1,5 @@
+//! Geração de código pra `<for>` e `<if>`/`<else>`.
+
 use crate::types::{DenForLoop, DenIfChain};
 use super::{generate_node, CodegenCtx};
 use quote::quote;

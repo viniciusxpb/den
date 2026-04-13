@@ -1,3 +1,5 @@
+//! Tradução de argumentos de click handlers e geração de DenElementStyle.
+
 use crate::types::{DenVisual, DisplayMode, WidthValue};
 use super::CodegenCtx;
 use quote::quote;

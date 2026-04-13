@@ -1,6 +1,4 @@
-// ============================================================================
-// Fase 1 output: tipos "raw" do parsing (sem styles resolvidos)
-// ============================================================================
+//! Tipos "raw" do parsing HTML (fase 1). Sem visual resolvido.
 
 /// Um segmento de texto — literal ou expressão interpolada `{{ expr }}`.
 #[derive(Debug, Clone)]

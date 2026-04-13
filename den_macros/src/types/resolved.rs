@@ -1,6 +1,4 @@
-// ============================================================================
-// Fase 2 output: nós com visual resolvido
-// ============================================================================
+//! Tipos resolvidos (fase 2): nós com visual linkado.
 
 use super::raw::TextSegment;
 use super::style::*;

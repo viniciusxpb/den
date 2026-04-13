@@ -8,9 +8,9 @@ dev: ## Hot reload (requires cargo-watch)
 preview: ## Gera preview HTML dos componentes com atributo dev
 	cargo run --bin preview
 
-review: ## Copia diff + prompt de code review para o clipboard
-	@{ printf 'Antes de tudo procure boas práticas para Rust e egui, depois encarne um dev Rust sênior. Faça um code review das alterações abaixo de uma aplicação que usa proc macros para compilar HTML + SCSS em código egui nativo em compile time. Seja chato com: magic numbers, variáveis sem nome descritivo, unwrap() sem justificativa, e warnings do clippy.\n\n'; git diff HEAD; } | xclip -selection clipboard
-	@printf '\033[32mDiff copiado para o clipboard com prompt de review.\033[0m\n'
+review: ## Copia REVIEW_PROMPT.md + diff para o clipboard
+	@{ cat REVIEW_PROMPT.md; printf '\n'; git diff HEAD; } | xclip -selection clipboard
+	@printf '\033[32mReview prompt + diff copiado para o clipboard.\033[0m\n'
 
 yoink: ## Copia o diff do último commit para o clipboard
 	@git diff HEAD~1 HEAD | xclip -selection clipboard

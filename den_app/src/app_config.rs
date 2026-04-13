@@ -1,3 +1,5 @@
+//! Constantes de configuração da janela e sistema de zoom.
+
 use eframe::egui;
 
 pub const APP_TITLE: &str = "Den";

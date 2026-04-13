@@ -35,8 +35,20 @@ fn main() {
     let mut all_components: Vec<(String, String)> = Vec::new(); // (label, html)
 
     for (html_path, scss_path) in &pairs {
-        let html = fs::read_to_string(html_path).unwrap_or_default();
-        let scss = fs::read_to_string(scss_path).unwrap_or_default();
+        let html = match fs::read_to_string(html_path) {
+            Ok(content) => content,
+            Err(e) => {
+                eprintln!("preview: falha ao ler {}: {e}", html_path.display());
+                continue;
+            }
+        };
+        let scss = match fs::read_to_string(scss_path) {
+            Ok(content) => content,
+            Err(e) => {
+                eprintln!("preview: falha ao ler {}: {e}", scss_path.display());
+                continue;
+            }
+        };
 
         all_css.push_str(&scss_to_css(&scss));
         all_css.push('\n');
@@ -76,6 +88,7 @@ fn main() {
 // Template discovery
 // ============================================================================
 
+/// Busca recursivamente pares HTML+SCSS em `dir`.
 fn find_template_pairs(dir: &Path) -> Vec<(PathBuf, PathBuf)> {
     let mut pairs = Vec::new();
     let Ok(entries) = fs::read_dir(dir) else { return pairs };
@@ -132,6 +145,8 @@ fn scss_to_css(scss: &str) -> String {
     out
 }
 
+/// Coleta declarações `$var: valor;` do SCSS.
+///
 // DUPLICAÇÃO: lógica idêntica a parse/scss.rs. Extrair pra den_core quando criado. Ver PENDING.md.
 fn collect_scss_vars(scss: &str) -> std::collections::HashMap<String, String> {
     let mut vars = std::collections::HashMap::new();
@@ -150,6 +165,7 @@ fn collect_scss_vars(scss: &str) -> std::collections::HashMap<String, String> {
     vars
 }
 
+/// Substitui referências `$nome` pelos valores resolvidos.
 fn resolve_scss_vars(line: &str, vars: &std::collections::HashMap<String, String>) -> String {
     if !line.contains('$') {
         return line.to_string();
@@ -168,6 +184,7 @@ const PX_PROPS: &[&str] = &[
     "border-width", "gap",
 ];
 
+/// Adiciona sufixo `px` a propriedades CSS com valores numéricos sem unidade.
 fn add_px_to_unitless(line: &str) -> String {
     let trimmed = line.trim();
     for prop in PX_PROPS {
@@ -326,6 +343,7 @@ fn read_inner_html(chars: &[char], start: usize, parent_tag: &str) -> (String, u
     (out, pos)
 }
 
+/// Converte um elemento Den recursivamente pra HTML padrão.
 fn convert_element(chars: &[char], start: usize) -> (String, usize) {
     let mut pos = start + 1; // skip '<'
     skip_ws(chars, &mut pos);
@@ -377,6 +395,7 @@ fn convert_element(chars: &[char], start: usize) -> (String, usize) {
     (format!("<{html_tag} class=\"{classes}\">{inner}</{html_tag}>"), end)
 }
 
+/// Mapeia tags Den (`heading`) pra tags HTML (`h2`).
 fn den_tag_to_html(tag: &str) -> &str {
     match tag {
         "heading" => "h2",
@@ -384,6 +403,7 @@ fn den_tag_to_html(tag: &str) -> &str {
     }
 }
 
+/// Extrai filhos de `<for>`, substituindo variável de loop por placeholder.
 fn extract_for_children(chars: &[char], start: usize) -> (String, usize) {
     let mut pos = start + 1;
     skip_ws(chars, &mut pos);
@@ -412,6 +432,7 @@ fn extract_for_children(chars: &[char], start: usize) -> (String, usize) {
     (inner, end)
 }
 
+/// Extrai filhos do branch `then` de `<if>`, ignorando `<else>`.
 fn extract_if_children(chars: &[char], start: usize) -> (String, usize) {
     let mut pos = start + 1;
     skip_ws(chars, &mut pos);
@@ -424,6 +445,7 @@ fn extract_if_children(chars: &[char], start: usize) -> (String, usize) {
     (inner, end)
 }
 
+/// Pula um elemento inteiro (opening + children + closing tag).
 fn skip_tag(chars: &[char], start: usize, _tag: &str) -> usize {
     let mut pos = start;
     // Skip opening tag
@@ -441,6 +463,7 @@ fn skip_tag(chars: &[char], start: usize, _tag: &str) -> usize {
     pos
 }
 
+/// Converte `{{ expr }}` em placeholder HTML visual.
 fn extract_interpolation(chars: &[char], start: usize) -> (String, usize) {
     let mut pos = start + 2; // skip '{{'
     let expr_start = pos;
@@ -460,6 +483,7 @@ fn extract_interpolation(chars: &[char], start: usize) -> (String, usize) {
 // HTML generation
 // ============================================================================
 
+/// Gera o HTML completo do preview com CSS injetado e componentes renderizados.
 fn generate_preview_html(css: &str, components: &[(String, String)]) -> String {
     let components_html: String = components
         .iter()
@@ -536,6 +560,7 @@ body {{
 // Parser helpers (independente do den_macros)
 // ============================================================================
 
+/// Lê o nome da tag após `<` sem avançar `pos`.
 fn peek_tag(chars: &[char], pos: usize) -> String {
     let mut p = pos;
     if p < chars.len() && chars[p] == '<' { p += 1; }
@@ -547,10 +572,12 @@ fn peek_tag(chars: &[char], pos: usize) -> String {
     chars[start..p].iter().collect()
 }
 
+/// Pula whitespace ASCII.
 fn skip_ws(chars: &[char], pos: &mut usize) {
     while *pos < chars.len() && chars[*pos].is_ascii_whitespace() { *pos += 1; }
 }
 
+/// Lê um identificador (alfanumérico + `_` + `-`).
 fn read_ident(chars: &[char], pos: &mut usize) -> String {
     let start = *pos;
     while *pos < chars.len() && (chars[*pos].is_ascii_alphanumeric() || chars[*pos] == '_' || chars[*pos] == '-') {
@@ -559,6 +586,7 @@ fn read_ident(chars: &[char], pos: &mut usize) -> String {
     chars[start..*pos].iter().collect()
 }
 
+/// Lê valor entre aspas, ou um identificador se não houver aspas.
 fn read_quoted(chars: &[char], pos: &mut usize) -> String {
     if *pos >= chars.len() { return String::new(); }
     let q = chars[*pos];

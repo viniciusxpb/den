@@ -1,3 +1,5 @@
+//! Fase 3 do pipeline: geração de código egui via `quote!`.
+
 mod click;
 mod control_flow;
 mod element;

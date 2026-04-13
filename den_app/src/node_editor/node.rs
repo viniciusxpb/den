@@ -1,3 +1,5 @@
+//! Renderização de nodes: shadow, header, accent, ports, fields.
+
 use eframe::egui;
 use super::{theme, types::*};
 

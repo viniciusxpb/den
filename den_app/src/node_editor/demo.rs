@@ -1,3 +1,5 @@
+//! Dados de demonstração: 4 nodes NDNM (Hermes/Atlas/Argus/Athena).
+
 use super::theme;
 use super::types::*;
 

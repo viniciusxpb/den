@@ -1,3 +1,5 @@
+//! Editor visual de grafos de nodes usando egui::Painter.
+
 mod canvas;
 mod demo;
 mod node;

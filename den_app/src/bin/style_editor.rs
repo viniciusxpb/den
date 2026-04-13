@@ -18,6 +18,20 @@ mod model {
     pub const WRITE_DELAY: Duration = Duration::from_millis(300);
     pub const SCAN_INTERVAL: Duration = Duration::from_secs(1);
 
+    /// Limites dos sliders no style editor por tipo de propriedade.
+    pub const FONT_SIZE_MIN: f32 = 6.0;
+    pub const FONT_SIZE_MAX: f32 = 72.0;
+    pub const PADDING_MAX: f32 = 64.0;
+    pub const BORDER_RADIUS_MAX: f32 = 32.0;
+    pub const WIDTH_PX_MAX: f32 = 800.0;
+    pub const BORDER_WIDTH_MAX: f32 = 10.0;
+
+    /// Defaults usados quando o parser não consegue ler o valor SCSS.
+    pub const DEFAULT_FONT_SIZE: f32 = 16.0;
+    pub const DEFAULT_WIDTH_PX: f32 = 100.0;
+    pub const DEFAULT_WIDTH_PERCENT: f32 = 100.0;
+
+    /// Arquivo SCSS carregado com classes editáveis e estado de dirty.
     pub struct ScssFile {
         pub path: PathBuf,
         pub raw_content: String,
@@ -25,6 +39,7 @@ mod model {
         pub dirty: bool,
     }
 
+    /// Classe SCSS com propriedades editáveis e metadados.
     pub struct EditableClass {
         pub name: String,
         #[allow(dead_code)] // reservado pra hover-aware styling futuro
@@ -32,6 +47,7 @@ mod model {
         pub properties: Vec<EditableProperty>,
     }
 
+    /// Propriedade individual com valor tipado e byte offsets pra rewrite.
     pub struct EditableProperty {
         pub name: String,
         pub value: PropertyValue,
@@ -41,6 +57,7 @@ mod model {
         pub raw_len: usize,
     }
 
+    /// Tipo de valor CSS: cor, tamanho, enum, borda ou raw text.
     #[derive(Clone)]
     pub enum PropertyValue {
         Color { r: u8, g: u8, b: u8 },
@@ -51,6 +68,7 @@ mod model {
     }
 
     impl PropertyValue {
+        /// Serializa o valor de volta pra string SCSS.
         pub fn to_scss_string(&self) -> String {
             match self {
                 Self::Color { r, g, b } => format!("#{r:02x}{g:02x}{b:02x}"),
@@ -81,16 +99,18 @@ mod ui {
     use eframe::egui;
     use super::model::*;
 
-    // ============================================================================
-    // UI — controles por tipo de propriedade
-    // ============================================================================
+    /// Largura da coluna de label de propriedade no style editor.
+    const PROPERTY_LABEL_WIDTH: f32 = 96.0;
+    /// Altura da label de propriedade.
+    const PROPERTY_LABEL_HEIGHT: f32 = 16.0;
 
+    /// Renderiza controle visual pra uma propriedade SCSS. Retorna `true` se o valor mudou.
     pub(super) fn render_property(ui: &mut egui::Ui, prop: &mut EditableProperty) -> bool {
         let mut changed = false;
 
         ui.horizontal(|ui| {
             ui.add_sized(
-                [96.0, 16.0],
+                [PROPERTY_LABEL_WIDTH, PROPERTY_LABEL_HEIGHT],
                 egui::Label::new(
                     egui::RichText::new(&prop.name)
                         .size(11.0)
@@ -152,7 +172,7 @@ mod ui {
 
                 PropertyValue::Border { width, color } => {
                     if ui
-                        .add(egui::Slider::new(width, 0.0..=10.0).suffix("px"))
+                        .add(egui::Slider::new(width, 0.0..=BORDER_WIDTH_MAX).suffix("px"))
                         .changed()
                     {
                         changed = true;
@@ -191,6 +211,7 @@ mod io {
     // File I/O
     // ============================================================================
 
+    /// Busca recursivamente arquivos `.scss` em `dir`.
     pub fn find_scss_files(dir: &std::path::Path) -> Vec<PathBuf> {
         let mut files = Vec::new();
         let Ok(entries) = std::fs::read_dir(dir) else { return files };
@@ -247,6 +268,7 @@ mod io {
     // SCSS parser com byte offsets
     // ============================================================================
 
+    /// Parseia SCSS com byte offsets pra edição visual. Resolve variáveis pra exibição.
     pub fn parse_scss_for_editing(content: &str) -> Vec<EditableClass> {
         let vars = collect_scss_vars(content);
         let mut classes = Vec::new();
@@ -357,24 +379,24 @@ mod io {
                 .unwrap_or_else(|| PropertyValue::Raw(raw.to_string())),
 
             "font-size" => PropertyValue::Size {
-                value: parse_num(raw).unwrap_or(16.0),
-                min: 6.0, max: 72.0, suffix: String::new(),
+                value: parse_num(raw).unwrap_or(DEFAULT_FONT_SIZE),
+                min: FONT_SIZE_MIN, max: FONT_SIZE_MAX, suffix: String::new(),
             },
             "padding" | "margin" => PropertyValue::Size {
                 value: parse_num(raw).unwrap_or(0.0),
-                min: 0.0, max: 64.0, suffix: String::new(),
+                min: 0.0, max: PADDING_MAX, suffix: String::new(),
             },
             "border-radius" => PropertyValue::Size {
                 value: parse_num(raw).unwrap_or(0.0),
-                min: 0.0, max: 32.0, suffix: String::new(),
+                min: 0.0, max: BORDER_RADIUS_MAX, suffix: String::new(),
             },
             "width" if raw.ends_with('%') => PropertyValue::Size {
-                value: raw.trim_end_matches('%').parse().unwrap_or(100.0),
+                value: raw.trim_end_matches('%').parse().unwrap_or(DEFAULT_WIDTH_PERCENT),
                 min: 0.0, max: 100.0, suffix: "%".to_string(),
             },
             "width" => PropertyValue::Size {
-                value: parse_num(raw).unwrap_or(100.0),
-                min: 0.0, max: 800.0, suffix: String::new(),
+                value: parse_num(raw).unwrap_or(DEFAULT_WIDTH_PX),
+                min: 0.0, max: WIDTH_PX_MAX, suffix: String::new(),
             },
             "display" => PropertyValue::Enum {
                 current: raw.to_string(),

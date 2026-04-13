@@ -1,3 +1,5 @@
+//! Tipos de dados do node editor: nodes, ports, wires, drag state.
+
 use eframe::egui;
 
 /// Estado de um drag em andamento. None = nada sendo arrastado.

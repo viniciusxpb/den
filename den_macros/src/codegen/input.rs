@@ -1,3 +1,5 @@
+//! Geração de código pra `<input bind="...">` (two-way binding).
+
 use crate::types::{DenElement, WidthValue};
 use super::CodegenCtx;
 use super::frame::build_frame_expr;
