@@ -7,13 +7,6 @@ pub(crate) fn gap_total(gap: f32, child_count: usize) -> f32 {
     gap * child_count.saturating_sub(1) as f32
 }
 
-/// Retorna se a largura resolvida deve ser guardada na tabela.
-///
-/// `Auto` sem `flex-grow` fica sem largura fixa para o backend medir conteúdo.
-pub(crate) fn should_store_resolved_width(width_rule: DimensionRule, flex_grow: f32) -> bool {
-    width_rule != DimensionRule::Auto || flex_grow > 0.0
-}
-
 /// Distribui a largura final de um filho em contexto flex.
 pub(crate) fn distribute_flex_width(
     width_rule: DimensionRule,
@@ -28,8 +21,6 @@ pub(crate) fn distribute_flex_width(
         } else {
             0.0
         }
-    } else if width_rule == DimensionRule::Auto {
-        0.0
     } else {
         fixed_width
     }

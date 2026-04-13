@@ -22,7 +22,7 @@ pub use entry::LayoutEntry;
 pub use geometry::LayoutRect;
 pub use router::{DenPage, DenRouter};
 pub use state::{DenDebugState, DenInputState, DenNodeId, DenRouteState};
-pub use table::LayoutTable;
+pub use table::{LayoutTable, layout_debug_enabled};
 
 /// Índice do body na lista. Sempre 0.
 pub const BODY_INDEX: usize = 0;

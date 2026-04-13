@@ -241,9 +241,17 @@ Den includes a runtime layout system (`den_layout` crate) with backend-agnostic 
 - **`width: 200px`**: fixed width, scales with zoom
 - **`margin: 12`**: reserves non-collapsing outer spacing in block/flex layout and maps to egui outer margin
 - **`display: flex`**: horizontal layout with automatic width distribution among children
-- **Auto (no width)**: content-sized by default
+- **Auto (no width)**: fills block context, or uses intrinsic width estimation inside flex without `flex: 1`
 
 The layout table is built once and recalculated every frame, so resizing the window reflows everything automatically. The crate itself no longer depends on egui. Generated route/page glue references `crate::DenUi`; the demo app binds that alias to `egui::Ui`, while `den_template!` still emits egui renderer calls.
+
+To inspect the resolved data sent toward the renderer:
+
+```bash
+DEN_DEBUG_LAYOUT=1 cargo run --bin den_app
+```
+
+The dump is emitted once per template and includes element labels, CSS rules, resolved sizes, and rects.
 
 ### Route State
 

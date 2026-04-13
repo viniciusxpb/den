@@ -3,9 +3,16 @@
 use crate::{
     BODY_INDEX, DimensionRule, DisplayMode, LayoutEntry, LayoutRect, dimension, flex, spacing,
 };
+use std::sync::OnceLock;
 
 /// Limite reservado para algoritmos iterativos futuros.
 const DEFAULT_MAX_PASSES: usize = 5;
+
+/// Variável de ambiente que habilita dump textual do layout.
+const LAYOUT_DEBUG_ENV: &str = "DEN_DEBUG_LAYOUT";
+
+/// Valor textual que liga o debug quando usado na variável de ambiente.
+const LAYOUT_DEBUG_ON: &str = "1";
 
 /// Tabela de layout que resolve retângulos em CSS pixels.
 ///
@@ -13,7 +20,7 @@ const DEFAULT_MAX_PASSES: usize = 5;
 pub struct LayoutTable {
     /// Flat list de todos os elementos, index 0 = body.
     pub entries: Vec<LayoutEntry>,
-    /// Larguras resolvidas. `None` = largura deixada para o backend medir.
+    /// Larguras resolvidas. `None` = ainda não calculada neste passe.
     /// Resetado no início de cada `resolve()`.
     pub sizes: Vec<Option<f32>>,
     /// Retângulos calculados em CSS pixels.
@@ -85,6 +92,18 @@ impl LayoutTable {
         let mut cursor_y = parent_rect.y + padding;
         let children = self.entries[parent_idx].children.clone();
 
+        if children.is_empty() {
+            if self.entries[parent_idx].height_rule == DimensionRule::Auto
+                && parent_idx != BODY_INDEX
+            {
+                self.rects[parent_idx].height = self.rects[parent_idx].height.max(
+                    self.entries[parent_idx].intrinsic_height
+                        + spacing::uniform_padding_extent(padding),
+                );
+            }
+            return;
+        }
+
         for (pos, child_idx) in children.iter().copied().enumerate() {
             let margin = self.entries[child_idx].margin;
             let child_width_context = spacing::child_content_width(content_width, margin);
@@ -134,8 +153,7 @@ impl LayoutTable {
             if grow > 0.0 && self.entries[child_idx].width_rule == DimensionRule::Auto {
                 grow_total += grow;
             } else if self.entries[child_idx].width_rule == DimensionRule::Auto {
-                // Auto sem flex-grow é content-sized no render backend.
-                // O layout ainda não mede conteúdo, então não desconta do espaço flex.
+                fixed_total += self.entries[child_idx].intrinsic_width;
             } else {
                 fixed_total += self.resolve_child_width(child_idx, content_width);
             }
@@ -149,7 +167,12 @@ impl LayoutTable {
         for (pos, child_idx) in children.iter().copied().enumerate() {
             let margin = self.entries[child_idx].margin;
             let grow = self.entries[child_idx].flex_grow;
-            let fixed_width = self.resolve_child_width(child_idx, content_width);
+            let fixed_width =
+                if self.entries[child_idx].width_rule == DimensionRule::Auto && grow == 0.0 {
+                    self.entries[child_idx].intrinsic_width
+                } else {
+                    self.resolve_child_width(child_idx, content_width)
+                };
             let resolved_width = flex::distribute_flex_width(
                 self.entries[child_idx].width_rule,
                 grow,
@@ -158,12 +181,7 @@ impl LayoutTable {
                 grow_total,
             );
             let resolved_height = self.resolve_child_height(child_idx, 0.0);
-            self.sizes[child_idx] =
-                if flex::should_store_resolved_width(self.entries[child_idx].width_rule, grow) {
-                    Some(resolved_width)
-                } else {
-                    None
-                };
+            self.sizes[child_idx] = Some(resolved_width);
             self.rects[child_idx] = LayoutRect {
                 x: cursor_x + margin,
                 y: content_y + margin,
@@ -180,7 +198,7 @@ impl LayoutTable {
         }
 
         if self.entries[parent_idx].height_rule == DimensionRule::Auto && parent_idx != BODY_INDEX {
-            self.rects[parent_idx].height = max_height + padding * 2.0;
+            self.rects[parent_idx].height = max_height + spacing::uniform_padding_extent(padding);
         }
     }
 
@@ -193,6 +211,53 @@ impl LayoutTable {
     fn resolve_child_height(&self, child_idx: usize, parent_content_height: f32) -> f32 {
         dimension::resolve_height(self.entries[child_idx].height_rule, parent_content_height)
     }
+
+    /// Emite no stderr um snapshot da tabela resolvida.
+    pub fn debug_dump(&self, template_path: &str, labels: &[&str]) {
+        eprintln!(
+            "DenLayout[{template_path}]: entries={} labels={}",
+            self.entries.len(),
+            labels.len()
+        );
+        for (idx, entry) in self.entries.iter().enumerate() {
+            let label = labels.get(idx).copied().unwrap_or("<missing-label>");
+            let rect = self.rects.get(idx).copied().unwrap_or_default();
+            let size = self.sizes.get(idx).copied().flatten();
+            eprintln!(
+                "  [{idx}] {label} parent={:?} children={:?} display={:?} width={:?} height={:?} padding={} margin={} gap={} flex_grow={} intrinsic_width={} intrinsic_height={} size={:?} rect=({}, {}, {}, {})",
+                entry.parent,
+                entry.children,
+                entry.display,
+                entry.width_rule,
+                entry.height_rule,
+                entry.padding,
+                entry.margin,
+                entry.gap,
+                entry.flex_grow,
+                entry.intrinsic_width,
+                entry.intrinsic_height,
+                size,
+                rect.x,
+                rect.y,
+                rect.width,
+                rect.height,
+            );
+        }
+    }
+}
+
+/// Retorna se o dump de layout está habilitado no ambiente.
+pub fn layout_debug_enabled() -> bool {
+    static CACHED: OnceLock<bool> = OnceLock::new();
+
+    *CACHED.get_or_init(|| match std::env::var(LAYOUT_DEBUG_ENV) {
+        Ok(value) => value == LAYOUT_DEBUG_ON || value.eq_ignore_ascii_case("true"),
+        Err(std::env::VarError::NotPresent) => false,
+        Err(err) => {
+            eprintln!("Den: falha ao ler {LAYOUT_DEBUG_ENV}: {err}");
+            false
+        }
+    })
 }
 
 #[cfg(test)]
@@ -221,6 +286,8 @@ mod tests {
             margin: 0.0,
             gap: 0.0,
             flex_grow: 0.0,
+            intrinsic_width: 0.0,
+            intrinsic_height: 0.0,
         }
     }
 
@@ -236,6 +303,8 @@ mod tests {
             margin: 0.0,
             gap: 0.0,
             flex_grow: 0.0,
+            intrinsic_width: 0.0,
+            intrinsic_height: 0.0,
         }
     }
 
@@ -251,6 +320,8 @@ mod tests {
             margin: 0.0,
             gap: 0.0,
             flex_grow: 0.0,
+            intrinsic_width: 0.0,
+            intrinsic_height: 0.0,
         }
     }
 
@@ -357,6 +428,23 @@ mod tests {
     }
 
     #[test]
+    fn auto_flex_child_uses_intrinsic_width_without_grow() {
+        let mut table = make_table(vec![
+            body(),
+            flex_entry(0, DimensionRule::Px(600.0)),
+            LayoutEntry {
+                intrinsic_width: 72.0,
+                ..entry(1, DimensionRule::Auto)
+            },
+            flex_grow_entry(1),
+        ]);
+        table.resolve(800.0);
+        assert_eq!(table.sizes[2], Some(72.0));
+        assert_eq!(table.sizes[3], Some(528.0));
+        assert_eq!(table.rects[3].x, 72.0);
+    }
+
+    #[test]
     fn percent_of_fixed_parent_not_of_body() {
         let mut table = make_table(vec![
             body(),
@@ -378,6 +466,21 @@ mod tests {
         table.resolve(800.0);
         assert_eq!(table.sizes[1], Some(600.0));
         assert_eq!(table.sizes[2], Some(560.0));
+    }
+
+    #[test]
+    fn intrinsic_height_contributes_to_auto_block_height() {
+        let mut table = make_table(vec![
+            body(),
+            padded_entry(0, DimensionRule::Px(600.0), 10.0),
+            LayoutEntry {
+                intrinsic_height: 18.0,
+                ..entry(1, DimensionRule::Auto)
+            },
+        ]);
+        table.resolve(800.0);
+        assert_eq!(table.rects[2].height, 18.0);
+        assert_eq!(table.rects[1].height, 38.0);
     }
 
     #[test]

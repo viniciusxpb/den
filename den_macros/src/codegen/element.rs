@@ -50,7 +50,7 @@ pub fn generate_element(
     ctx.layout_index += 1;
 
     // Gera filhos. Se este elemento é flex, seta parent_is_flex pros filhos
-    // pra que filhos Auto sem flex-grow deixem o egui medir conteúdo.
+    // para diferenciar flex-grow de largura intrínseca estimada.
     let prev_parent_is_flex = ctx.parent_is_flex;
     ctx.parent_is_flex = visual.display == DisplayMode::Flex;
 
@@ -126,7 +126,7 @@ pub fn generate_element(
 
     // Determina se este elemento tem flex-grow num container flex.
     // Só flex_grow=true cresce pra preencher o share — comportamento CSS `flex: 1`.
-    // Auto sem flex_grow é content-sized (padrão CSS).
+    // Auto sem flex_grow usa largura intrínseca estimada.
     let is_flex_auto_child = prev_parent_is_flex && visual.flex_grow;
     let force_auto_width = !prev_parent_is_flex || visual.flex_grow;
 

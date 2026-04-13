@@ -11,7 +11,7 @@ Den is a Rust framework that compiles HTML + SCSS templates into native egui des
 ```bash
 cargo build                    # Build everything
 cargo run --bin den_app        # Run the demo application
-cargo test                     # Run all tests (39 total: 17 layout + 22 parse)
+cargo test                     # Run all tests (41 total: 19 layout + 22 parse)
 cargo clippy                   # Lint
 make dev                       # Hot reload dev mode (requires cargo-watch)
 make preview                   # Generate HTML preview of dev-tagged components
@@ -88,12 +88,13 @@ All errors become `compile_error!` — users see IDE errors immediately.
 - `DimensionRule`: `Auto` | `Px(f32)` | `Percent(f32)`
 - `resolve_in_viewport(width, height)`: recalculates full rects in CSS pixels every frame.
 - Block layout stacks children vertically using parent content width, padding, margin, gap, and explicit height rules. Margins are currently non-collapsing.
-- Flex layout places children horizontally; `flex: 1` / `flex-grow: 1` Auto children split the remaining width after fixed widths, margins, and gaps are reserved.
+- Flex layout places children horizontally; `flex: 1` / `flex-grow: 1` Auto children split the remaining width after fixed widths, intrinsic auto widths, margins, and gaps are reserved.
 - `distribute_flex()` is now a compatibility no-op because flex is resolved inside `layout_children()`.
 - Generated code uses `thread_local! { RefCell<LayoutTable> }` — initialized once, reused every frame
-- **Width at render**: `Px` and `Percent` use `__den_layout.sizes[i] * __den_scale`, already resolved from the parent content box. `Auto` fills block context unless it is a content-sized flex child.
+- **Width at render**: `Px`, `Percent`, and estimated `Auto` widths use `__den_layout.sizes[i] * __den_scale`, already resolved from the parent content box.
 - `den_layout` no longer depends on `egui`; `DenPage<Route, Ui>` is generic over the UI backend type.
 - Generated route/page glue references `crate::DenUi`; the demo app aliases it to `egui::Ui`.
+- `DEN_DEBUG_LAYOUT=1` emits a one-time resolved LayoutTable dump per template, including labels, CSS rules, sizes, and rects.
 
 ### Route state (`den_layout::DenRouteState`)
 

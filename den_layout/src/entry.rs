@@ -26,4 +26,8 @@ pub struct LayoutEntry {
     pub gap: f32,
     /// Peso de flex-grow. 0 = não cresce.
     pub flex_grow: f32,
+    /// Largura mínima estimada do conteúdo próprio em CSS pixels.
+    pub intrinsic_width: f32,
+    /// Altura mínima estimada do conteúdo próprio em CSS pixels.
+    pub intrinsic_height: f32,
 }

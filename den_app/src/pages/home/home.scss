@@ -159,6 +159,7 @@ $white:      #ffffff;
 
 .input-col {
     padding: 4;
+    flex: 1;
 }
 
 .input-label {
@@ -273,6 +274,133 @@ $white:      #ffffff;
     color: $white;
     font-size: 11;
     width: 25%;
+}
+
+// -- CSS Rules Lab ---------------------------------------------
+
+.css-lab {
+    background: $bg-card;
+    border-radius: 10;
+    padding: 14;
+    border: 1px solid $border;
+    width: 100%;
+    gap: 10;
+}
+
+.rule-color-font {
+    background: $bg-deep;
+    color: $orange;
+    font-size: 18;
+    padding: 8;
+    border-radius: 6;
+    width: 100%;
+}
+
+.rule-padding-margin-wrap {
+    background: $bg-deep;
+    border: 1px solid $border-sub;
+    border-radius: 6;
+    padding: 4;
+    width: 100%;
+}
+
+.rule-padding-margin {
+    background: $green;
+    color: $dark-ink;
+    font-size: 12;
+    padding: 12;
+    margin: 10;
+    border-radius: 6;
+    width: 220px;
+}
+
+.rule-gap-row {
+    gap: 12;
+}
+
+.rule-flex-child {
+    background: $bg-deep;
+    border: 1px solid $blue;
+    border-radius: 6;
+    padding: 10;
+    color: $blue;
+    font-size: 12;
+    flex: 1;
+}
+
+.rule-flex-fixed {
+    background: $blue;
+    border-radius: 6;
+    padding: 10;
+    color: $dark-ink;
+    font-size: 12;
+    width: 160px;
+}
+
+.rule-size-row {
+    gap: 10;
+}
+
+.rule-width-fixed {
+    background: $crimson;
+    border-radius: 6;
+    padding: 8;
+    color: $white;
+    font-size: 12;
+    width: 180px;
+}
+
+.rule-width-percent {
+    background: $orange;
+    border-radius: 6;
+    padding: 8;
+    color: $dark-ink;
+    font-size: 12;
+    width: 40%;
+}
+
+.rule-height-fixed {
+    background: $green;
+    border-radius: 6;
+    padding: 8;
+    color: $dark-ink;
+    font-size: 12;
+    width: 180px;
+    height: 52px;
+}
+
+.rule-hover {
+    background: $bg-deep;
+    border: 1px solid $border-sub;
+    border-radius: 6;
+    padding: 10;
+    color: $text-muted;
+    font-size: 12;
+    width: 220px;
+}
+
+.rule-hover:hover {
+    background: $blue;
+    color: $dark-ink;
+    cursor: pointer;
+}
+
+.rule-grid-demo {
+    display: grid;
+    background: $bg-deep;
+    border: 1px solid $border;
+    border-radius: 6;
+    padding: 8;
+    width: 100%;
+}
+
+.rule-grid-child {
+    background: $border-sub;
+    color: $text-main;
+    font-size: 12;
+    padding: 8;
+    border-radius: 6;
+    width: 320px;
 }
 
 // -- Flex ------------------------------------------------------
