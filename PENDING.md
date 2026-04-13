@@ -8,6 +8,10 @@ Itens intencionalmente deixados pra depois. Apaga quando resolver.
 
 O próximo passo arquitetural é reduzir o codegen direto de widgets egui por elemento e caminhar para um renderer genérico: HTML + SCSS vira uma árvore Den resolvida, com retângulos calculados pelo motor de layout, e o frontend egui apenas renderiza essa árvore.
 
+O `den_layout` já foi separado em módulos de motor (`dimension`, `spacing`, `display`, `flex`, `entry`, `table`) e não depende mais diretamente de `egui`. O glue gerado por `den_router!`/`#[den_page]` também usa `crate::DenUi` em vez de citar egui diretamente.
+
+O acoplamento que ainda resta está no `den_template!`: `codegen/frame.rs`, `codegen/element.rs` e `codegen/input.rs` ainda emitem chamadas egui por elemento. O próximo corte é fazer o macro gerar uma árvore Den resolvida e mover essas chamadas para um renderer egui separado.
+
 `DenRouteState` já existe como ponto de encaixe runtime por rota. Ele ainda só guarda estado de inputs/debug, mas deve evoluir para carregar ou observar dados da árvore ativa quando a renderização for centralizada.
 
 ---

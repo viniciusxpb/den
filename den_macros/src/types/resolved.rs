@@ -13,6 +13,7 @@ pub struct DenVisual {
     pub font_size: Option<f32>,
     pub background: Option<RgbColor>,
     pub padding: Option<f32>,
+    pub margin: Option<f32>,
     pub display: DisplayMode,
     pub border: Option<BorderStyle>,
     pub border_radius: Option<f32>,
@@ -34,6 +35,7 @@ impl DenVisual {
             font_size: rule.font_size,
             background: rule.background,
             padding: rule.padding,
+            margin: rule.margin,
             display: rule.display,
             border: rule.border,
             border_radius: rule.border_radius,
@@ -53,6 +55,7 @@ impl DenVisual {
     pub fn needs_frame(&self) -> bool {
         self.background.is_some()
             || self.padding.is_some()
+            || self.margin.is_some()
             || self.border.is_some()
             || self.border_radius.is_some()
     }
@@ -79,6 +82,9 @@ impl DenVisual {
         }
         if other.padding.is_some() {
             self.padding = other.padding;
+        }
+        if other.margin.is_some() {
+            self.margin = other.margin;
         }
         if other.display != DisplayMode::Block {
             self.display = other.display;

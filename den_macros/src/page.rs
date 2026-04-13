@@ -2,7 +2,7 @@
 
 use quote::quote;
 
-/// Gera uma implementação de `DenPage<crate::AppRoute>` para a struct anotada.
+/// Gera uma implementação de `DenPage<crate::AppRoute, crate::DenUi>`.
 pub fn expand(
     _attr: proc_macro::TokenStream,
     item: proc_macro::TokenStream,
@@ -48,7 +48,7 @@ pub fn expand(
     quote! {
         #item_struct
 
-        impl den_layout::DenPage<crate::AppRoute> for #name {
+        impl den_layout::DenPage<crate::AppRoute, crate::DenUi> for #name {
             fn page_name() -> &'static str {
                 #page_name
             }
@@ -59,7 +59,7 @@ pub fn expand(
 
             fn render(
                 &mut self,
-                ui: &mut egui::Ui,
+                ui: &mut crate::DenUi,
                 __den_scale: f32,
                 __den_router: &mut den_layout::DenRouter<crate::AppRoute>,
                 __den_route_state: &mut den_layout::DenRouteState,

@@ -3,17 +3,17 @@
 use crate::DenRouteState;
 
 /// Contrato base para páginas Den navegáveis.
-pub trait DenPage<Route>: Sized {
+pub trait DenPage<Route, Ui>: Sized {
     /// Retorna o nome estático da página usado em declarações de rota.
     fn page_name() -> &'static str;
 
     /// Tenta construir a página a partir da rota atual.
     fn from_route(route: &Route) -> Option<Self>;
 
-    /// Renderiza a página usando egui.
+    /// Renderiza a página usando o backend de UI escolhido pelo app.
     fn render(
         &mut self,
-        ui: &mut egui::Ui,
+        ui: &mut Ui,
         __den_scale: f32,
         __den_router: &mut DenRouter<Route>,
         __den_route_state: &mut DenRouteState,

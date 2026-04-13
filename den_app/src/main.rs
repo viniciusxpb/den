@@ -10,6 +10,9 @@ use eframe::egui;
 
 pub use routes::*;
 
+/// Tipo de UI usado pelo backend atual do app demo.
+pub type DenUi = egui::Ui;
+
 fn main() -> eframe::Result {
     env_logger::init();
 

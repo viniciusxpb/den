@@ -42,6 +42,7 @@ pub struct StyleRule {
     pub font_size: Option<f32>,
     pub background: Option<RgbColor>,
     pub padding: Option<f32>,
+    pub margin: Option<f32>,
     pub display: DisplayMode,
     pub border: Option<BorderStyle>,
     pub border_radius: Option<f32>,
@@ -68,6 +69,9 @@ impl StyleRule {
         }
         if other.padding.is_some() {
             self.padding = other.padding;
+        }
+        if other.margin.is_some() {
+            self.margin = other.margin;
         }
         if other.display != DisplayMode::Block {
             self.display = other.display;

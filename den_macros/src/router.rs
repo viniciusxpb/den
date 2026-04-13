@@ -180,7 +180,7 @@ fn build_app_pages(routes: &[RouteDecl]) -> TokenStream {
             quote! {
                 AppRoute::#name { .. } => {
                     // sync_from_route() deve ser chamado somente após DenRouter::flush().
-                    self.#page_field = <#name as den_layout::DenPage<AppRoute>>::from_route(route);
+                    self.#page_field = <#name as den_layout::DenPage<AppRoute, crate::DenUi>>::from_route(route);
                     self.#state_field = den_layout::DenRouteState::new();
                 }
             }
@@ -203,7 +203,7 @@ fn build_app_pages(routes: &[RouteDecl]) -> TokenStream {
                 AppRoute::#name { .. } => {
                     if self.#page_field.is_none() {
                         self.#page_field =
-                            <#name as den_layout::DenPage<AppRoute>>::from_route(&current);
+                            <#name as den_layout::DenPage<AppRoute, crate::DenUi>>::from_route(&current);
                     }
                     if let Some(page) = &mut self.#page_field {
                         // Borrows mutáveis seguros: page e route_state são campos distintos.
@@ -242,7 +242,7 @@ fn build_app_pages(routes: &[RouteDecl]) -> TokenStream {
             /// Renderiza a página correspondente à rota atual.
             pub fn render_current(
                 &mut self,
-                ui: &mut eframe::egui::Ui,
+                ui: &mut crate::DenUi,
                 scale: f32,
                 router: &mut den_layout::DenRouter<AppRoute>,
             ) {

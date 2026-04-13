@@ -95,6 +95,7 @@ struct FlatEntry {
     height: WidthValue,
     display: DisplayMode,
     padding: Option<f32>,
+    margin: Option<f32>,
     gap: Option<f32>,
     flex_grow: bool,
 }
@@ -111,6 +112,7 @@ fn collect_flat_entries(nodes: &[DenNode]) -> Vec<FlatEntry> {
             height: el.visual.height,
             display: el.visual.display,
             padding: el.visual.padding,
+            margin: el.visual.margin,
             gap: el.visual.gap,
             flex_grow: el.visual.flex_grow,
         });
@@ -131,10 +133,11 @@ fn generate_layout_init(nodes: &[DenNode]) -> proc_macro2::TokenStream {
         den_layout::LayoutEntry {
             parent: None,
             children: vec![],
-            width_rule: den_layout::WidthRule::Auto,
-            height_rule: den_layout::WidthRule::Auto,
+            width_rule: den_layout::DimensionRule::Auto,
+            height_rule: den_layout::DimensionRule::Auto,
             display: den_layout::DisplayMode::Block,
             padding: 0.0,
+            margin: 0.0,
             gap: 0.0,
             flex_grow: 0.0,
         }
@@ -143,14 +146,14 @@ fn generate_layout_init(nodes: &[DenNode]) -> proc_macro2::TokenStream {
     for e in &flat {
         let parent = e.parent;
         let width_ts = match e.width {
-            WidthValue::Auto => quote! { den_layout::WidthRule::Auto },
-            WidthValue::Px(v) => quote! { den_layout::WidthRule::Px(#v) },
-            WidthValue::Percent(v) => quote! { den_layout::WidthRule::Percent(#v) },
+            WidthValue::Auto => quote! { den_layout::DimensionRule::Auto },
+            WidthValue::Px(v) => quote! { den_layout::DimensionRule::Px(#v) },
+            WidthValue::Percent(v) => quote! { den_layout::DimensionRule::Percent(#v) },
         };
         let height_ts = match e.height {
-            WidthValue::Auto => quote! { den_layout::WidthRule::Auto },
-            WidthValue::Px(v) => quote! { den_layout::WidthRule::Px(#v) },
-            WidthValue::Percent(v) => quote! { den_layout::WidthRule::Percent(#v) },
+            WidthValue::Auto => quote! { den_layout::DimensionRule::Auto },
+            WidthValue::Px(v) => quote! { den_layout::DimensionRule::Px(#v) },
+            WidthValue::Percent(v) => quote! { den_layout::DimensionRule::Percent(#v) },
         };
         let display_ts = match e.display {
             DisplayMode::Flex => quote! { den_layout::DisplayMode::Flex },
@@ -158,6 +161,7 @@ fn generate_layout_init(nodes: &[DenNode]) -> proc_macro2::TokenStream {
             DisplayMode::Block => quote! { den_layout::DisplayMode::Block },
         };
         let padding = e.padding.unwrap_or(0.0);
+        let margin = e.margin.unwrap_or(0.0);
         let gap = e.gap.unwrap_or(0.0);
         let flex_grow = if e.flex_grow { 1.0 } else { 0.0 };
         entries_code.push(quote! {
@@ -168,6 +172,7 @@ fn generate_layout_init(nodes: &[DenNode]) -> proc_macro2::TokenStream {
                 height_rule: #height_ts,
                 display: #display_ts,
                 padding: #padding as f32,
+                margin: #margin as f32,
                 gap: #gap as f32,
                 flex_grow: #flex_grow as f32,
             }

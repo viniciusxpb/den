@@ -15,6 +15,9 @@ pub fn build_frame_expr(visual: &DenVisual) -> proc_macro2::TokenStream {
     if let Some(pad) = visual.padding {
         expr = quote! { #expr.inner_margin(#pad * __den_scale) };
     }
+    if let Some(margin) = visual.margin {
+        expr = quote! { #expr.outer_margin(#margin * __den_scale) };
+    }
     if let Some(radius) = visual.border_radius {
         expr = quote! { #expr.corner_radius(#radius * __den_scale) };
     }

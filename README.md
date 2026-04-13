@@ -48,7 +48,7 @@ Add Den to your workspace. Your project structure should look like:
 my-app/
 ├── Cargo.toml
 ├── den_macros/              # proc macro crate (the compiler)
-├── den_layout/              # runtime layout system (width resolution)
+├── den_layout/              # runtime layout system (backend-agnostic rect engine)
 └── den_app/                 # your application
     └── src/
         ├── main.rs
@@ -95,6 +95,14 @@ impl HomePage {
         den_macros::den_template!("pages/home/home", self);
     }
 }
+```
+
+At the crate root, define the backend UI alias used by the route/page macros:
+
+```rust
+use eframe::egui;
+
+pub type DenUi = egui::Ui;
 ```
 
 That's it. Run `cargo run --bin den_app` and you get a native desktop window with styled text. No egui boilerplate. No `RichText::new().color().size()` chains. Just HTML and SCSS.
@@ -217,7 +225,7 @@ $accent:  #e94560;
 
 ### Zoom / Scale System
 
-All pixel values (`font-size`, `padding`, `border-width`, `border-radius`, `width: Npx`) are multiplied by `__den_scale` at render time. Colors, percentages, and layout modes are unaffected.
+All pixel values (`font-size`, `padding`, `margin`, `border-width`, `border-radius`, `width: Npx`) are multiplied by `__den_scale` at render time. Colors, percentages, and layout modes are unaffected.
 
 Built-in controls:
 - **Ctrl+scroll** or **Ctrl+=** / **Ctrl+-**: zoom in/out (10% steps)
@@ -227,14 +235,15 @@ Built-in controls:
 
 ### Layout System
 
-Den includes a runtime layout system (`den_layout` crate) with iterative width resolution:
+Den includes a runtime layout system (`den_layout` crate) with backend-agnostic rect resolution:
 
 - **`width: 100%`**: fills parent's available width (respects padding)
 - **`width: 200px`**: fixed width, scales with zoom
+- **`margin: 12`**: reserves non-collapsing outer spacing in block/flex layout and maps to egui outer margin
 - **`display: flex`**: horizontal layout with automatic width distribution among children
 - **Auto (no width)**: content-sized by default
 
-The layout table is built once and recalculated every frame, so resizing the window reflows everything automatically.
+The layout table is built once and recalculated every frame, so resizing the window reflows everything automatically. The crate itself no longer depends on egui. Generated route/page glue references `crate::DenUi`; the demo app binds that alias to `egui::Ui`, while `den_template!` still emits egui renderer calls.
 
 ### Route State
 
@@ -290,10 +299,13 @@ Changes write back to disk with 300ms debounce. The `cargo-watch` in `make dev` 
 | `font-size`      | `RichText::size()`         | `24` or `24px`       |
 | `background`     | `Frame::fill()`            | `#1a1a2e`            |
 | `padding`        | `Frame::inner_margin()`    | `16` or `16px`       |
+| `margin`         | `Frame::outer_margin()` + layout | `16` or `16px` |
 | `display: flex`  | `ui.horizontal()`          | `display: flex`      |
 | `border`         | `Frame::stroke()`          | `1px solid #e94560`  |
 | `border-radius`  | `Frame::corner_radius()`   | `8` or `8px`         |
 | `width`          | `ui.set_width()`           | `100%`, `200px`      |
+| `height`         | `ui.set_height()`          | `100%`, `200px`      |
+| `gap`            | egui item spacing + layout | `8` or `8px`         |
 | `cursor: pointer`| `CursorIcon::PointingHand` | in `:hover` blocks   |
 
 ## Supported HTML Tags
@@ -324,7 +336,9 @@ den/
 ├── den_layout/              # Runtime layout system
 │   └── src/
 │       ├── lib.rs           # LayoutTable, rect-based layout runtime
-│       ├── router.rs        # DenRouter and DenPage trait
+│       ├── display.rs, dimension.rs, spacing.rs, flex.rs
+│       ├── entry.rs, geometry.rs, table.rs
+│       ├── router.rs        # DenRouter and generic DenPage trait
 │       └── state.rs         # DenRouteState and per-route runtime state
 └── den_app/                 # Application crate
     └── src/
@@ -355,12 +369,12 @@ make push       # AI-generated commit + push
 - [x] `{{ self.field }}` data interpolation
 - [x] `(click)="method()"` event binding
 - [x] `:hover` pseudo-selector with cursor support
-- [x] `display: flex`, `border`, `border-radius`, `width` CSS properties
+- [x] `display: flex`, `border`, `border-radius`, `width`, `height`, `gap`, `margin` CSS properties
 - [x] `<for each="item" in="self.list">` loop rendering
 - [x] `<if cond="self.flag">` / `<else>` conditional rendering
 - [x] SCSS variables (`$var: value`)
 - [x] Zoom / scale system (50%--300%)
-- [x] Layout system with iterative width resolution
+- [x] Layout system with backend-agnostic rect resolution
 - [x] HTML preview generator (`make preview`)
 - [x] Live style editor with visual controls
 - [x] Modular architecture (parse / resolve / codegen)

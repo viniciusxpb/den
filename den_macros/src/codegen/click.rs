@@ -31,6 +31,7 @@ pub(super) fn generate_style_struct(visual: &DenVisual) -> proc_macro2::TokenStr
     let background = quote_opt_rgb(visual.background);
     let font_size = quote_opt_f32(visual.font_size);
     let padding = quote_opt_f32(visual.padding);
+    let margin = quote_opt_f32(visual.margin);
     let border_radius = quote_opt_f32(visual.border_radius);
     let (border_width, border_color) = match visual.border {
         Some(b) => {
@@ -53,6 +54,7 @@ pub(super) fn generate_style_struct(visual: &DenVisual) -> proc_macro2::TokenStr
             background: #background,
             font_size: #font_size,
             padding: #padding,
+            margin: #margin,
             border_radius: #border_radius,
             border_width: #border_width,
             border_color: #border_color,

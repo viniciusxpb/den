@@ -11,7 +11,7 @@ Den is a Rust framework that compiles HTML + SCSS templates into native egui des
 ```bash
 cargo build                    # Build everything
 cargo run --bin den_app        # Run the demo application
-cargo test                     # Run all tests (36 total: 14 layout + 22 parse)
+cargo test                     # Run all tests (39 total: 17 layout + 22 parse)
 cargo clippy                   # Lint
 make dev                       # Hot reload dev mode (requires cargo-watch)
 make preview                   # Generate HTML preview of dev-tagged components
@@ -25,7 +25,7 @@ make help                      # List all makefile commands
 **Workspace structure**: Three crates in a Cargo workspace (resolver v3, edition 2024, Rust 1.88+).
 
 - **`den_macros`** — Proc macro crate. 3-phase compile-time pipeline in modular files. Exports `den_template!`.
-- **`den_layout`** — Runtime library. `LayoutTable` (rect-based block/flex layout), `DenRouteState` (per-route runtime state), `DenElementStyle` (visual properties exposed to click handlers), and typed router traits.
+- **`den_layout`** — Runtime library. Backend-agnostic layout primitives split by concern (`dimension`, `spacing`, `display`, `flex`, `entry`, `table`), `DenRouteState`, `DenElementStyle`, and typed router traits.
 - **`den_app`** — Example application using eframe/egui. Contains pages with `.html` + `.scss` template pairs, a static Nodes page, and dev tool binaries (`preview`, `style_editor`).
 
 ### Compile-time pipeline (3 phases across `den_macros/src/`)
@@ -85,13 +85,15 @@ All errors become `compile_error!` — users see IDE errors immediately.
 ### Layout system (`den_layout` crate, runtime)
 
 - `LayoutTable` with flat list of `LayoutEntry` (index 0 = invisible body/root)
-- `WidthRule`: `Auto` | `Px(f32)` | `Percent(f32)`
+- `DimensionRule`: `Auto` | `Px(f32)` | `Percent(f32)`
 - `resolve_in_viewport(width, height)`: recalculates full rects in CSS pixels every frame.
-- Block layout stacks children vertically using parent content width, padding, gap, and explicit height rules.
-- Flex layout places children horizontally; `flex: 1` / `flex-grow: 1` Auto children split the remaining width, while Px and Percent children are fixed.
+- Block layout stacks children vertically using parent content width, padding, margin, gap, and explicit height rules. Margins are currently non-collapsing.
+- Flex layout places children horizontally; `flex: 1` / `flex-grow: 1` Auto children split the remaining width after fixed widths, margins, and gaps are reserved.
 - `distribute_flex()` is now a compatibility no-op because flex is resolved inside `layout_children()`.
 - Generated code uses `thread_local! { RefCell<LayoutTable> }` — initialized once, reused every frame
 - **Width at render**: `Px` and `Percent` use `__den_layout.sizes[i] * __den_scale`, already resolved from the parent content box. `Auto` fills block context unless it is a content-sized flex child.
+- `den_layout` no longer depends on `egui`; `DenPage<Route, Ui>` is generic over the UI backend type.
+- Generated route/page glue references `crate::DenUi`; the demo app aliases it to `egui::Ui`.
 
 ### Route state (`den_layout::DenRouteState`)
 
@@ -104,7 +106,7 @@ All errors become `compile_error!` — users see IDE errors immediately.
 ### Scale system
 
 - `__den_scale: f32` parameter on `render()`, multiplies all pixel values
-- Scales: `font-size` (min 6.0), `padding`, `border-width` (min 1.0), `border-radius`, `width: Npx`
+- Scales: `font-size` (min 6.0), `padding`, `margin`, `border-width` (min 1.0), `border-radius`, `width: Npx`
 - Does NOT scale: `color`, `background`, `width: N%`, `display`, `cursor`
 - Controls: Ctrl+=/Ctrl+-/Ctrl+0/Ctrl+scroll, +/-/% widget at bottom-right
 - Zoom is currently global for the demo app.
@@ -142,10 +144,13 @@ When `(click)` has arguments:
 | `font-size`      | `RichText::size()`          | scaled               | `24` or `24px`                   |
 | `background`     | `Frame::fill()`             | —                    | `#RRGGBB`, `#RGB`, `$variable`  |
 | `padding`        | `Frame::inner_margin()`     | scaled               | `16` or `16px`                   |
+| `margin`         | layout + `Frame::outer_margin()` | scaled          | `16` or `16px`                   |
 | `display: flex`  | `ui.horizontal()` + flex dist | layout system      | only `flex` value supported      |
 | `border`         | `Frame::stroke()`           | width scaled (min 1) | `1px solid #RRGGBB`             |
 | `border-radius`  | `Frame::corner_radius()`    | scaled               | `8` or `8px`                     |
-| `width`          | layout system / inline      | Px: layout, %: inline | `100%`, `50%`, `200px`, `auto` |
+| `width`          | layout system               | Px/%/Auto resolved runtime | `100%`, `50%`, `200px`, `auto` |
+| `height`         | layout system               | Px/%/Auto resolved runtime | `100%`, `200px`, `auto` |
+| `gap`            | layout + egui spacing       | scaled               | `8` or `8px`                     |
 | `cursor: pointer`| `ctx.set_cursor_icon()`     | —                    | only in `:hover` blocks          |
 
 Supported HTML tags: `div`, `span`, `p`, `heading`/`h1`-`h3`. All map to `ui.label()` or `ui.heading()`.

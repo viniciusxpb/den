@@ -1,9 +1,12 @@
+//! Parser SCSS mínimo usado em compile time pelo pipeline Den.
+
 use super::color::parse_hex_color;
 use crate::types::{BorderStyle, DisplayMode, StyleMap, StyleRule, WidthValue};
 use std::collections::HashMap;
 
 // SCSS identifiers são ASCII-only, então parsing byte-level é seguro aqui.
 
+/// Converte SCSS de uma página em mapa de estilos resolvidos por classe.
 pub fn parse_scss(input: &str) -> StyleMap {
     let vars = collect_variables(input);
     let mut styles = StyleMap::new();
@@ -93,6 +96,7 @@ pub fn parse_scss(input: &str) -> StyleMap {
                 "font-size" => rule.font_size = parse_size_value(&value),
                 "background" => rule.background = parse_hex_color(&value),
                 "padding" => rule.padding = parse_size_value(&value),
+                "margin" => rule.margin = parse_size_value(&value),
                 "display" if value == "flex" => rule.display = DisplayMode::Flex,
                 "display" if value == "grid" => rule.display = DisplayMode::Grid,
                 "border" => rule.border = parse_border_value(&value),
