@@ -78,12 +78,20 @@ $accent: #e94560;
 
 **home.rs**
 ```rust
+use crate::AppRoute;
+use den_layout::{DenRouteState, DenRouter};
 use eframe::egui;
 
 pub struct HomePage;
 
 impl HomePage {
-    pub fn render(&mut self, ui: &mut egui::Ui, __den_scale: f32) {
+    pub fn render(
+        &mut self,
+        ui: &mut egui::Ui,
+        __den_scale: f32,
+        __den_router: &mut DenRouter<AppRoute>,
+        __den_route_state: &mut DenRouteState,
+    ) {
         den_macros::den_template!("pages/home/home", self);
     }
 }
@@ -120,13 +128,23 @@ Use `{{ self.field }}` to bind component state. Fields must implement `Display`.
 ```
 
 ```rust
+use crate::AppRoute;
+use den_layout::{DenRouteState, DenRouter};
+use eframe::egui;
+
 pub struct HomePage {
     pub name: String,
     pub age: u32,
 }
 
 impl HomePage {
-    pub fn render(&mut self, ui: &mut egui::Ui, __den_scale: f32) {
+    pub fn render(
+        &mut self,
+        ui: &mut egui::Ui,
+        __den_scale: f32,
+        __den_router: &mut DenRouter<AppRoute>,
+        __den_route_state: &mut DenRouteState,
+    ) {
         den_macros::den_template!("pages/home/home", self);
     }
 }
@@ -218,6 +236,22 @@ Den includes a runtime layout system (`den_layout` crate) with iterative width r
 
 The layout table is built once and recalculated every frame, so resizing the window reflows everything automatically.
 
+### Route State
+
+Generated app hosts keep a `DenRouteState` for each route declared with `den_router!`. Page render methods receive that state after the router:
+
+```rust
+fn render(
+    &mut self,
+    ui: &mut egui::Ui,
+    __den_scale: f32,
+    __den_router: &mut DenRouter<AppRoute>,
+    __den_route_state: &mut DenRouteState,
+)
+```
+
+`DenRouteState` currently groups input and debug state, and is the runtime hook for moving Den toward a generic renderer that consumes a resolved HTML/CSS element tree.
+
 ## Dev Tools
 
 ### Hot Reload
@@ -288,7 +322,10 @@ den/
 │           ├── element.rs, click.rs, flex.rs, input.rs
 │           ├── control_flow.rs, frame.rs, text.rs
 ├── den_layout/              # Runtime layout system
-│   └── src/lib.rs           # LayoutTable, iterative width resolution
+│   └── src/
+│       ├── lib.rs           # LayoutTable, rect-based layout runtime
+│       ├── router.rs        # DenRouter and DenPage trait
+│       └── state.rs         # DenRouteState and per-route runtime state
 └── den_app/                 # Application crate
     └── src/
         ├── main.rs          # Entry point + zoom controls

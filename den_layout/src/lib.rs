@@ -5,8 +5,10 @@
 //! frame porque egui é immediate mode e a janela pode mudar de tamanho.
 
 mod router;
+mod state;
 
 pub use router::{DenPage, DenRouter};
+pub use state::{DenDebugState, DenInputState, DenNodeId, DenRouteState};
 
 /// Índice do body na lista. Sempre 0.
 pub const BODY_INDEX: usize = 0;

@@ -102,6 +102,7 @@ pub fn expand(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     .into()
 }
 
+/// Gera o construtor auxiliar usado por atributos `goto`.
 fn build_route_helper(route: &RouteDecl) -> TokenStream {
     let name = &route.name;
     let helper_name = format_ident!("__den_route_{}", name);
@@ -133,8 +134,9 @@ fn build_route_helper(route: &RouteDecl) -> TokenStream {
     }
 }
 
+/// Gera o host `AppPages` com instâncias de páginas e estado por rota.
 fn build_app_pages(routes: &[RouteDecl]) -> TokenStream {
-    let fields = routes.iter().map(|route| {
+    let page_fields = routes.iter().map(|route| {
         let page_field = page_field_ident(&route.name);
         let name = &route.name;
         if route.fields.is_empty() {
@@ -144,7 +146,12 @@ fn build_app_pages(routes: &[RouteDecl]) -> TokenStream {
         }
     });
 
-    let init_fields = routes.iter().map(|route| {
+    let state_fields = routes.iter().map(|route| {
+        let state_field = route_state_field_ident(&route.name);
+        quote! { #state_field: den_layout::DenRouteState }
+    });
+
+    let page_init_fields = routes.iter().map(|route| {
         let page_field = page_field_ident(&route.name);
         if route.fields.is_empty() {
             quote! { #page_field: ::std::default::Default::default() }
@@ -153,26 +160,42 @@ fn build_app_pages(routes: &[RouteDecl]) -> TokenStream {
         }
     });
 
-    let sync_arms = routes
-        .iter()
-        .filter(|route| !route.fields.is_empty())
-        .map(|route| {
-            let page_field = page_field_ident(&route.name);
-            let name = &route.name;
-            quote! {
-                AppRoute::#name { .. } => {
-                    self.#page_field = <#name as den_layout::DenPage<AppRoute>>::from_route(route);
-                }
-            }
-        });
+    let state_init_fields = routes.iter().map(|route| {
+        let state_field = route_state_field_ident(&route.name);
+        quote! { #state_field: den_layout::DenRouteState::new() }
+    });
 
-    let render_arms = routes.iter().map(|route| {
+    let sync_arms = routes.iter().map(|route| {
         let page_field = page_field_ident(&route.name);
+        let state_field = route_state_field_ident(&route.name);
         let name = &route.name;
         if route.fields.is_empty() {
             quote! {
                 AppRoute::#name => {
-                    self.#page_field.render(ui, scale, router);
+                    // sync_from_route() deve ser chamado somente após DenRouter::flush().
+                    self.#state_field = den_layout::DenRouteState::new();
+                }
+            }
+        } else {
+            quote! {
+                AppRoute::#name { .. } => {
+                    // sync_from_route() deve ser chamado somente após DenRouter::flush().
+                    self.#page_field = <#name as den_layout::DenPage<AppRoute>>::from_route(route);
+                    self.#state_field = den_layout::DenRouteState::new();
+                }
+            }
+        }
+    });
+
+    let render_arms = routes.iter().map(|route| {
+        let page_field = page_field_ident(&route.name);
+        let state_field = route_state_field_ident(&route.name);
+        let name = &route.name;
+        if route.fields.is_empty() {
+            quote! {
+                AppRoute::#name => {
+                    self.#state_field.dump_once(stringify!(#name));
+                    self.#page_field.render(ui, scale, router, &mut self.#state_field);
                 }
             }
         } else {
@@ -183,7 +206,9 @@ fn build_app_pages(routes: &[RouteDecl]) -> TokenStream {
                             <#name as den_layout::DenPage<AppRoute>>::from_route(&current);
                     }
                     if let Some(page) = &mut self.#page_field {
-                        page.render(ui, scale, router);
+                        // Borrows mutáveis seguros: page e route_state são campos distintos.
+                        self.#state_field.dump_once(stringify!(#name));
+                        page.render(ui, scale, router, &mut self.#state_field);
                     }
                 }
             }
@@ -193,18 +218,20 @@ fn build_app_pages(routes: &[RouteDecl]) -> TokenStream {
     quote! {
         /// Estado das páginas instanciadas pelo router.
         pub struct AppPages {
-            #( #fields ),*
+            #( #page_fields, )*
+            #( #state_fields ),*
         }
 
         impl AppPages {
             /// Cria o conjunto de páginas do app.
             pub fn new() -> Self {
                 Self {
-                    #( #init_fields ),*
+                    #( #page_init_fields, )*
+                    #( #state_init_fields ),*
                 }
             }
 
-            /// Sincroniza páginas stateful quando uma rota nova entra.
+            /// Sincroniza páginas stateful quando uma navegação pendente é aplicada.
             pub fn sync_from_route(&mut self, route: &AppRoute) {
                 match route {
                     #( #sync_arms )*
@@ -234,10 +261,17 @@ fn build_app_pages(routes: &[RouteDecl]) -> TokenStream {
     }
 }
 
+/// Retorna o nome do campo que guarda a instância de uma página no host.
 fn page_field_ident(page_name: &syn::Ident) -> syn::Ident {
     format_ident!("{}", to_snake_case(&page_name.to_string()))
 }
 
+/// Retorna o nome do campo que guarda o estado runtime de uma rota.
+fn route_state_field_ident(page_name: &syn::Ident) -> syn::Ident {
+    format_ident!("{}_route_state", to_snake_case(&page_name.to_string()))
+}
+
+/// Converte um identificador Rust CamelCase para snake_case simples.
 fn to_snake_case(input: &str) -> String {
     let mut out = String::new();
     for (idx, ch) in input.chars().enumerate() {

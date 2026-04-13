@@ -1,5 +1,5 @@
 use crate::AppRoute;
-use den_layout::DenRouter;
+use den_layout::{DenRouteState, DenRouter};
 use eframe::egui;
 
 #[derive(Default)]
@@ -11,6 +11,7 @@ impl NodesPage {
         ui: &mut egui::Ui,
         __den_scale: f32,
         __den_router: &mut DenRouter<AppRoute>,
+        __den_route_state: &mut DenRouteState,
     ) {
         den_macros::den_template!("pages/nodes/nodes", self);
     }

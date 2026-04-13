@@ -62,8 +62,9 @@ pub fn expand(
                 ui: &mut egui::Ui,
                 __den_scale: f32,
                 __den_router: &mut den_layout::DenRouter<crate::AppRoute>,
+                __den_route_state: &mut den_layout::DenRouteState,
             ) {
-                #name::render(self, ui, __den_scale, __den_router);
+                #name::render(self, ui, __den_scale, __den_router, __den_route_state);
             }
         }
     }

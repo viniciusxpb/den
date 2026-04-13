@@ -10,8 +10,8 @@ Den is a Rust framework that compiles HTML + SCSS templates into native egui des
 
 ```bash
 cargo build                    # Build everything
-cargo run --bin den_app        # Run the demo application (F2 toggles Node Editor)
-cargo test                     # Run all tests (33 total: 13 layout + 20 parse)
+cargo run --bin den_app        # Run the demo application
+cargo test                     # Run all tests (36 total: 14 layout + 22 parse)
 cargo clippy                   # Lint
 make dev                       # Hot reload dev mode (requires cargo-watch)
 make preview                   # Generate HTML preview of dev-tagged components
@@ -25,8 +25,8 @@ make help                      # List all makefile commands
 **Workspace structure**: Three crates in a Cargo workspace (resolver v3, edition 2024, Rust 1.88+).
 
 - **`den_macros`** — Proc macro crate. 3-phase compile-time pipeline in modular files. Exports `den_template!`.
-- **`den_layout`** — Runtime library. `LayoutTable` (iterative width resolution), `DenElementStyle` (visual properties exposed to click handlers). Pure data, no GUI dependency.
-- **`den_app`** — Example application using eframe/egui. Contains pages with `.html` + `.scss` template pairs, a node editor, and dev tool binaries (`preview`, `style_editor`).
+- **`den_layout`** — Runtime library. `LayoutTable` (rect-based block/flex layout), `DenRouteState` (per-route runtime state), `DenElementStyle` (visual properties exposed to click handlers), and typed router traits.
+- **`den_app`** — Example application using eframe/egui. Contains pages with `.html` + `.scss` template pairs, a static Nodes page, and dev tool binaries (`preview`, `style_editor`).
 
 ### Compile-time pipeline (3 phases across `den_macros/src/`)
 
@@ -86,10 +86,20 @@ All errors become `compile_error!` — users see IDE errors immediately.
 
 - `LayoutTable` with flat list of `LayoutEntry` (index 0 = invisible body/root)
 - `WidthRule`: `Auto` | `Px(f32)` | `Percent(f32)`
-- `resolve(available_width)`: iterative passes. Px → immediate, Percent → from parent, Auto → fill parent (leaf) or embrace children (container)
-- `distribute_flex()`: post-pass, divides remaining space among Auto children of flex containers. Px and Percent children treated as fixed.
+- `resolve_in_viewport(width, height)`: recalculates full rects in CSS pixels every frame.
+- Block layout stacks children vertically using parent content width, padding, gap, and explicit height rules.
+- Flex layout places children horizontally; `flex: 1` / `flex-grow: 1` Auto children split the remaining width, while Px and Percent children are fixed.
+- `distribute_flex()` is now a compatibility no-op because flex is resolved inside `layout_children()`.
 - Generated code uses `thread_local! { RefCell<LayoutTable> }` — initialized once, reused every frame
-- **Width at render**: `Px` uses `__den_layout.sizes[i] * __den_scale`. `Percent` uses `ui.available_width() * pct` inline (layout doesn't know about padding). `Auto` doesn't set width.
+- **Width at render**: `Px` and `Percent` use `__den_layout.sizes[i] * __den_scale`, already resolved from the parent content box. `Auto` fills block context unless it is a content-sized flex child.
+
+### Route state (`den_layout::DenRouteState`)
+
+- Each generated `AppPages` host stores one `DenRouteState` per declared route.
+- Route state is reset when navigation flushes into that route.
+- Page render methods receive `__den_route_state: &mut DenRouteState` after `__den_router`.
+- `DenRouteState` currently groups `DenInputState` and `DenDebugState`; it is the runtime hook for the planned generic renderer/tree pipeline.
+- `DEN_DEBUG_ROUTE_STATE=1` emits a one-time state dump per route render path.
 
 ### Scale system
 
@@ -97,21 +107,20 @@ All errors become `compile_error!` — users see IDE errors immediately.
 - Scales: `font-size` (min 6.0), `padding`, `border-width` (min 1.0), `border-radius`, `width: Npx`
 - Does NOT scale: `color`, `background`, `width: N%`, `display`, `cursor`
 - Controls: Ctrl+=/Ctrl+-/Ctrl+0/Ctrl+scroll, +/-/% widget at bottom-right
-- Per-view zoom: Home and NodeEditor have independent scale values
+- Zoom is currently global for the demo app.
 
 ### Flex distribution (`codegen/flex.rs` + `codegen/element.rs`)
 
 - `parent_is_flex` in `CodegenCtx` tracks flex parent context
-- `collect_flex_children_info` uses `walk_den_nodes` to pre-collect child width rules
-- `build_flex_layout` generates runtime `__den_flex_share` (remaining space ÷ Auto children)
-- Auto flex children wrapped in `allocate_ui_with_layout(top_down)` for text wrapping
+- `build_flex_layout` maps flex containers to `ui.horizontal()` and applies SCSS `gap`
+- Runtime width distribution lives in `den_layout::LayoutTable::layout_flex_children`
+- `flex: 1` Auto children are wrapped in `allocate_ui_with_layout(top_down)` for text wrapping
 - **Limitation**: `IfChain` inside flex contributes both branches at compile time
 
 ### DFS traversal invariant
 
 `walk_den_nodes()` in `types/walk.rs` is the **single source of truth** for DFS order. All functions that assign layout indices or iterate elements MUST use it. Currently used by:
 - `collect_flat_entries` (codegen/mod.rs)
-- `collect_flex_children_info` (codegen/element.rs)
 - `generate_element` increments `ctx.layout_index` in the same DFS order
 
 ### Click handler codegen (`codegen/click.rs`)
@@ -141,18 +150,11 @@ When `(click)` has arguments:
 
 Supported HTML tags: `div`, `span`, `p`, `heading`/`h1`-`h3`. All map to `ui.label()` or `ui.heading()`.
 
-**Page pattern**: Each page is a struct with `render(&mut self, ui: &mut egui::Ui, __den_scale: f32)` that calls `den_template!`. The `__den_scale` parameter name is required — generated code references it directly.
+**Page pattern**: Each page is a struct with `render(&mut self, ui: &mut egui::Ui, __den_scale: f32, __den_router: &mut DenRouter<AppRoute>, __den_route_state: &mut DenRouteState)` that calls `den_template!`. The `__den_scale`, `__den_router`, and `__den_route_state` names are framework-reserved by convention.
 
-### Node Editor (`den_app/src/node_editor/`)
+### Nodes page (`den_app/src/pages/nodes/`)
 
-Visual node graph editor using `egui::Painter` directly (zero widgets):
-- `theme.rs` — 50+ named constants, zero magic numbers
-- `types.rs` — `NodeData`, `PortData`, `WireData`, `FieldData`, `PortType`, `DragState`, `WireDragState`
-- `node.rs` — `draw_node` (shadow, header, accent, ports with triangle/diamond/circle shapes, fields with dashed separator)
-- `wire.rs` — `draw_wire` with cubic bezier, `get_port_position` returning `Option<Pos2>`
-- `canvas.rs` — `NodeEditorCanvas` with drag & drop (node drag + wire drag from output ports), hit testing, z-order
-- `demo.rs` — 4 NDNM nodes (Hermes/Atlas/Argus/Athena) + 6 wires fixture
-- F2 toggles between Home view and Node Editor
+The previous direct `egui::Painter` node editor was removed. The current Nodes view is a Den template pair (`nodes.html` + `nodes.scss`) that renders static Hermes/Atlas/Argus/Athena cards through the normal HTML + SCSS pipeline. New visual work in `den_app` should continue through Den templates, not handwritten painter calls.
 
 ### Dev tools (binaries in `den_app/src/bin/`)
 

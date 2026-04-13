@@ -1,5 +1,5 @@
 use crate::{AppRoute, models::Usuario};
-use den_layout::DenRouter;
+use den_layout::{DenRouteState, DenRouter};
 use eframe::egui;
 
 pub struct UsuarioPage {
@@ -18,6 +18,7 @@ impl UsuarioPage {
         ui: &mut egui::Ui,
         __den_scale: f32,
         __den_router: &mut DenRouter<AppRoute>,
+        __den_route_state: &mut DenRouteState,
     ) {
         den_macros::den_template!("pages/usuario/usuario", self);
     }

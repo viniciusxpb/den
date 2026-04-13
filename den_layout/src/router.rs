@@ -1,5 +1,7 @@
 //! Runtime de rotas tipadas para aplicações Den.
 
+use crate::DenRouteState;
+
 /// Contrato base para páginas Den navegáveis.
 pub trait DenPage<Route>: Sized {
     /// Retorna o nome estático da página usado em declarações de rota.
@@ -9,7 +11,13 @@ pub trait DenPage<Route>: Sized {
     fn from_route(route: &Route) -> Option<Self>;
 
     /// Renderiza a página usando egui.
-    fn render(&mut self, ui: &mut egui::Ui, __den_scale: f32, __den_router: &mut DenRouter<Route>);
+    fn render(
+        &mut self,
+        ui: &mut egui::Ui,
+        __den_scale: f32,
+        __den_router: &mut DenRouter<Route>,
+        __den_route_state: &mut DenRouteState,
+    );
 }
 
 /// Router simples com rota atual e uma navegação pendente.
