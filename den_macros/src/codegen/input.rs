@@ -1,8 +1,8 @@
 //! Geração de código pra `<input bind="...">` (two-way binding).
 
-use crate::types::{DenElement, WidthValue};
 use super::CodegenCtx;
 use super::frame::build_frame_expr;
+use crate::types::{DenElement, WidthValue};
 use quote::quote;
 
 /// Gera código para `<input bind="self.field" />`.
@@ -24,11 +24,9 @@ pub fn generate_input_element(
 
     // (click) em <input> não é suportado em v1
     if el.on_click.is_some() {
-        return Err(
-            "Den: <input> does not support (click) events in v1. \
+        return Err("Den: <input> does not support (click) events in v1. \
              Use the bind attribute for two-way data binding."
-                .to_string(),
-        );
+            .to_string());
     }
 
     let bind_expr = el.bind_expr.as_ref().unwrap(); // safe: caller verificou is_some()

@@ -1,5 +1,5 @@
-use crate::types::{BorderStyle, DisplayMode, StyleMap, StyleRule, WidthValue};
 use super::color::parse_hex_color;
+use crate::types::{BorderStyle, DisplayMode, StyleMap, StyleRule, WidthValue};
 use std::collections::HashMap;
 
 // SCSS identifiers são ASCII-only, então parsing byte-level é seguro aqui.
@@ -22,7 +22,9 @@ pub fn parse_scss(input: &str) -> StyleMap {
             while pos < bytes.len() && bytes[pos] != b';' && bytes[pos] != b'\n' {
                 pos += 1;
             }
-            if pos < bytes.len() { pos += 1; }
+            if pos < bytes.len() {
+                pos += 1;
+            }
             continue;
         }
 
@@ -129,7 +131,9 @@ fn collect_variables(input: &str) -> HashMap<String, String> {
 
     while pos < bytes.len() {
         skip_whitespace(bytes, &mut pos);
-        if pos >= bytes.len() { break; }
+        if pos >= bytes.len() {
+            break;
+        }
 
         if bytes[pos] == b'$' {
             pos += 1; // skip '$'

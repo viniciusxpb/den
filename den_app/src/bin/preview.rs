@@ -18,8 +18,7 @@ use std::path::{Path, PathBuf};
 const EGUI_WINDOW_WIDTH: u32 = 1200;
 
 fn main() {
-    let manifest = std::env::var("CARGO_MANIFEST_DIR")
-        .unwrap_or_else(|_| ".".to_string());
+    let manifest = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
     let pages_dir = Path::new(&manifest).join("src/pages");
     let preview_dir = Path::new(&manifest).join("../preview");
 
@@ -27,7 +26,10 @@ fn main() {
 
     let pairs = find_template_pairs(&pages_dir);
     if pairs.is_empty() {
-        eprintln!("preview: nenhum template encontrado em {}", pages_dir.display());
+        eprintln!(
+            "preview: nenhum template encontrado em {}",
+            pages_dir.display()
+        );
         return;
     }
 
@@ -74,7 +76,11 @@ fn main() {
     let out_path = preview_dir.join("index.html");
     let already_exists = out_path.exists();
     fs::write(&out_path, &output).expect("Failed to write preview/index.html");
-    println!("preview: {} componente(s) → {}", all_components.len(), out_path.display());
+    println!(
+        "preview: {} componente(s) → {}",
+        all_components.len(),
+        out_path.display()
+    );
 
     if !already_exists {
         std::process::Command::new("xdg-open")
@@ -91,13 +97,15 @@ fn main() {
 /// Busca recursivamente pares HTML+SCSS em `dir`.
 fn find_template_pairs(dir: &Path) -> Vec<(PathBuf, PathBuf)> {
     let mut pairs = Vec::new();
-    let Ok(entries) = fs::read_dir(dir) else { return pairs };
+    let Ok(entries) = fs::read_dir(dir) else {
+        return pairs;
+    };
 
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_dir() {
             pairs.extend(find_template_pairs(&path));
-        } else if path.extension().map_or(false, |e| e == "html") {
+        } else if path.extension().is_some_and(|e| e == "html") {
             let scss = path.with_extension("scss");
             if scss.exists() {
                 pairs.push((path, scss));
@@ -152,13 +160,17 @@ fn collect_scss_vars(scss: &str) -> std::collections::HashMap<String, String> {
     let mut vars = std::collections::HashMap::new();
     for line in scss.lines() {
         let trimmed = line.trim();
-        if let Some(rest) = trimmed.strip_prefix('$') {
-            if let Some(colon) = rest.find(':') {
-                let name = rest[..colon].trim().to_string();
-                let value = rest[colon + 1..].trim().trim_end_matches(';').trim().to_string();
-                if !name.is_empty() && !value.is_empty() {
-                    vars.insert(name, value);
-                }
+        if let Some(rest) = trimmed.strip_prefix('$')
+            && let Some(colon) = rest.find(':')
+        {
+            let name = rest[..colon].trim().to_string();
+            let value = rest[colon + 1..]
+                .trim()
+                .trim_end_matches(';')
+                .trim()
+                .to_string();
+            if !name.is_empty() && !value.is_empty() {
+                vars.insert(name, value);
             }
         }
     }
@@ -179,23 +191,32 @@ fn resolve_scss_vars(line: &str, vars: &std::collections::HashMap<String, String
 
 /// Propriedades CSS que precisam de unidade px quando o valor for número puro.
 const PX_PROPS: &[&str] = &[
-    "font-size", "padding", "border-radius", "margin",
-    "width", "height", "top", "left", "right", "bottom",
-    "border-width", "gap",
+    "font-size",
+    "padding",
+    "border-radius",
+    "margin",
+    "width",
+    "height",
+    "top",
+    "left",
+    "right",
+    "bottom",
+    "border-width",
+    "gap",
 ];
 
 /// Adiciona sufixo `px` a propriedades CSS com valores numéricos sem unidade.
 fn add_px_to_unitless(line: &str) -> String {
     let trimmed = line.trim();
     for prop in PX_PROPS {
-        if trimmed.starts_with(prop) {
-            if let Some(colon) = trimmed.find(':') {
-                let value = trimmed[colon + 1..].trim().trim_end_matches(';').trim();
-                // Só adiciona px se o valor for um número puro (sem %, px, etc.)
-                if value.parse::<f32>().is_ok() {
-                    let indent: String = line.chars().take_while(|c| c.is_whitespace()).collect();
-                    return format!("{indent}{prop}: {value}px;");
-                }
+        if trimmed.starts_with(prop)
+            && let Some(colon) = trimmed.find(':')
+        {
+            let value = trimmed[colon + 1..].trim().trim_end_matches(';').trim();
+            // Só adiciona px se o valor for um número puro (sem %, px, etc.)
+            if value.parse::<f32>().is_ok() {
+                let indent: String = line.chars().take_while(|c| c.is_whitespace()).collect();
+                return format!("{indent}{prop}: {value}px;");
             }
         }
     }
@@ -213,12 +234,14 @@ fn extract_dev_components(html: &str) -> Vec<String> {
     let mut components = Vec::new();
 
     while pos < chars.len() {
-        if chars[pos] == '<' && pos + 1 < chars.len() && chars[pos + 1] != '/' {
-            if let Some((html_str, end)) = try_extract_dev_element(&chars, pos) {
-                components.push(html_str);
-                pos = end;
-                continue;
-            }
+        if chars[pos] == '<'
+            && pos + 1 < chars.len()
+            && chars[pos + 1] != '/'
+            && let Some((html_str, end)) = try_extract_dev_element(&chars, pos)
+        {
+            components.push(html_str);
+            pos = end;
+            continue;
         }
         pos += 1;
     }
@@ -246,7 +269,9 @@ fn try_extract_dev_element(chars: &[char], start: usize) -> Option<(String, usiz
             // Event binding: (click)="funcao()" — consome inteiro e ignora
             pos += 1; // skip '('
             read_ident(chars, &mut pos); // "click"
-            if pos < chars.len() && chars[pos] == ')' { pos += 1; }
+            if pos < chars.len() && chars[pos] == ')' {
+                pos += 1;
+            }
             skip_ws(chars, &mut pos);
             if pos < chars.len() && chars[pos] == '=' {
                 pos += 1;
@@ -359,7 +384,9 @@ fn convert_element(chars: &[char], start: usize) -> (String, usize) {
             // Event binding: (click)="funcao()" — consome inteiro e ignora
             pos += 1;
             read_ident(chars, &mut pos);
-            if pos < chars.len() && chars[pos] == ')' { pos += 1; }
+            if pos < chars.len() && chars[pos] == ')' {
+                pos += 1;
+            }
             skip_ws(chars, &mut pos);
             if pos < chars.len() && chars[pos] == '=' {
                 pos += 1;
@@ -392,7 +419,10 @@ fn convert_element(chars: &[char], start: usize) -> (String, usize) {
 
     let html_tag = den_tag_to_html(&tag);
     let (inner, end) = read_inner_html(chars, pos, &tag);
-    (format!("<{html_tag} class=\"{classes}\">{inner}</{html_tag}>"), end)
+    (
+        format!("<{html_tag} class=\"{classes}\">{inner}</{html_tag}>"),
+        end,
+    )
 }
 
 /// Mapeia tags Den (`heading`) pra tags HTML (`h2`).
@@ -418,17 +448,21 @@ fn extract_for_children(chars: &[char], start: usize) -> (String, usize) {
         if pos < chars.len() && chars[pos] == '=' {
             pos += 1;
             let val = read_quoted(chars, &mut pos);
-            if attr == "each" { each_var = val; }
+            if attr == "each" {
+                each_var = val;
+            }
         }
         skip_ws(chars, &mut pos);
     }
-    if pos < chars.len() { pos += 1; } // skip '>'
+    if pos < chars.len() {
+        pos += 1;
+    } // skip '>'
 
     // Lê filhos uma vez, substituindo a variável por placeholder
     let (inner, end) = read_inner_html(chars, pos, "for");
     // Substitui {{ each_var }} por um placeholder legível
     let placeholder = format!("[{each_var}]");
-    let inner = inner.replace(&format!("{each_var}"), &placeholder);
+    let inner = inner.replace(&each_var.to_string(), &placeholder);
     (inner, end)
 }
 
@@ -437,8 +471,12 @@ fn extract_if_children(chars: &[char], start: usize) -> (String, usize) {
     let mut pos = start + 1;
     skip_ws(chars, &mut pos);
     read_ident(chars, &mut pos); // "if"
-    while pos < chars.len() && chars[pos] != '>' { pos += 1; }
-    if pos < chars.len() { pos += 1; }
+    while pos < chars.len() && chars[pos] != '>' {
+        pos += 1;
+    }
+    if pos < chars.len() {
+        pos += 1;
+    }
 
     // Só renderiza o bloco then
     let (inner, end) = read_inner_html(chars, pos, "if");
@@ -449,13 +487,21 @@ fn extract_if_children(chars: &[char], start: usize) -> (String, usize) {
 fn skip_tag(chars: &[char], start: usize, _tag: &str) -> usize {
     let mut pos = start;
     // Skip opening tag
-    while pos < chars.len() && chars[pos] != '>' { pos += 1; }
-    if pos < chars.len() { pos += 1; }
+    while pos < chars.len() && chars[pos] != '>' {
+        pos += 1;
+    }
+    if pos < chars.len() {
+        pos += 1;
+    }
     // Skip children until closing tag
     while pos < chars.len() {
         if chars[pos] == '<' && pos + 1 < chars.len() && chars[pos + 1] == '/' {
-            while pos < chars.len() && chars[pos] != '>' { pos += 1; }
-            if pos < chars.len() { pos += 1; }
+            while pos < chars.len() && chars[pos] != '>' {
+                pos += 1;
+            }
+            if pos < chars.len() {
+                pos += 1;
+            }
             return pos;
         }
         pos += 1;
@@ -471,11 +517,14 @@ fn extract_interpolation(chars: &[char], start: usize) -> (String, usize) {
         pos += 1;
     }
     let expr: String = chars[expr_start..pos].iter().collect();
-    let expr = expr.trim()
+    let expr = expr
+        .trim()
         .trim_start_matches("self.")
         .trim_start_matches("this.");
     let placeholder = format!("<span class=\"den-placeholder\">[{expr}]</span>");
-    if pos + 1 < chars.len() { pos += 2; } // skip '}}'
+    if pos + 1 < chars.len() {
+        pos += 2;
+    } // skip '}}'
     (placeholder, pos)
 }
 
@@ -563,10 +612,16 @@ body {{
 /// Lê o nome da tag após `<` sem avançar `pos`.
 fn peek_tag(chars: &[char], pos: usize) -> String {
     let mut p = pos;
-    if p < chars.len() && chars[p] == '<' { p += 1; }
-    while p < chars.len() && chars[p].is_ascii_whitespace() { p += 1; }
+    if p < chars.len() && chars[p] == '<' {
+        p += 1;
+    }
+    while p < chars.len() && chars[p].is_ascii_whitespace() {
+        p += 1;
+    }
     let start = p;
-    while p < chars.len() && (chars[p].is_ascii_alphanumeric() || chars[p] == '_' || chars[p] == '-') {
+    while p < chars.len()
+        && (chars[p].is_ascii_alphanumeric() || chars[p] == '_' || chars[p] == '-')
+    {
         p += 1;
     }
     chars[start..p].iter().collect()
@@ -574,13 +629,17 @@ fn peek_tag(chars: &[char], pos: usize) -> String {
 
 /// Pula whitespace ASCII.
 fn skip_ws(chars: &[char], pos: &mut usize) {
-    while *pos < chars.len() && chars[*pos].is_ascii_whitespace() { *pos += 1; }
+    while *pos < chars.len() && chars[*pos].is_ascii_whitespace() {
+        *pos += 1;
+    }
 }
 
 /// Lê um identificador (alfanumérico + `_` + `-`).
 fn read_ident(chars: &[char], pos: &mut usize) -> String {
     let start = *pos;
-    while *pos < chars.len() && (chars[*pos].is_ascii_alphanumeric() || chars[*pos] == '_' || chars[*pos] == '-') {
+    while *pos < chars.len()
+        && (chars[*pos].is_ascii_alphanumeric() || chars[*pos] == '_' || chars[*pos] == '-')
+    {
         *pos += 1;
     }
     chars[start..*pos].iter().collect()
@@ -588,13 +647,21 @@ fn read_ident(chars: &[char], pos: &mut usize) -> String {
 
 /// Lê valor entre aspas, ou um identificador se não houver aspas.
 fn read_quoted(chars: &[char], pos: &mut usize) -> String {
-    if *pos >= chars.len() { return String::new(); }
+    if *pos >= chars.len() {
+        return String::new();
+    }
     let q = chars[*pos];
-    if q != '"' && q != '\'' { return read_ident(chars, pos); }
+    if q != '"' && q != '\'' {
+        return read_ident(chars, pos);
+    }
     *pos += 1;
     let start = *pos;
-    while *pos < chars.len() && chars[*pos] != q { *pos += 1; }
+    while *pos < chars.len() && chars[*pos] != q {
+        *pos += 1;
+    }
     let val: String = chars[start..*pos].iter().collect();
-    if *pos < chars.len() { *pos += 1; }
+    if *pos < chars.len() {
+        *pos += 1;
+    }
     val
 }

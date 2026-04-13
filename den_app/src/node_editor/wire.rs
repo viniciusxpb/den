@@ -1,7 +1,7 @@
 //! Renderização de wires (bezier cúbica entre ports).
 
-use eframe::egui;
 use super::{theme, types::*};
+use eframe::egui;
 
 /// Retorna a posição screen-space de um port em um node.
 /// `is_output = true` → borda direita do node; `false` → borda esquerda.
@@ -13,7 +13,11 @@ pub fn get_port_position(
     scale: f32,
     canvas_origin: egui::Pos2,
 ) -> Option<egui::Pos2> {
-    let ports = if is_output { &node.outputs } else { &node.inputs };
+    let ports = if is_output {
+        &node.outputs
+    } else {
+        &node.inputs
+    };
     let idx = ports.iter().position(|p| p.name == port_name)?;
 
     let x = if is_output {
@@ -44,12 +48,17 @@ pub fn draw_wire(
 ) {
     let from_node = nodes.iter().find(|n| n.id == wire.from_node);
     let to_node = nodes.iter().find(|n| n.id == wire.to_node);
-    let (Some(from), Some(to)) = (from_node, to_node) else { return };
+    let (Some(from), Some(to)) = (from_node, to_node) else {
+        return;
+    };
 
     let Some(from_pos) = get_port_position(from, &wire.from_port, true, scale, canvas_origin)
-    else { return };
-    let Some(to_pos) = get_port_position(to, &wire.to_port, false, scale, canvas_origin)
-    else { return };
+    else {
+        return;
+    };
+    let Some(to_pos) = get_port_position(to, &wire.to_port, false, scale, canvas_origin) else {
+        return;
+    };
 
     let wire_color = match wire.wire_type {
         PortType::Exec => theme::WIRE_EXEC,

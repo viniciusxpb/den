@@ -1,0 +1,32 @@
+$bg: #f5f7fb;
+$card: #ffffff;
+$text: #18202f;
+$muted: #5d6778;
+$accent: #2f8cff;
+$border: #d8deea;
+
+.page {
+    background: $bg;
+    padding: 16;
+    width: 100%;
+}
+
+.title {
+    background: $card;
+    border: 1px solid $border;
+    border-radius: 8;
+    padding: 14;
+    color: $accent;
+    font-size: 24;
+    width: 100%;
+}
+
+.body {
+    background: $card;
+    border: 1px solid $border;
+    border-radius: 8;
+    padding: 14;
+    color: $muted;
+    font-size: 16;
+    width: 100%;
+}

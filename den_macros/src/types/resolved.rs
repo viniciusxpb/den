@@ -66,17 +66,39 @@ impl DenVisual {
     /// INVARIANTE: esta função DEVE ser atualizada junto com StyleRule::merge_from
     /// quando adicionar nova propriedade CSS.
     pub fn merge_from(&mut self, other: &Self) {
-        if other.color.is_some() { self.color = other.color; }
-        if other.font_size.is_some() { self.font_size = other.font_size; }
-        if other.background.is_some() { self.background = other.background; }
-        if other.padding.is_some() { self.padding = other.padding; }
-        if other.display != DisplayMode::Block { self.display = other.display; }
-        if other.border.is_some() { self.border = other.border; }
-        if other.border_radius.is_some() { self.border_radius = other.border_radius; }
-        if other.width != WidthValue::Auto { self.width = other.width; }
-        if other.height != WidthValue::Auto { self.height = other.height; }
-        if other.cursor_pointer { self.cursor_pointer = true; }
-        if other.flex_grow { self.flex_grow = true; }
+        if other.color.is_some() {
+            self.color = other.color;
+        }
+        if other.font_size.is_some() {
+            self.font_size = other.font_size;
+        }
+        if other.background.is_some() {
+            self.background = other.background;
+        }
+        if other.padding.is_some() {
+            self.padding = other.padding;
+        }
+        if other.display != DisplayMode::Block {
+            self.display = other.display;
+        }
+        if other.border.is_some() {
+            self.border = other.border;
+        }
+        if other.border_radius.is_some() {
+            self.border_radius = other.border_radius;
+        }
+        if other.width != WidthValue::Auto {
+            self.width = other.width;
+        }
+        if other.height != WidthValue::Auto {
+            self.height = other.height;
+        }
+        if other.cursor_pointer {
+            self.cursor_pointer = true;
+        }
+        if other.flex_grow {
+            self.flex_grow = true;
+        }
     }
 
     /// Resolve o visual final em estado hover (base + overrides).
@@ -102,6 +124,7 @@ impl DenVisual {
 
 /// Nó resolvido: lógica + visual linkados.
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum DenNode {
     Element(DenElement),
     ForLoop(DenForLoop),

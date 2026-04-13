@@ -1,7 +1,7 @@
 //! Tradução de argumentos de click handlers e geração de DenElementStyle.
 
-use crate::types::{DenVisual, DisplayMode, WidthValue};
 use super::CodegenCtx;
+use crate::types::{DenVisual, DisplayMode, WidthValue};
 use quote::quote;
 
 /// Traduz um argumento de click pra TokenStream.
@@ -20,7 +20,8 @@ pub(super) fn translate_click_arg(
     if arg == "style" {
         return Ok(quote! { __den_element_style });
     }
-    arg.parse().map_err(|e| format!("Invalid click argument '{arg}': {e}"))
+    arg.parse()
+        .map_err(|e| format!("Invalid click argument '{arg}': {e}"))
 }
 
 /// Gera `let __den_element_style = DenElementStyle { ... }` a partir do DenVisual.

@@ -1,7 +1,7 @@
 //! Renderização de nodes: shadow, header, accent, ports, fields.
 
-use eframe::egui;
 use super::{theme, types::*};
+use eframe::egui;
 
 /// Calcula a altura total do node em CSS pixels (sem scale).
 /// Considera header, ports (max entre inputs e outputs), seção de fields (se houver) e padding.
@@ -24,12 +24,7 @@ pub fn calculate_node_height(node: &NodeData) -> f32 {
 /// Renderiza um node completo: shadow, body, header, accent line, title, subtitle,
 /// separator, input ports (esquerda), output ports (direita) e fields.
 /// `canvas_origin` é o canto top-left do canvas em screen coords.
-pub fn draw_node(
-    painter: &egui::Painter,
-    node: &NodeData,
-    scale: f32,
-    canvas_origin: egui::Pos2,
-) {
+pub fn draw_node(painter: &egui::Painter, node: &NodeData, scale: f32, canvas_origin: egui::Pos2) {
     let s = scale;
     let x = canvas_origin.x + node.x * s;
     let y = canvas_origin.y + node.y * s;
@@ -38,7 +33,10 @@ pub fn draw_node(
     let node_rect = egui::Rect::from_min_size(egui::pos2(x, y), egui::vec2(w, h));
 
     // 1. Shadow
-    let shadow_rect = node_rect.translate(egui::vec2(theme::SHADOW_OFFSET * s, theme::SHADOW_OFFSET * s));
+    let shadow_rect = node_rect.translate(egui::vec2(
+        theme::SHADOW_OFFSET * s,
+        theme::SHADOW_OFFSET * s,
+    ));
     painter.rect_filled(
         shadow_rect,
         theme::NODE_CORNER_RADIUS * s,
@@ -46,8 +44,16 @@ pub fn draw_node(
     );
 
     // 2. Body
-    let border_color = if node.selected { node.color } else { theme::NODE_BORDER };
-    let border_width = if node.selected { theme::BORDER_WIDTH_SELECTED } else { theme::BORDER_WIDTH_NORMAL };
+    let border_color = if node.selected {
+        node.color
+    } else {
+        theme::NODE_BORDER
+    };
+    let border_width = if node.selected {
+        theme::BORDER_WIDTH_SELECTED
+    } else {
+        theme::BORDER_WIDTH_NORMAL
+    };
     painter.rect(
         node_rect,
         theme::NODE_CORNER_RADIUS * s,
@@ -57,20 +63,32 @@ pub fn draw_node(
     );
 
     // 3. Header background
-    let header_rect = egui::Rect::from_min_size(node_rect.min, egui::vec2(w, theme::HEADER_HEIGHT * s));
-    painter.rect_filled(header_rect, theme::NODE_CORNER_RADIUS * s, theme::NODE_HEADER_BG);
+    let header_rect =
+        egui::Rect::from_min_size(node_rect.min, egui::vec2(w, theme::HEADER_HEIGHT * s));
+    painter.rect_filled(
+        header_rect,
+        theme::NODE_CORNER_RADIUS * s,
+        theme::NODE_HEADER_BG,
+    );
     // Patch: cover bottom rounded corners
     let patch_rect = egui::Rect::from_min_size(
-        egui::pos2(x, y + (theme::HEADER_HEIGHT - theme::HEADER_PATCH_HEIGHT) * s),
+        egui::pos2(
+            x,
+            y + (theme::HEADER_HEIGHT - theme::HEADER_PATCH_HEIGHT) * s,
+        ),
         egui::vec2(w, theme::HEADER_PATCH_HEIGHT * s),
     );
     painter.rect_filled(patch_rect, 0.0, theme::NODE_HEADER_BG);
 
     // 4. Accent line
-    let accent_rect = egui::Rect::from_min_size(node_rect.min, egui::vec2(w, theme::ACCENT_LINE_HEIGHT * s));
+    let accent_rect =
+        egui::Rect::from_min_size(node_rect.min, egui::vec2(w, theme::ACCENT_LINE_HEIGHT * s));
     painter.rect_filled(accent_rect, theme::NODE_CORNER_RADIUS * s, node.color);
     let accent_cover = egui::Rect::from_min_size(
-        egui::pos2(x, y + theme::ACCENT_LINE_HEIGHT * s - theme::ACCENT_COVER_HEIGHT * s),
+        egui::pos2(
+            x,
+            y + theme::ACCENT_LINE_HEIGHT * s - theme::ACCENT_COVER_HEIGHT * s,
+        ),
         egui::vec2(w, theme::ACCENT_COVER_HEIGHT * s),
     );
     painter.rect_filled(accent_cover, 0.0, node.color);
@@ -97,18 +115,28 @@ pub fn draw_node(
     painter.line_segment(
         [
             egui::pos2(x + theme::SEPARATOR_INSET * s, y + theme::HEADER_HEIGHT * s),
-            egui::pos2(x + w - theme::SEPARATOR_INSET * s, y + theme::HEADER_HEIGHT * s),
+            egui::pos2(
+                x + w - theme::SEPARATOR_INSET * s,
+                y + theme::HEADER_HEIGHT * s,
+            ),
         ],
         egui::Stroke::new(theme::SEPARATOR_STROKE_WIDTH, theme::NODE_BORDER),
     );
 
     // 7. Input ports
     for (i, port) in node.inputs.iter().enumerate() {
-        let py = y + (theme::HEADER_HEIGHT + theme::BODY_PAD_TOP
-            + i as f32 * theme::PORT_ROW_HEIGHT + theme::PORT_ROW_HEIGHT / 2.0) * s;
+        let py = y
+            + (theme::HEADER_HEIGHT
+                + theme::BODY_PAD_TOP
+                + i as f32 * theme::PORT_ROW_HEIGHT
+                + theme::PORT_ROW_HEIGHT / 2.0)
+                * s;
         draw_port(painter, egui::pos2(x, py), port, false, s);
         painter.text(
-            egui::pos2(x + theme::NODE_PAD_X * s, py + theme::PORT_LABEL_OFFSET_Y * s),
+            egui::pos2(
+                x + theme::NODE_PAD_X * s,
+                py + theme::PORT_LABEL_OFFSET_Y * s,
+            ),
             egui::Align2::LEFT_TOP,
             &port.name,
             egui::FontId::monospace(theme::FONT_PORT * s),
@@ -118,11 +146,18 @@ pub fn draw_node(
 
     // 8. Output ports
     for (i, port) in node.outputs.iter().enumerate() {
-        let py = y + (theme::HEADER_HEIGHT + theme::BODY_PAD_TOP
-            + i as f32 * theme::PORT_ROW_HEIGHT + theme::PORT_ROW_HEIGHT / 2.0) * s;
+        let py = y
+            + (theme::HEADER_HEIGHT
+                + theme::BODY_PAD_TOP
+                + i as f32 * theme::PORT_ROW_HEIGHT
+                + theme::PORT_ROW_HEIGHT / 2.0)
+                * s;
         draw_port(painter, egui::pos2(x + w, py), port, true, s);
         painter.text(
-            egui::pos2(x + w - theme::NODE_PAD_X * s, py + theme::PORT_LABEL_OFFSET_Y * s),
+            egui::pos2(
+                x + w - theme::NODE_PAD_X * s,
+                py + theme::PORT_LABEL_OFFSET_Y * s,
+            ),
             egui::Align2::RIGHT_TOP,
             &port.name,
             egui::FontId::monospace(theme::FONT_PORT * s),
@@ -133,8 +168,11 @@ pub fn draw_node(
     // 9-10. Fields
     if !node.fields.is_empty() {
         let max_ports = node.inputs.len().max(node.outputs.len());
-        let fields_base_y = y + (theme::HEADER_HEIGHT + theme::BODY_PAD_TOP
-            + max_ports as f32 * theme::PORT_ROW_HEIGHT) * s;
+        let fields_base_y = y
+            + (theme::HEADER_HEIGHT
+                + theme::BODY_PAD_TOP
+                + max_ports as f32 * theme::PORT_ROW_HEIGHT)
+                * s;
         draw_fields(painter, node, x, w, fields_base_y, s);
     }
 }
@@ -214,7 +252,9 @@ fn draw_dashed_line(
     stroke: egui::Stroke,
 ) {
     let total_len = from.distance(to);
-    if total_len < 0.01 { return; }
+    if total_len < 0.01 {
+        return;
+    }
     let dir = (to - from) / total_len;
     let mut pos = 0.0;
     while pos < total_len {
@@ -255,7 +295,11 @@ fn draw_port(
                     egui::pos2(center.x + s, center.y + s),
                 ]
             };
-            painter.add(egui::Shape::convex_polygon(points, fill, egui::Stroke::NONE));
+            painter.add(egui::Shape::convex_polygon(
+                points,
+                fill,
+                egui::Stroke::NONE,
+            ));
         }
         PortType::Output => {
             let s = r + theme::PORT_SHAPE_EXTRA * scale;
@@ -265,7 +309,11 @@ fn draw_port(
                 egui::pos2(center.x, center.y + s),
                 egui::pos2(center.x - s, center.y),
             ];
-            painter.add(egui::Shape::convex_polygon(points, fill, egui::Stroke::NONE));
+            painter.add(egui::Shape::convex_polygon(
+                points,
+                fill,
+                egui::Stroke::NONE,
+            ));
         }
         PortType::Data | PortType::Input => {
             painter.circle_filled(center, r, color);

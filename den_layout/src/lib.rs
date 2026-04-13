@@ -6,6 +6,10 @@
 //! ESCOPO: só largura. Altura, posição vertical, margin, gap são
 //! problemas separados pra depois.
 
+mod router;
+
+pub use router::{DenPage, DenRouter};
+
 /// Índice do body na lista. Sempre 0.
 pub const BODY_INDEX: usize = 0;
 
@@ -124,8 +128,7 @@ impl LayoutTable {
                     // largura fixa. O codegen NÃO usa sizes[i] pra Percent —
                     // usa ui.available_width() * pct inline (que já desconta padding).
                     // Ver codegen/element.rs build_inner.
-                    let parent_width = self.entries[i].parent
-                        .and_then(|p| self.sizes[p]);
+                    let parent_width = self.entries[i].parent.and_then(|p| self.sizes[p]);
                     if let Some(pw) = parent_width {
                         self.sizes[i] = Some(pw * pct);
                         changed = true;
@@ -178,9 +181,15 @@ impl LayoutTable {
     /// Só filhos `Auto` recebem espaço distribuído.
     pub fn distribute_flex(&mut self) {
         for i in 0..self.entries.len() {
-            if self.entries[i].display != DisplayMode::Flex { continue; }
-            if self.entries[i].children.is_empty() { continue; }
-            let Some(parent_width) = self.sizes[i] else { continue; };
+            if self.entries[i].display != DisplayMode::Flex {
+                continue;
+            }
+            if self.entries[i].children.is_empty() {
+                continue;
+            }
+            let Some(parent_width) = self.sizes[i] else {
+                continue;
+            };
 
             // Clone após os continues — não aloca se o elemento for ignorado
             let children = self.entries[i].children.clone();
@@ -198,7 +207,9 @@ impl LayoutTable {
                 }
             }
 
-            if flex_children.is_empty() { continue; }
+            if flex_children.is_empty() {
+                continue;
+            }
 
             // Espaço restante dividido igualmente entre filhos Auto
             let remaining = (parent_width - fixed_total).max(0.0);
@@ -244,8 +255,10 @@ mod tests {
 
     fn body() -> LayoutEntry {
         LayoutEntry {
-            parent: None, children: vec![],
-            width_rule: WidthRule::Auto, display: DisplayMode::Block,
+            parent: None,
+            children: vec![],
+            width_rule: WidthRule::Auto,
+            display: DisplayMode::Block,
         }
     }
 
@@ -253,15 +266,19 @@ mod tests {
     /// O index é a posição no Vec passado pra make_table.
     fn entry(parent: usize, rule: WidthRule) -> LayoutEntry {
         LayoutEntry {
-            parent: Some(parent), children: vec![],
-            width_rule: rule, display: DisplayMode::Block,
+            parent: Some(parent),
+            children: vec![],
+            width_rule: rule,
+            display: DisplayMode::Block,
         }
     }
 
     fn flex_entry(parent: usize, rule: WidthRule) -> LayoutEntry {
         LayoutEntry {
-            parent: Some(parent), children: vec![],
-            width_rule: rule, display: DisplayMode::Flex,
+            parent: Some(parent),
+            children: vec![],
+            width_rule: rule,
+            display: DisplayMode::Flex,
         }
     }
 
@@ -305,7 +322,7 @@ mod tests {
         // pai auto (block), filho fixo 300px → pai fica 300px (capped ao body 800)
         let mut t = make_table(vec![
             body(),
-            entry(0, WidthRule::Auto),   // container block auto
+            entry(0, WidthRule::Auto), // container block auto
             entry(1, WidthRule::Px(300.0)),
         ]);
         t.resolve(800.0);
@@ -318,7 +335,7 @@ mod tests {
         // pai flex 600px, 3 filhos auto → cada um 200px após distribute_flex
         let mut t = make_table(vec![
             body(),
-            flex_entry(0, WidthRule::Percent(1.0)),  // flex container 100%
+            flex_entry(0, WidthRule::Percent(1.0)), // flex container 100%
             entry(1, WidthRule::Auto),
             entry(1, WidthRule::Auto),
             entry(1, WidthRule::Auto),
@@ -352,7 +369,7 @@ mod tests {
         // filho=50% de pai=600px → 300px, independente do body ser 800px
         let mut t = make_table(vec![
             body(),
-            entry(0, WidthRule::Px(600.0)),  // pai fixo 600px
+            entry(0, WidthRule::Px(600.0)), // pai fixo 600px
             entry(1, WidthRule::Percent(0.5)),
         ]);
         t.resolve(800.0);
@@ -402,12 +419,12 @@ mod tests {
         // L1(1) → seta filhos[2,5] = 400 cada
         // L2(2) → agora tem 400, seta filhos[3,4] = 200 cada
         let mut t = make_table(vec![
-            body(),                                     // 0
-            flex_entry(0, WidthRule::Percent(1.0)),     // 1: L1 flex
-            flex_entry(1, WidthRule::Auto),              // 2: L2 flex (filho do L1)
-            entry(2, WidthRule::Auto),                   // 3: neto A
-            entry(2, WidthRule::Auto),                   // 4: neto B
-            entry(1, WidthRule::Auto),                   // 5: L2 simples (irmão)
+            body(),                                 // 0
+            flex_entry(0, WidthRule::Percent(1.0)), // 1: L1 flex
+            flex_entry(1, WidthRule::Auto),         // 2: L2 flex (filho do L1)
+            entry(2, WidthRule::Auto),              // 3: neto A
+            entry(2, WidthRule::Auto),              // 4: neto B
+            entry(1, WidthRule::Auto),              // 5: L2 simples (irmão)
         ]);
 
         t.resolve(800.0);
@@ -426,8 +443,8 @@ mod tests {
         // block mode usa MAX dos filhos: 700 > 600 → capped em 600
         let mut t = make_table(vec![
             body(),
-            entry(0, WidthRule::Auto),       // container auto
-            entry(1, WidthRule::Px(700.0)),  // filho maior que o pai
+            entry(0, WidthRule::Auto),      // container auto
+            entry(1, WidthRule::Px(700.0)), // filho maior que o pai
         ]);
         t.resolve(600.0);
         assert_eq!(t.sizes[2], Some(700.0)); // filho não é capped (só o container é)

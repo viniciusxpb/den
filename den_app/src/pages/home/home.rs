@@ -1,3 +1,5 @@
+use crate::AppRoute;
+use den_layout::DenRouter;
 use eframe::egui;
 
 pub struct HomePage {
@@ -27,7 +29,12 @@ impl Default for HomePage {
 }
 
 impl HomePage {
-    pub fn render(&mut self, ui: &mut egui::Ui, __den_scale: f32) {
+    pub fn render(
+        &mut self,
+        ui: &mut egui::Ui,
+        __den_scale: f32,
+        __den_router: &mut DenRouter<AppRoute>,
+    ) {
         den_macros::den_template!("pages/home/home", self);
     }
 

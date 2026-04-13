@@ -1,7 +1,7 @@
 //! Geração de código pra `<for>` e `<if>`/`<else>`.
 
+use super::{CodegenCtx, generate_node};
 use crate::types::{DenForLoop, DenIfChain};
-use super::{generate_node, CodegenCtx};
 use quote::quote;
 
 pub fn generate_for_loop(

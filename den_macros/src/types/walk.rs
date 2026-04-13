@@ -16,8 +16,7 @@ pub fn walk_den_nodes<F>(
     parent_index: usize,
     counter: &mut usize,
     visitor: &mut F,
-)
-where
+) where
     F: FnMut(&DenElement, usize, usize), // (element, my_index, parent_index)
 {
     for node in nodes {

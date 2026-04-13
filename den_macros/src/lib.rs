@@ -25,8 +25,7 @@ pub fn den_template(input: TokenStream) -> TokenStream {
     let template_path = parsed.path.value();
     let has_self = parsed.has_self;
 
-    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
-        .expect("CARGO_MANIFEST_DIR not set");
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
     let base = std::path::Path::new(&manifest_dir)
         .join("src")
         .join(&template_path);

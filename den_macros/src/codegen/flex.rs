@@ -30,15 +30,20 @@ pub(super) fn collect_flex_children_info(
 ) -> Vec<FlexChildInfo> {
     let mut infos = Vec::new();
 
-    crate::types::walk_den_nodes(children, parent_idx, layout_index, &mut |el, idx, parent| {
-        if parent == parent_idx {
-            infos.push(FlexChildInfo {
-                layout_index: idx,
-                width: el.visual.width,
-                flex_grow: el.visual.flex_grow,
-            });
-        }
-    });
+    crate::types::walk_den_nodes(
+        children,
+        parent_idx,
+        layout_index,
+        &mut |el, idx, parent| {
+            if parent == parent_idx {
+                infos.push(FlexChildInfo {
+                    layout_index: idx,
+                    width: el.visual.width,
+                    flex_grow: el.visual.flex_grow,
+                });
+            }
+        },
+    );
 
     infos
 }

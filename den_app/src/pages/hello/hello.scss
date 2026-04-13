@@ -1,0 +1,21 @@
+$bg: #eef8f3;
+$card: #ffffff;
+$text: #163225;
+$accent: #15915b;
+$border: #cfe7db;
+
+.page {
+    background: $bg;
+    padding: 16;
+    width: 100%;
+}
+
+.message {
+    background: $card;
+    border: 1px solid $border;
+    border-radius: 8;
+    padding: 18;
+    color: $accent;
+    font-size: 26;
+    width: 100%;
+}

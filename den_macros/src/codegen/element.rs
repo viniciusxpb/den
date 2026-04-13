@@ -1,12 +1,12 @@
 //! Geração de código pra elementos HTML regulares e containers flex.
 
-use crate::types::{DenElement, DenVisual, DisplayMode, WidthValue};
-use super::{generate_node, CodegenCtx};
-use super::click::{translate_click_arg, generate_style_struct};
-use super::flex::{collect_flex_children_info, build_flex_layout};
+use super::click::{generate_style_struct, translate_click_arg};
+use super::flex::{build_flex_layout, collect_flex_children_info};
 use super::frame::{build_frame_expr, build_rich_text_expr};
 use super::input::generate_input_element;
 use super::text::build_text_token_stream;
+use super::{CodegenCtx, generate_node};
+use crate::types::{DenElement, DenVisual, DisplayMode, WidthValue};
 use quote::quote;
 use std::hash::{Hash, Hasher};
 
@@ -19,11 +19,9 @@ pub fn generate_element(
         return generate_input_element(el, ctx);
     }
     if el.tag == "input" {
-        return Err(
-            "Den: <input> requires a bind attribute. \
+        return Err("Den: <input> requires a bind attribute. \
              Use: <input bind=\"self.field\" />"
-                .to_string(),
-        );
+            .to_string());
     }
 
     let visual = &el.visual;
@@ -50,7 +48,11 @@ pub fn generate_element(
     // não interferir com a geração real dos filhos.
     let flex_children_info = if visual.display == DisplayMode::Flex {
         let mut peek_index = ctx.layout_index;
-        Some(collect_flex_children_info(&el.children, my_layout_index, &mut peek_index))
+        Some(collect_flex_children_info(
+            &el.children,
+            my_layout_index,
+            &mut peek_index,
+        ))
     } else {
         None
     };
@@ -92,7 +94,8 @@ pub fn generate_element(
             let mut arg_idents = Vec::new();
             for (i, arg) in el.on_click_args.iter().enumerate() {
                 let var_name = format!("__den_click_arg_{i}");
-                let var_ident: proc_macro2::TokenStream = var_name.parse()
+                let var_ident: proc_macro2::TokenStream = var_name
+                    .parse()
                     .map_err(|e| format!("Internal error building click arg ident: {e}"))?;
                 let arg_expr = translate_click_arg(arg, ctx)?;
 
@@ -141,8 +144,24 @@ pub fn generate_element(
         let render_code = if has_hover {
             let hovered = visual.resolve_hover();
 
-            let base_inner = build_inner(visual, &text_ts, &children_code, tag, my_layout_index, flex_info_ref, is_flex_auto_child);
-            let hover_inner = build_inner(&hovered, &text_ts, &children_code, tag, my_layout_index, flex_info_ref, is_flex_auto_child);
+            let base_inner = build_inner(
+                visual,
+                &text_ts,
+                &children_code,
+                tag,
+                my_layout_index,
+                flex_info_ref,
+                is_flex_auto_child,
+            );
+            let hover_inner = build_inner(
+                &hovered,
+                &text_ts,
+                &children_code,
+                tag,
+                my_layout_index,
+                flex_info_ref,
+                is_flex_auto_child,
+            );
 
             let base_code = if visual.needs_frame() {
                 let frame = build_frame_expr(visual);
@@ -183,7 +202,15 @@ pub fn generate_element(
             }
         } else {
             // Click apenas, sem hover — wrap em scope pra capturar rect
-            let inner_code = build_inner(visual, &text_ts, &children_code, tag, my_layout_index, flex_info_ref, is_flex_auto_child);
+            let inner_code = build_inner(
+                visual,
+                &text_ts,
+                &children_code,
+                tag,
+                my_layout_index,
+                flex_info_ref,
+                is_flex_auto_child,
+            );
             let wrapped = if visual.needs_frame() {
                 let frame_expr = build_frame_expr(visual);
                 quote! { #frame_expr.show(ui, |ui| { #inner_code }); }
@@ -234,7 +261,15 @@ pub fn generate_element(
         }
     } else {
         // Sem hover, sem click — caminho simples
-        let inner_code = build_inner(visual, &text_ts, &children_code, tag, my_layout_index, flex_info_ref, is_flex_auto_child);
+        let inner_code = build_inner(
+            visual,
+            &text_ts,
+            &children_code,
+            tag,
+            my_layout_index,
+            flex_info_ref,
+            is_flex_auto_child,
+        );
 
         if visual.needs_frame() {
             let frame_expr = build_frame_expr(visual);
@@ -345,7 +380,7 @@ fn build_inner(
                 ui.set_height(#scaled * __den_scale);
                 #inner
             }
-        },
+        }
         WidthValue::Auto => inner,
     }
 }
@@ -356,12 +391,7 @@ fn build_inner(
 /// mas isso é aceitável porque o ID é usado apenas dentro de um mesmo frame
 /// do egui (hover state via `data_mut`). Se o binário for recompilado, os IDs
 /// mudam mas o estado transiente do egui também reseta.
-fn den_element_id(
-    template_path: &str,
-    tree_path: &[usize],
-    tag: &str,
-    classes: &[String],
-) -> u64 {
+fn den_element_id(template_path: &str, tree_path: &[usize], tag: &str, classes: &[String]) -> u64 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     template_path.hash(&mut hasher);
     tree_path.hash(&mut hasher);

@@ -60,10 +60,25 @@ mod model {
     /// Tipo de valor CSS: cor, tamanho, enum, borda ou raw text.
     #[derive(Clone)]
     pub enum PropertyValue {
-        Color { r: u8, g: u8, b: u8 },
-        Size { value: f32, min: f32, max: f32, suffix: String },
-        Enum { current: String, options: Vec<String> },
-        Border { width: f32, color: (u8, u8, u8) },
+        Color {
+            r: u8,
+            g: u8,
+            b: u8,
+        },
+        Size {
+            value: f32,
+            min: f32,
+            max: f32,
+            suffix: String,
+        },
+        Enum {
+            current: String,
+            options: Vec<String>,
+        },
+        Border {
+            width: f32,
+            color: (u8, u8, u8),
+        },
         Raw(String),
     }
 
@@ -78,7 +93,11 @@ mod model {
                     } else {
                         format!("{value:.1}")
                     };
-                    if suffix.is_empty() || suffix == "px" { n } else { format!("{n}{suffix}") }
+                    if suffix.is_empty() || suffix == "px" {
+                        n
+                    } else {
+                        format!("{n}{suffix}")
+                    }
                 }
                 Self::Enum { current, .. } => current.clone(),
                 Self::Border { width, color } => {
@@ -96,8 +115,8 @@ mod model {
 }
 
 mod ui {
-    use eframe::egui;
     use super::model::*;
+    use eframe::egui;
 
     /// Largura da coluna de label de propriedade no style editor.
     const PROPERTY_LABEL_WIDTH: f32 = 96.0;
@@ -142,7 +161,12 @@ mod ui {
                     );
                 }
 
-                PropertyValue::Size { value, min, max, suffix } => {
+                PropertyValue::Size {
+                    value,
+                    min,
+                    max,
+                    suffix,
+                } => {
                     let suffix_str = suffix.clone();
                     if ui
                         .add(
@@ -203,9 +227,9 @@ mod ui {
 }
 
 mod io {
+    use super::model::*;
     use std::collections::HashMap;
     use std::path::PathBuf;
-    use super::model::*;
 
     // ============================================================================
     // File I/O
@@ -214,12 +238,14 @@ mod io {
     /// Busca recursivamente arquivos `.scss` em `dir`.
     pub fn find_scss_files(dir: &std::path::Path) -> Vec<PathBuf> {
         let mut files = Vec::new();
-        let Ok(entries) = std::fs::read_dir(dir) else { return files };
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return files;
+        };
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
                 files.extend(find_scss_files(&path));
-            } else if path.extension().map_or(false, |e| e == "scss") {
+            } else if path.extension().is_some_and(|e| e == "scss") {
                 files.push(path);
             }
         }
@@ -241,7 +267,9 @@ mod io {
 
         let mut content = file.raw_content.clone();
         for (offset, len, new_val) in edits {
-            if offset + len > content.len() { continue; }
+            if offset + len > content.len() {
+                continue;
+            }
             if content[offset..offset + len].trim() != new_val {
                 content.replace_range(offset..offset + len, &new_val);
             }
@@ -260,7 +288,10 @@ mod io {
                 file.raw_content = content;
                 file.dirty = false;
             }
-            Err(e) => eprintln!("Den Style Editor: falha ao escrever {}: {e}", file.path.display()),
+            Err(e) => eprintln!(
+                "Den Style Editor: falha ao escrever {}: {e}",
+                file.path.display()
+            ),
         }
     }
 
@@ -277,19 +308,27 @@ mod io {
 
         while pos < bytes.len() {
             skip_ws(bytes, &mut pos);
-            if pos >= bytes.len() { break; }
+            if pos >= bytes.len() {
+                break;
+            }
 
             // Pula variáveis ($var: value;)
             if bytes[pos] == b'$' {
-                while pos < bytes.len() && bytes[pos] != b';' && bytes[pos] != b'\n' { pos += 1; }
-                if pos < bytes.len() { pos += 1; }
+                while pos < bytes.len() && bytes[pos] != b';' && bytes[pos] != b'\n' {
+                    pos += 1;
+                }
+                if pos < bytes.len() {
+                    pos += 1;
+                }
                 continue;
             }
 
             // Pula comentários // e /* */
             if bytes[pos] == b'/' {
                 if pos + 1 < bytes.len() && bytes[pos + 1] == b'/' {
-                    while pos < bytes.len() && bytes[pos] != b'\n' { pos += 1; }
+                    while pos < bytes.len() && bytes[pos] != b'\n' {
+                        pos += 1;
+                    }
                     continue;
                 }
                 if pos + 1 < bytes.len() && bytes[pos + 1] == b'*' {
@@ -302,11 +341,16 @@ mod io {
                 }
             }
 
-            if bytes[pos] != b'.' { pos += 1; continue; }
+            if bytes[pos] != b'.' {
+                pos += 1;
+                continue;
+            }
             pos += 1;
 
             let class_name = read_ident(bytes, &mut pos);
-            if class_name.is_empty() { continue; }
+            if class_name.is_empty() {
+                continue;
+            }
 
             let is_hover = if pos < bytes.len() && bytes[pos] == b':' {
                 pos += 1;
@@ -316,7 +360,9 @@ mod io {
             };
 
             skip_ws(bytes, &mut pos);
-            if pos >= bytes.len() || bytes[pos] != b'{' { continue; }
+            if pos >= bytes.len() || bytes[pos] != b'{' {
+                continue;
+            }
             pos += 1;
 
             let mut properties = Vec::new();
@@ -324,28 +370,41 @@ mod io {
             loop {
                 skip_ws(bytes, &mut pos);
                 if pos >= bytes.len() || bytes[pos] == b'}' {
-                    if pos < bytes.len() { pos += 1; }
+                    if pos < bytes.len() {
+                        pos += 1;
+                    }
                     break;
                 }
 
                 // Comentários inline
                 if bytes[pos] == b'/' && pos + 1 < bytes.len() && bytes[pos + 1] == b'/' {
-                    while pos < bytes.len() && bytes[pos] != b'\n' { pos += 1; }
+                    while pos < bytes.len() && bytes[pos] != b'\n' {
+                        pos += 1;
+                    }
                     continue;
                 }
 
                 let prop_name = read_css_ident(bytes, &mut pos);
-                if prop_name.is_empty() { pos += 1; continue; }
+                if prop_name.is_empty() {
+                    pos += 1;
+                    continue;
+                }
 
                 skip_ws(bytes, &mut pos);
-                if pos >= bytes.len() || bytes[pos] != b':' { continue; }
+                if pos >= bytes.len() || bytes[pos] != b':' {
+                    continue;
+                }
                 pos += 1;
                 skip_ws(bytes, &mut pos);
 
                 let value_start = pos;
-                while pos < bytes.len() && bytes[pos] != b';' && bytes[pos] != b'}' { pos += 1; }
+                while pos < bytes.len() && bytes[pos] != b';' && bytes[pos] != b'}' {
+                    pos += 1;
+                }
                 let value_end = pos;
-                if pos < bytes.len() && bytes[pos] == b';' { pos += 1; }
+                if pos < bytes.len() && bytes[pos] == b';' {
+                    pos += 1;
+                }
 
                 let raw_value = content[value_start..value_end].trim();
 
@@ -363,7 +422,11 @@ mod io {
 
             if !properties.is_empty() {
                 classes.push(EditableClass {
-                    name: if is_hover { format!("{class_name}:hover") } else { class_name },
+                    name: if is_hover {
+                        format!("{class_name}:hover")
+                    } else {
+                        class_name
+                    },
                     is_hover,
                     properties,
                 });
@@ -380,23 +443,36 @@ mod io {
 
             "font-size" => PropertyValue::Size {
                 value: parse_num(raw).unwrap_or(DEFAULT_FONT_SIZE),
-                min: FONT_SIZE_MIN, max: FONT_SIZE_MAX, suffix: String::new(),
+                min: FONT_SIZE_MIN,
+                max: FONT_SIZE_MAX,
+                suffix: String::new(),
             },
             "padding" | "margin" => PropertyValue::Size {
                 value: parse_num(raw).unwrap_or(0.0),
-                min: 0.0, max: PADDING_MAX, suffix: String::new(),
+                min: 0.0,
+                max: PADDING_MAX,
+                suffix: String::new(),
             },
             "border-radius" => PropertyValue::Size {
                 value: parse_num(raw).unwrap_or(0.0),
-                min: 0.0, max: BORDER_RADIUS_MAX, suffix: String::new(),
+                min: 0.0,
+                max: BORDER_RADIUS_MAX,
+                suffix: String::new(),
             },
             "width" if raw.ends_with('%') => PropertyValue::Size {
-                value: raw.trim_end_matches('%').parse().unwrap_or(DEFAULT_WIDTH_PERCENT),
-                min: 0.0, max: 100.0, suffix: "%".to_string(),
+                value: raw
+                    .trim_end_matches('%')
+                    .parse()
+                    .unwrap_or(DEFAULT_WIDTH_PERCENT),
+                min: 0.0,
+                max: 100.0,
+                suffix: "%".to_string(),
             },
             "width" => PropertyValue::Size {
                 value: parse_num(raw).unwrap_or(DEFAULT_WIDTH_PX),
-                min: 0.0, max: WIDTH_PX_MAX, suffix: String::new(),
+                min: 0.0,
+                max: WIDTH_PX_MAX,
+                suffix: String::new(),
             },
             "display" => PropertyValue::Enum {
                 current: raw.to_string(),
@@ -425,13 +501,17 @@ mod io {
         let mut vars = HashMap::new();
         for line in content.lines() {
             let t = line.trim();
-            if let Some(rest) = t.strip_prefix('$') {
-                if let Some(colon) = rest.find(':') {
-                    let name = rest[..colon].trim().to_string();
-                    let val = rest[colon + 1..].trim().trim_end_matches(';').trim().to_string();
-                    if !name.is_empty() && !val.is_empty() {
-                        vars.insert(name, val);
-                    }
+            if let Some(rest) = t.strip_prefix('$')
+                && let Some(colon) = rest.find(':')
+            {
+                let name = rest[..colon].trim().to_string();
+                let val = rest[colon + 1..]
+                    .trim()
+                    .trim_end_matches(';')
+                    .trim()
+                    .to_string();
+                if !name.is_empty() && !val.is_empty() {
+                    vars.insert(name, val);
                 }
             }
         }
@@ -439,7 +519,9 @@ mod io {
     }
 
     fn resolve_vars(value: &str, vars: &HashMap<String, String>) -> String {
-        if !value.contains('$') { return value.to_string(); }
+        if !value.contains('$') {
+            return value.to_string();
+        }
         let mut result = value.to_string();
         for (name, val) in vars {
             result = result.replace(&format!("${name}"), val);
@@ -458,7 +540,9 @@ mod io {
         } else {
             hex.to_string()
         };
-        if exp.len() < 6 { return None; }
+        if exp.len() < 6 {
+            return None;
+        }
         let r = u8::from_str_radix(&exp[0..2], 16).ok()?;
         let g = u8::from_str_radix(&exp[2..4], 16).ok()?;
         let b = u8::from_str_radix(&exp[4..6], 16).ok()?;
@@ -466,7 +550,9 @@ mod io {
     }
 
     fn skip_ws(bytes: &[u8], pos: &mut usize) {
-        while *pos < bytes.len() && bytes[*pos].is_ascii_whitespace() { *pos += 1; }
+        while *pos < bytes.len() && bytes[*pos].is_ascii_whitespace() {
+            *pos += 1;
+        }
     }
 
     fn read_ident(bytes: &[u8], pos: &mut usize) -> String {
@@ -476,7 +562,9 @@ mod io {
         {
             *pos += 1;
         }
-        std::str::from_utf8(&bytes[start..*pos]).unwrap_or("").to_string()
+        std::str::from_utf8(&bytes[start..*pos])
+            .unwrap_or("")
+            .to_string()
     }
 
     fn read_css_ident(bytes: &[u8], pos: &mut usize) -> String {
@@ -486,12 +574,14 @@ mod io {
         {
             *pos += 1;
         }
-        std::str::from_utf8(&bytes[start..*pos]).unwrap_or("").to_string()
+        std::str::from_utf8(&bytes[start..*pos])
+            .unwrap_or("")
+            .to_string()
     }
 }
 
-use model::*;
 use io::*;
+use model::*;
 
 // ============================================================================
 // Data model
@@ -515,11 +605,20 @@ impl StyleEditor {
             .filter_map(|path| {
                 let raw = std::fs::read_to_string(&path).ok()?;
                 let classes = io::parse_scss_for_editing(&raw);
-                Some(ScssFile { path, raw_content: raw, classes, dirty: false })
+                Some(ScssFile {
+                    path,
+                    raw_content: raw,
+                    classes,
+                    dirty: false,
+                })
             })
             .collect();
 
-        Self { files, last_change: None, last_scan: Instant::now() }
+        Self {
+            files,
+            last_change: None,
+            last_scan: Instant::now(),
+        }
     }
 }
 
@@ -528,7 +627,9 @@ impl eframe::App for StyleEditor {
         // Ctrl+S: save imediato
         if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(egui::Key::S)) {
             for file in &mut self.files {
-                if file.dirty { write_back(file); }
+                if file.dirty {
+                    write_back(file);
+                }
             }
             self.last_change = None;
         }
@@ -549,7 +650,9 @@ impl eframe::App for StyleEditor {
         if let Some(last) = self.last_change {
             if last.elapsed() >= WRITE_DELAY {
                 for file in &mut self.files {
-                    if file.dirty { write_back(file); }
+                    if file.dirty {
+                        write_back(file);
+                    }
                 }
                 self.last_change = None;
             } else {
@@ -560,13 +663,12 @@ impl eframe::App for StyleEditor {
         // File watch: re-parseia se .scss mudou externamente
         if self.last_scan.elapsed() >= SCAN_INTERVAL {
             for file in &mut self.files {
-                if !file.dirty {
-                    if let Ok(content) = std::fs::read_to_string(&file.path) {
-                        if content != file.raw_content {
-                            file.classes = io::parse_scss_for_editing(&content);
-                            file.raw_content = content;
-                        }
-                    }
+                if !file.dirty
+                    && let Ok(content) = std::fs::read_to_string(&file.path)
+                    && content != file.raw_content
+                {
+                    file.classes = io::parse_scss_for_editing(&content);
+                    file.raw_content = content;
                 }
             }
             self.last_scan = Instant::now();
@@ -619,10 +721,8 @@ impl eframe::App for StyleEditor {
                     ui.add_space(4.0);
 
                     for class_idx in 0..self.files[file_idx].classes.len() {
-                        let class_name =
-                            self.files[file_idx].classes[class_idx].name.clone();
-                        let n_props =
-                            self.files[file_idx].classes[class_idx].properties.len();
+                        let class_name = self.files[file_idx].classes[class_idx].name.clone();
+                        let n_props = self.files[file_idx].classes[class_idx].properties.len();
 
                         let resp = egui::CollapsingHeader::new(
                             egui::RichText::new(&class_name).monospace().size(13.0),
@@ -635,8 +735,8 @@ impl eframe::App for StyleEditor {
                             {
                                 if ui::render_property(
                                     ui,
-                                    &mut self.files[file_idx].classes[class_idx]
-                                        .properties[prop_idx],
+                                    &mut self.files[file_idx].classes[class_idx].properties
+                                        [prop_idx],
                                 ) {
                                     class_changed = true;
                                 }

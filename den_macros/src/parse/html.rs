@@ -1,5 +1,5 @@
-use crate::types::{RawElement, RawForLoop, RawIfChain, RawNode};
 use super::text::parse_text_segments;
+use crate::types::{RawElement, RawForLoop, RawIfChain, RawNode};
 
 // Toda a lógica de parsing HTML opera em `Vec<char>` para suporte correto a UTF-8.
 

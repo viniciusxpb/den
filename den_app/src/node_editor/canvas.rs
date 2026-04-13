@@ -1,7 +1,7 @@
 //! Canvas principal: render, drag, wire drag, hit testing, pan e grid.
 
+use super::{node, theme, types::*, wire};
 use eframe::egui;
-use super::{theme, types::*, node, wire};
 
 /// Mapeia `PortType` para a cor de wire/highlight correspondente.
 fn port_type_color(pt: PortType) -> egui::Color32 {
@@ -35,16 +35,18 @@ impl NodeEditorCanvas {
     /// - **effective_origin**: posição screen do CSS pixel (0, 0). = `canvas_rect.min + pan_offset * scale`.
     /// - **Mouse → CSS**: `(mouse - effective_origin) / scale`.
     pub fn render(&mut self, ui: &mut egui::Ui) {
-        let (response, painter) = ui.allocate_painter(
-            ui.available_size(),
-            egui::Sense::click_and_drag(),
-        );
+        let (response, painter) =
+            ui.allocate_painter(ui.available_size(), egui::Sense::click_and_drag());
         let canvas_rect = response.rect;
         let s = self.scale;
 
         // Scroll sem Ctrl → pan vertical/horizontal (Ctrl+scroll é zoom, tratado em main.rs)
         let scroll = ui.ctx().input(|i| {
-            if !i.modifiers.ctrl { i.raw_scroll_delta } else { egui::Vec2::ZERO }
+            if !i.modifiers.ctrl {
+                i.raw_scroll_delta
+            } else {
+                egui::Vec2::ZERO
+            }
         });
         if scroll != egui::Vec2::ZERO {
             self.pan_offset.x += scroll.x / s;
@@ -78,39 +80,37 @@ impl NodeEditorCanvas {
                 node::draw_node(&painter, n, s, effective_origin);
             }
         }
-        if let Some(ref drag_id) = dragged_id {
-            if let Some(n) = self.nodes.iter().find(|n| &n.id == drag_id) {
-                node::draw_node(&painter, n, s, effective_origin);
-            }
+        if let Some(ref drag_id) = dragged_id
+            && let Some(n) = self.nodes.iter().find(|n| &n.id == drag_id)
+        {
+            node::draw_node(&painter, n, s, effective_origin);
         }
 
         // 5. Wire drag preview (bezier temporária port → cursor)
-        if let Some(ref wd) = self.wire_drag {
-            if let Some(mouse_pos) = response.interact_pointer_pos() {
-                self.draw_wire_preview(&painter, wd, mouse_pos, effective_origin);
+        if let Some(ref wd) = self.wire_drag
+            && let Some(mouse_pos) = response.interact_pointer_pos()
+        {
+            self.draw_wire_preview(&painter, wd, mouse_pos, effective_origin);
 
-                // 6. Highlight do port alvo quando compatível
-                let cx = (mouse_pos.x - effective_origin.x) / s;
-                let cy = (mouse_pos.y - effective_origin.y) / s;
-                if let Some((node_id, port_name, port_type)) = self.hit_test_input_port(cx, cy) {
-                    if port_type == wd.port_type && node_id != wd.from_node_id {
-                        if let Some(node) = self.nodes.iter().find(|n| n.id == node_id) {
-                            if let Some(port_pos) = wire::get_port_position(
-                                node, &port_name, false, s, effective_origin,
-                            ) {
-                                let wire_color = port_type_color(wd.port_type);
-                                painter.circle_stroke(
-                                    port_pos,
-                                    theme::PORT_SNAP_HIGHLIGHT_RADIUS * s,
-                                    egui::Stroke::new(
-                                        theme::PORT_SNAP_HIGHLIGHT_STROKE,
-                                        wire_color.linear_multiply(theme::PORT_SNAP_HIGHLIGHT_OPACITY),
-                                    ),
-                                );
-                            }
-                        }
-                    }
-                }
+            // 6. Highlight do port alvo quando compatível
+            let cx = (mouse_pos.x - effective_origin.x) / s;
+            let cy = (mouse_pos.y - effective_origin.y) / s;
+            if let Some((node_id, port_name, port_type)) = self.hit_test_input_port(cx, cy)
+                && port_type == wd.port_type
+                && node_id != wd.from_node_id
+                && let Some(node) = self.nodes.iter().find(|n| n.id == node_id)
+                && let Some(port_pos) =
+                    wire::get_port_position(node, &port_name, false, s, effective_origin)
+            {
+                let wire_color = port_type_color(wd.port_type);
+                painter.circle_stroke(
+                    port_pos,
+                    theme::PORT_SNAP_HIGHLIGHT_RADIUS * s,
+                    egui::Stroke::new(
+                        theme::PORT_SNAP_HIGHLIGHT_STROKE,
+                        wire_color.linear_multiply(theme::PORT_SNAP_HIGHLIGHT_OPACITY),
+                    ),
+                );
             }
         }
     }
@@ -124,46 +124,47 @@ impl NodeEditorCanvas {
     fn handle_drag(&mut self, response: &egui::Response, effective_origin: egui::Pos2) {
         let s = self.scale;
 
-        if response.drag_started() {
-            if let Some(mouse_pos) = response.interact_pointer_pos() {
-                let canvas_x = (mouse_pos.x - effective_origin.x) / s;
-                let canvas_y = (mouse_pos.y - effective_origin.y) / s;
+        if response.drag_started()
+            && let Some(mouse_pos) = response.interact_pointer_pos()
+        {
+            let canvas_x = (mouse_pos.x - effective_origin.x) / s;
+            let canvas_y = (mouse_pos.y - effective_origin.y) / s;
 
-                // PRIORIDADE 0: input port com wire → desconecta e inicia drag reverso
-                if let Some((node_id, port_name, _)) = self.hit_test_input_port(canvas_x, canvas_y) {
-                    if let Some(wire_idx) = self.wires.iter().position(|w| {
-                        w.to_node == node_id && w.to_port == port_name
-                    }) {
-                        let removed = self.wires.remove(wire_idx);
-                        self.wire_drag = Some(WireDragState {
-                            from_node_id: removed.from_node,
-                            from_port_name: removed.from_port,
-                            port_type: removed.wire_type,
-                        });
-                        return;
-                    }
-                }
+            // PRIORIDADE 0: input port com wire → desconecta e inicia drag reverso
+            if let Some((node_id, port_name, _)) = self.hit_test_input_port(canvas_x, canvas_y)
+                && let Some(wire_idx) = self
+                    .wires
+                    .iter()
+                    .position(|w| w.to_node == node_id && w.to_port == port_name)
+            {
+                let removed = self.wires.remove(wire_idx);
+                self.wire_drag = Some(WireDragState {
+                    from_node_id: removed.from_node,
+                    from_port_name: removed.from_port,
+                    port_type: removed.wire_type,
+                });
+                return;
+            }
 
-                // PRIORIDADE 1: output port → inicia wire drag
-                if let Some((node_id, port_name, port_type)) =
-                    self.hit_test_output_port(canvas_x, canvas_y)
-                {
-                    self.wire_drag = Some(WireDragState {
-                        from_node_id: node_id,
-                        from_port_name: port_name,
-                        port_type,
-                    });
-                    return;
-                }
+            // PRIORIDADE 1: output port → inicia wire drag
+            if let Some((node_id, port_name, port_type)) =
+                self.hit_test_output_port(canvas_x, canvas_y)
+            {
+                self.wire_drag = Some(WireDragState {
+                    from_node_id: node_id,
+                    from_port_name: port_name,
+                    port_type,
+                });
+                return;
+            }
 
-                // PRIORIDADE 2: node body → inicia node drag
-                if let Some(node) = self.hit_test(canvas_x, canvas_y) {
-                    let offset = egui::vec2(canvas_x - node.x, canvas_y - node.y);
-                    self.drag = Some(DragState {
-                        node_id: node.id.clone(),
-                        offset,
-                    });
-                }
+            // PRIORIDADE 2: node body → inicia node drag
+            if let Some(node) = self.hit_test(canvas_x, canvas_y) {
+                let offset = egui::vec2(canvas_x - node.x, canvas_y - node.y);
+                self.drag = Some(DragState {
+                    node_id: node.id.clone(),
+                    offset,
+                });
             }
         }
 
@@ -191,23 +192,28 @@ impl NodeEditorCanvas {
         }
 
         if response.drag_stopped() {
-            if let Some(wd) = self.wire_drag.take() {
-                if let Some(mouse_pos) = response.interact_pointer_pos() {
-                    let cx = (mouse_pos.x - effective_origin.x) / s;
-                    let cy = (mouse_pos.y - effective_origin.y) / s;
-                    if let Some((to_node, to_port, to_type)) = self.hit_test_input_port(cx, cy) {
-                        let valid = to_type == wd.port_type
-                            && to_node != wd.from_node_id
-                            && !self.wire_exists(&wd.from_node_id, &wd.from_port_name, &to_node, &to_port);
-                        if valid {
-                            self.wires.push(WireData {
-                                from_node: wd.from_node_id,
-                                from_port: wd.from_port_name,
-                                to_node,
-                                to_port,
-                                wire_type: wd.port_type,
-                            });
-                        }
+            if let Some(wd) = self.wire_drag.take()
+                && let Some(mouse_pos) = response.interact_pointer_pos()
+            {
+                let cx = (mouse_pos.x - effective_origin.x) / s;
+                let cy = (mouse_pos.y - effective_origin.y) / s;
+                if let Some((to_node, to_port, to_type)) = self.hit_test_input_port(cx, cy) {
+                    let valid = to_type == wd.port_type
+                        && to_node != wd.from_node_id
+                        && !self.wire_exists(
+                            &wd.from_node_id,
+                            &wd.from_port_name,
+                            &to_node,
+                            &to_port,
+                        );
+                    if valid {
+                        self.wires.push(WireData {
+                            from_node: wd.from_node_id,
+                            from_port: wd.from_port_name,
+                            to_node,
+                            to_port,
+                            wire_type: wd.port_type,
+                        });
                     }
                 }
             }
@@ -285,8 +291,9 @@ impl NodeEditorCanvas {
         mouse_pos: egui::Pos2,
         canvas_origin: egui::Pos2,
     ) {
-        let Some(from_node) = self.nodes.iter().find(|n| n.id == wire_drag.from_node_id)
-        else { return };
+        let Some(from_node) = self.nodes.iter().find(|n| n.id == wire_drag.from_node_id) else {
+            return;
+        };
 
         let Some(from_pos) = wire::get_port_position(
             from_node,
@@ -294,7 +301,9 @@ impl NodeEditorCanvas {
             true,
             self.scale,
             canvas_origin,
-        ) else { return };
+        ) else {
+            return;
+        };
 
         let wire_color = port_type_color(wire_drag.port_type);
 
@@ -318,8 +327,10 @@ impl NodeEditorCanvas {
     /// Retorna `true` se já existe um wire com esses endpoints exatos (sem duplicatas).
     fn wire_exists(&self, from_node: &str, from_port: &str, to_node: &str, to_port: &str) -> bool {
         self.wires.iter().any(|w| {
-            w.from_node == from_node && w.from_port == from_port
-                && w.to_node == to_node && w.to_port == to_port
+            w.from_node == from_node
+                && w.from_port == from_port
+                && w.to_node == to_node
+                && w.to_port == to_port
         })
     }
 

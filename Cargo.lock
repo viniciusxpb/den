@@ -791,6 +791,9 @@ dependencies = [
 [[package]]
 name = "den_layout"
 version = "0.1.0"
+dependencies = [
+ "egui",
+]
 
 [[package]]
 name = "den_macros"
