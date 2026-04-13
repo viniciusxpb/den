@@ -275,6 +275,8 @@ fn parse_element_chars(chars: &[char], pos: &mut usize) -> Option<RawElement> {
     let mut den_bind = None;
     let mut bind_expr = None;
     let mut placeholder = None;
+    let mut goto_page = None;
+    let mut goto_with = None;
     skip_ws(chars, pos);
     while *pos < chars.len() && chars[*pos] != '>' && chars[*pos] != '/' {
         if chars[*pos] == '(' {
@@ -311,6 +313,10 @@ fn parse_element_chars(chars: &[char], pos: &mut usize) -> Option<RawElement> {
                     bind_expr = Some(value);
                 } else if attr_name == "placeholder" {
                     placeholder = Some(value);
+                } else if attr_name == "goto" {
+                    goto_page = Some(value);
+                } else if attr_name == "with" {
+                    goto_with = Some(value);
                 }
             }
         }
@@ -336,6 +342,8 @@ fn parse_element_chars(chars: &[char], pos: &mut usize) -> Option<RawElement> {
             den_bind,
             bind_expr,
             placeholder,
+            goto_page,
+            goto_with,
         });
     }
     if *pos < chars.len() && chars[*pos] == '>' {
@@ -376,6 +384,8 @@ fn parse_element_chars(chars: &[char], pos: &mut usize) -> Option<RawElement> {
         den_bind,
         bind_expr,
         placeholder,
+        goto_page,
+        goto_with,
     })
 }
 
@@ -419,6 +429,18 @@ fn read_quoted(chars: &[char], pos: &mut usize) -> String {
 mod tests {
     use super::*;
     use crate::types::RawNode;
+
+    fn assert_goto_attrs(html: &str, page: &str, with: Option<&str>) {
+        let nodes = parse_html(html);
+        assert_eq!(nodes.len(), 1);
+        match &nodes[0] {
+            RawNode::Element(el) => {
+                assert_eq!(el.goto_page.as_deref(), Some(page));
+                assert_eq!(el.goto_with.as_deref(), with);
+            }
+            _ => panic!("expected Element"),
+        }
+    }
 
     #[test]
     fn input_bind_parsed() {
@@ -476,5 +498,23 @@ mod tests {
         } else {
             panic!("expected div Element");
         }
+    }
+
+    #[test]
+    fn goto_attr_parsed() {
+        assert_goto_attrs(
+            r#"<div goto="TargetPage" class="btn">Abrir</div>"#,
+            "TargetPage",
+            None,
+        );
+    }
+
+    #[test]
+    fn goto_with_attr_parsed() {
+        assert_goto_attrs(
+            r#"<div goto="TargetPage" with="self.value">Enviar</div>"#,
+            "TargetPage",
+            Some("self.value"),
+        );
     }
 }

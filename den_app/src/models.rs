@@ -7,6 +7,13 @@ pub struct Usuario {
 }
 
 impl Usuario {
+    /// Cria um usuário vazio para preenchimento em formulário.
+    pub fn vazio() -> Self {
+        Self {
+            nome: String::new(),
+        }
+    }
+
     /// Cria o usuário padrão usado no fluxo demo.
     pub fn demo() -> Self {
         Self {

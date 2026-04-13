@@ -1,7 +1,9 @@
 mod codegen;
 mod input;
+mod page;
 mod parse;
 mod resolve;
+mod router;
 mod types;
 
 use proc_macro::TokenStream;
@@ -63,4 +65,14 @@ pub fn den_template(input: TokenStream) -> TokenStream {
             .to_compile_error()
             .into(),
     }
+}
+
+#[proc_macro_attribute]
+pub fn den_page(attr: TokenStream, item: TokenStream) -> TokenStream {
+    page::expand(attr, item)
+}
+
+#[proc_macro]
+pub fn den_router(input: TokenStream) -> TokenStream {
+    router::expand(input)
 }

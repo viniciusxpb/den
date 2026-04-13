@@ -1,4 +1,5 @@
 <div class="page">
-    <div class="title">Usuario recebido</div>
-    <div class="body">Nome: {{ self.usuario.nome }}</div>
+    <div class="title">Digite seu nome</div>
+    <input bind="self.usuario.nome" placeholder="Seu nome..." class="text-input" />
+    <div class="button" goto="HelloPage" with="self.usuario">Enviar usuario</div>
 </div>

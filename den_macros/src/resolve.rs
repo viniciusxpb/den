@@ -65,6 +65,8 @@ fn resolve_element(el: &RawElement, styles: &StyleMap, inherited: &StyleRule) ->
         visual,
         bind_expr: el.bind_expr.clone(),
         placeholder: el.placeholder.clone(),
+        goto_page: el.goto_page.clone(),
+        goto_with: el.goto_with.clone(),
     })
 }
 

@@ -2,6 +2,7 @@ use crate::{AppRoute, models::Usuario};
 use den_layout::DenRouter;
 use eframe::egui;
 
+#[den_macros::den_page]
 pub struct HelloPage {
     pub usuario: Usuario,
 }

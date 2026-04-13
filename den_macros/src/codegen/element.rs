@@ -4,6 +4,7 @@ use super::click::{generate_style_struct, translate_click_arg};
 use super::flex::{build_flex_layout, collect_flex_children_info};
 use super::frame::{build_frame_expr, build_rich_text_expr};
 use super::input::generate_input_element;
+use super::navigation::generate_goto_call;
 use super::text::build_text_token_stream;
 use super::{CodegenCtx, generate_node};
 use crate::types::{DenElement, DenVisual, DisplayMode, WidthValue};
@@ -25,6 +26,8 @@ pub fn generate_element(
     }
 
     let visual = &el.visual;
+
+    let goto_call = generate_goto_call(el)?;
 
     // Valida uso de (click) sem self
     if el.on_click.is_some() && !ctx.has_self {
@@ -75,7 +78,8 @@ pub fn generate_element(
     let tag = el.tag.as_str();
     let has_hover = visual.needs_hover();
     let has_click = el.on_click.is_some();
-    let needs_interaction = has_hover || has_click;
+    let has_goto = goto_call.is_some();
+    let needs_interaction = has_hover || has_click || has_goto;
 
     // Constrói o call do click handler + clones de argumentos
     let (click_call, click_clone_stmts) = if let Some(func_name) = &el.on_click {
@@ -222,13 +226,24 @@ pub fn generate_element(
             }
         };
 
-        let click_code = if let Some(call) = click_call {
+        let action_call = click_call.or(goto_call);
+        let click_code = if let Some(call) = action_call {
+            let cursor_code = if has_goto {
+                quote! {
+                    if __den_resp.hovered() {
+                        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                    }
+                }
+            } else {
+                quote! {}
+            };
             quote! {
                 let __den_resp = ui.interact(
                     __den_scope.response.rect,
                     __den_id.with("click"),
                     egui::Sense::click(),
                 );
+                #cursor_code
                 if __den_resp.clicked() {
                     #call;
                 }

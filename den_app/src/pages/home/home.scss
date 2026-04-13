@@ -45,6 +45,20 @@ $white:      #ffffff;
     font-size: 13;
 }
 
+.hero-action {
+    background: $blue;
+    border-radius: 6;
+    padding: 10;
+    color: $dark-ink;
+    font-size: 13;
+    width: 200px;
+}
+
+.hero-action:hover {
+    background: #9ecafb;
+    cursor: pointer;
+}
+
 // -- Stats Row -------------------------------------------------
 
 .stat-card {

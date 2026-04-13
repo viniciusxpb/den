@@ -4,21 +4,12 @@ mod app_config;
 mod models;
 mod node_editor;
 mod pages;
+mod routes;
 
 use den_layout::DenRouter;
 use eframe::egui;
-use models::Usuario;
-use node_editor::NodeEditorCanvas;
-use pages::{HelloPage, HomePage, NodesPage, UsuarioPage};
 
-#[derive(Debug, Clone)]
-pub enum AppRoute {
-    HomePage,
-    NodesPage,
-    UsuarioPage { usuario: Usuario },
-    HelloPage { usuario: Usuario },
-    NodeEditor,
-}
+pub use routes::*;
 
 fn main() -> eframe::Result {
     env_logger::init();
@@ -41,30 +32,22 @@ fn main() -> eframe::Result {
 
 struct DenApp {
     router: DenRouter<AppRoute>,
-    home: HomePage,
-    nodes_page: NodesPage,
-    usuario_page: Option<UsuarioPage>,
-    hello_page: Option<HelloPage>,
-    node_editor: NodeEditorCanvas,
+    pages: AppPages,
     scale: f32,
 }
 
 impl DenApp {
     fn new() -> Self {
         Self {
-            router: DenRouter::new(AppRoute::HomePage),
-            home: HomePage::default(),
-            nodes_page: NodesPage,
-            usuario_page: None,
-            hello_page: None,
-            node_editor: NodeEditorCanvas::new(),
+            router: DenRouter::new(routes::initial_route()),
+            pages: AppPages::new(),
             scale: app_config::DEFAULT_SCALE,
         }
     }
 
     fn render_zoom_controls(&mut self, ctx: &egui::Context) {
         let mut current_scale = match self.router.current() {
-            AppRoute::NodeEditor => self.node_editor.scale,
+            AppRoute::NodeEditor => self.pages.node_editor_scale(),
             _ => self.scale,
         };
 
@@ -97,39 +80,14 @@ impl DenApp {
             });
 
         match self.router.current() {
-            AppRoute::NodeEditor => self.node_editor.scale = current_scale,
+            AppRoute::NodeEditor => self.pages.set_node_editor_scale(current_scale),
             _ => self.scale = current_scale,
         }
     }
 
     fn queue_next_route(&mut self) {
-        let usuario = Usuario::demo();
-        let next = match self.router.current() {
-            AppRoute::HomePage => AppRoute::UsuarioPage { usuario },
-            AppRoute::UsuarioPage { usuario } => AppRoute::HelloPage {
-                usuario: usuario.clone(),
-            },
-            AppRoute::HelloPage { .. } => AppRoute::NodesPage,
-            AppRoute::NodesPage => AppRoute::NodeEditor,
-            AppRoute::NodeEditor => AppRoute::HomePage,
-        };
-        self.router.goto(next);
-    }
-
-    fn sync_pages_from_route(&mut self) {
-        match self.router.current() {
-            AppRoute::UsuarioPage { usuario } => {
-                self.usuario_page = Some(UsuarioPage {
-                    usuario: usuario.clone(),
-                });
-            }
-            AppRoute::HelloPage { usuario } => {
-                self.hello_page = Some(HelloPage {
-                    usuario: usuario.clone(),
-                });
-            }
-            _ => {}
-        }
+        self.router
+            .goto(routes::demo_next_route(self.router.current()));
     }
 }
 
@@ -141,25 +99,27 @@ impl eframe::App for DenApp {
         }
 
         if self.router.flush() {
-            self.sync_pages_from_route();
+            self.pages.sync_from_route(self.router.current());
         }
 
         // Zoom: roteia pro scale da view ativa
-        let active_scale = match self.router.current() {
-            AppRoute::NodeEditor => &mut self.node_editor.scale,
-            _ => &mut self.scale,
+        let is_node_editor = matches!(self.router.current(), AppRoute::NodeEditor);
+        let mut active_scale = if is_node_editor {
+            self.pages.node_editor_scale()
+        } else {
+            self.scale
         };
 
         if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(egui::Key::Equals)) {
-            *active_scale = (*active_scale + app_config::SCALE_STEP).min(app_config::MAX_SCALE);
+            active_scale = (active_scale + app_config::SCALE_STEP).min(app_config::MAX_SCALE);
         }
         if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(egui::Key::Minus)) {
-            *active_scale = (*active_scale - app_config::SCALE_STEP).max(app_config::MIN_SCALE);
+            active_scale = (active_scale - app_config::SCALE_STEP).max(app_config::MIN_SCALE);
         }
         if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(egui::Key::Num0)) {
-            *active_scale = app_config::DEFAULT_SCALE;
-            if matches!(self.router.current(), AppRoute::NodeEditor) {
-                self.node_editor.pan_offset = egui::Vec2::ZERO;
+            active_scale = app_config::DEFAULT_SCALE;
+            if is_node_editor {
+                self.pages.reset_node_editor_pan();
             }
         }
         let scroll_delta = ctx.input(|i| {
@@ -171,38 +131,18 @@ impl eframe::App for DenApp {
         });
         if scroll_delta != 0.0 {
             let steps = (scroll_delta / app_config::SCROLL_SENSITIVITY).clamp(-1.0, 1.0);
-            *active_scale = (*active_scale + steps * app_config::SCALE_STEP)
+            active_scale = (active_scale + steps * app_config::SCALE_STEP)
                 .clamp(app_config::MIN_SCALE, app_config::MAX_SCALE);
+        }
+        if is_node_editor {
+            self.pages.set_node_editor_scale(active_scale);
+        } else {
+            self.scale = active_scale;
         }
 
         // Render
-        let current = self.router.current().clone();
-        egui::CentralPanel::default().show(ctx, |ui| match current {
-            AppRoute::HomePage => {
-                self.home.render(ui, self.scale, &mut self.router);
-            }
-            AppRoute::NodesPage => {
-                self.nodes_page.render(ui, self.scale, &mut self.router);
-            }
-            AppRoute::UsuarioPage { usuario } => {
-                if self.usuario_page.is_none() {
-                    self.usuario_page = Some(UsuarioPage { usuario });
-                }
-                if let Some(page) = &mut self.usuario_page {
-                    page.render(ui, self.scale, &mut self.router);
-                }
-            }
-            AppRoute::HelloPage { usuario } => {
-                if self.hello_page.is_none() {
-                    self.hello_page = Some(HelloPage { usuario });
-                }
-                if let Some(page) = &mut self.hello_page {
-                    page.render(ui, self.scale, &mut self.router);
-                }
-            }
-            AppRoute::NodeEditor => {
-                self.node_editor.render(ui);
-            }
+        egui::CentralPanel::default().show(ctx, |ui| {
+            self.pages.render_current(ui, self.scale, &mut self.router);
         });
 
         self.render_zoom_controls(ctx);

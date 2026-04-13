@@ -6,6 +6,7 @@ mod element;
 mod flex;
 mod frame;
 mod input;
+mod navigation;
 mod text;
 
 use crate::types::{DenNode, DisplayMode, WidthValue};

@@ -150,6 +150,10 @@ pub struct DenElement {
     pub bind_expr: Option<String>,
     /// Texto placeholder para inputs.
     pub placeholder: Option<String>,
+    /// Nome da página alvo em `goto="PageName"`.
+    pub goto_page: Option<String>,
+    /// Expressão opcional de dados para navegação em `with="expr"`.
+    pub goto_with: Option<String>,
 }
 
 /// ForLoop resolvido. Transparente visualmente.

@@ -7,6 +7,12 @@ pub struct UsuarioPage {
 }
 
 impl UsuarioPage {
+    pub fn new() -> Self {
+        Self {
+            usuario: Usuario::vazio(),
+        }
+    }
+
     pub fn render(
         &mut self,
         ui: &mut egui::Ui,
