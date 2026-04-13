@@ -10,7 +10,7 @@ O próximo passo arquitetural é reduzir o codegen direto de widgets egui por el
 
 O `den_layout` já foi separado em módulos de motor (`dimension`, `spacing`, `display`, `flex`, `entry`, `table`) e não depende mais diretamente de `egui`. O glue gerado por `den_router!`/`#[den_page]` também usa `crate::DenUi` em vez de citar egui diretamente.
 
-O acoplamento que ainda resta está no `den_template!`: `codegen/frame.rs`, `codegen/element.rs` e `codegen/input.rs` ainda emitem chamadas egui por elemento. O próximo corte é fazer o macro gerar uma árvore Den resolvida e mover essas chamadas para um renderer egui separado.
+O acoplamento que ainda resta está no `den_template!`: `codegen/egui_backend.rs` concentra os tokens egui, enquanto `codegen/element.rs` e `codegen/input.rs` ainda decidem qual widget/render path usar por elemento. O próximo corte é fazer o macro gerar uma árvore Den resolvida e mover essas decisões para um renderer egui separado.
 
 `DenRouteState` já existe como ponto de encaixe runtime por rota. Ele ainda só guarda estado de inputs/debug, mas deve evoluir para carregar ou observar dados da árvore ativa quando a renderização for centralizada.
 

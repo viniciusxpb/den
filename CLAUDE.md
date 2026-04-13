@@ -34,7 +34,7 @@ make help                      # List all makefile commands
   Phase 1: Parse           Phase 2: Resolve          Phase 3: Codegen
   parse/html.rs            resolve.rs                codegen/element.rs
   parse/scss.rs            RawNode + StyleMap         codegen/control_flow.rs
-  parse/text.rs            → DenNode tree             codegen/frame.rs
+  parse/text.rs            → DenNode tree             codegen/egui_backend.rs
   parse/color.rs           (with DenVisual)           codegen/text.rs
   → RawNode + StyleMap                                codegen/click.rs
                                                       codegen/flex.rs

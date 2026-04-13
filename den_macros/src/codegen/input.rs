@@ -1,13 +1,18 @@
 //! Geração de código pra `<input bind="...">` (two-way binding).
 
 use super::CodegenCtx;
-use super::frame::build_frame_expr;
+use super::egui_backend::{
+    build_frame_expr, build_text_edit_expr, flex_child_wrapper, text_edit_desired_width_expr,
+};
 use crate::types::{DenElement, WidthValue};
 use quote::quote;
 
+/// Quantidade de lados horizontais para padding uniforme.
+const HORIZONTAL_SIDES: f32 = 2.0;
+
 /// Gera código para `<input bind="self.field" />`.
 ///
-/// Produz `egui::TextEdit::singleline(&mut self.field)` com styling SCSS.
+/// Produz o widget de texto do backend atual com styling SCSS.
 /// Não suporta (click), (change), hover, ou den-bind em v1.
 pub fn generate_input_element(
     el: &DenElement,
@@ -41,29 +46,7 @@ pub fn generate_input_element(
         .parse()
         .map_err(|e| format!("Invalid bind expression '{bind_expr}': {e}"))?;
 
-    // Constrói a chain do TextEdit
-    let mut textedit = quote! { egui::TextEdit::singleline(#bind_tokens) };
-
-    // Desabilita frame nativo quando Den fornece frame via SCSS
-    if visual.needs_frame() {
-        textedit = quote! { #textedit.frame(false) };
-    }
-
-    if let Some(hint) = &el.placeholder {
-        textedit = quote! { #textedit.hint_text(#hint) };
-    }
-
-    if let Some(size) = visual.font_size {
-        textedit = quote! {
-            #textedit.font(egui::FontId::proportional((#size * __den_scale).max(6.0)))
-        };
-    }
-
-    if let Some((r, g, b)) = visual.color {
-        textedit = quote! {
-            #textedit.text_color(egui::Color32::from_rgb(#r, #g, #b))
-        };
-    }
+    let mut textedit = build_text_edit_expr(&bind_tokens, el.placeholder.as_deref(), visual);
 
     // Constraint de largura — via desired_width no TextEdit.
     // Px e Percent usam o layout system (mesma fonte de verdade que elementos regulares).
@@ -71,13 +54,8 @@ pub fn generate_input_element(
     textedit = match visual.width {
         WidthValue::Percent(_) | WidthValue::Px(_) => {
             let idx = my_layout_index;
-            let horizontal_padding = visual.padding.unwrap_or(0.0) * 2.0;
-            quote! {
-                #textedit.desired_width(
-                    ((__den_layout.sizes[#idx].unwrap_or(0.0) - #horizontal_padding as f32)
-                        .max(0.0)) * __den_scale
-                )
-            }
+            let horizontal_padding = visual.padding.unwrap_or(0.0) * HORIZONTAL_SIDES;
+            text_edit_desired_width_expr(textedit, idx, horizontal_padding)
         }
         WidthValue::Auto => textedit,
     };
@@ -99,15 +77,12 @@ pub fn generate_input_element(
         ctx.parent_is_flex && visual.width == WidthValue::Auto && visual.flex_grow;
     if is_flex_auto_child {
         let idx = my_layout_index;
+        let wrapped_flex_child = flex_child_wrapper(quote! { __den_child_width }, element_code);
         return Ok(quote! {
             let __den_child_width = __den_layout.sizes[#idx]
                 .unwrap_or_else(|| ui.available_width() / __den_scale)
                 * __den_scale;
-            ui.allocate_ui_with_layout(
-                egui::vec2(__den_child_width, ui.available_height()),
-                egui::Layout::top_down(egui::Align::Min),
-                |ui| { #element_code },
-            );
+            #wrapped_flex_child
         });
     }
 

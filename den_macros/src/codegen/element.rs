@@ -1,8 +1,11 @@
 //! Geração de código pra elementos HTML regulares e containers flex.
 
 use super::click::{generate_style_struct, translate_click_arg};
+use super::egui_backend::{
+    build_frame_expr, build_rich_text_expr, click_sense_expr, element_id_expr, flex_child_wrapper,
+    pointing_hand_cursor_expr,
+};
 use super::flex::build_flex_layout;
-use super::frame::{build_frame_expr, build_rich_text_expr};
 use super::input::generate_input_element;
 use super::navigation::generate_goto_call;
 use super::text::build_text_token_stream;
@@ -165,9 +168,10 @@ pub fn generate_element(
             };
 
             let cursor_code = if hovered.cursor_pointer {
+                let pointer_cursor = pointing_hand_cursor_expr();
                 quote! {
                     if __den_is_hovered {
-                        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                        ui.ctx().set_cursor_icon(#pointer_cursor);
                     }
                 }
             } else {
@@ -211,19 +215,21 @@ pub fn generate_element(
         let action_call = click_call.or(goto_call);
         let click_code = if let Some(call) = action_call {
             let cursor_code = if has_goto {
+                let pointer_cursor = pointing_hand_cursor_expr();
                 quote! {
                     if __den_resp.hovered() {
-                        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                        ui.ctx().set_cursor_icon(#pointer_cursor);
                     }
                 }
             } else {
                 quote! {}
             };
+            let click_sense = click_sense_expr();
             quote! {
                 let __den_resp = ui.interact(
                     __den_scope.response.rect,
                     __den_id.with("click"),
-                    egui::Sense::click(),
+                    #click_sense,
                 );
                 #cursor_code
                 if __den_resp.clicked() {
@@ -242,9 +248,9 @@ pub fn generate_element(
                     .map_err(|e| format!("Internal error building loop salt ident: {e}"))?;
                 salt = quote! { (#salt).wrapping_mul(31).wrapping_add(#idx as u64) };
             }
-            quote! { egui::Id::new(#element_id ^ #salt) }
+            element_id_expr(quote! { #element_id ^ #salt })
         } else {
-            quote! { egui::Id::new(#element_id) }
+            element_id_expr(quote! { #element_id })
         };
 
         quote! {
@@ -282,17 +288,15 @@ pub fn generate_element(
     // Se este elemento é um filho `flex: 1`, limita sua largura ao tamanho
     // calculado pelo layout runtime.
     if is_flex_auto_child {
-        element_code = quote! {
+        let child_width_stmt = quote! {
             let __den_child_width = __den_layout.sizes[#my_layout_index]
                 .unwrap_or_else(|| ui.available_width() / __den_scale)
                 * __den_scale;
-            ui.allocate_ui_with_layout(
-                egui::vec2(__den_child_width, ui.available_height()),
-                egui::Layout::top_down(egui::Align::Min),
-                |ui| {
-                    #element_code
-                },
-            );
+        };
+        let wrapped_flex_child = flex_child_wrapper(quote! { __den_child_width }, element_code);
+        element_code = quote! {
+            #child_width_stmt
+            #wrapped_flex_child
         };
     }
 
