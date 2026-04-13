@@ -48,6 +48,8 @@ pub struct StyleRule {
     pub border_radius: Option<f32>,
     pub width: WidthValue,
     pub cursor_pointer: bool,
+    /// `flex: 1` / `flex-grow: 1` — elemento cresce pra preencher o share do flex pai.
+    pub flex_grow: bool,
     pub hover: Option<Box<StyleRule>>,
 }
 
@@ -80,6 +82,9 @@ impl StyleRule {
         }
         if other.cursor_pointer {
             self.cursor_pointer = true;
+        }
+        if other.flex_grow {
+            self.flex_grow = true;
         }
         if other.hover.is_some() {
             self.hover = other.hover.clone();

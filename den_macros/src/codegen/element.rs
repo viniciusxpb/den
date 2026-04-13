@@ -128,8 +128,10 @@ pub fn generate_element(
 
     let flex_info_ref = flex_children_info.as_deref();
 
-    // Determina se este elemento é um filho Auto de flex — precisa de constraint.
-    let is_flex_auto_child = prev_parent_is_flex && visual.width == WidthValue::Auto;
+    // Determina se este elemento tem flex-grow num container flex.
+    // Só flex_grow=true cresce pra preencher o share — comportamento CSS `flex: 1`.
+    // Auto sem flex_grow é content-sized (padrão CSS).
+    let is_flex_auto_child = prev_parent_is_flex && visual.flex_grow;
 
     let mut element_code = if needs_interaction {
         let element_id = den_element_id(ctx.template_path, &ctx.tree_path, tag, &el.classes);
@@ -137,8 +139,8 @@ pub fn generate_element(
         let render_code = if has_hover {
             let hovered = visual.resolve_hover();
 
-            let base_inner = build_inner(visual, &text_ts, &children_code, tag, my_layout_index, flex_info_ref);
-            let hover_inner = build_inner(&hovered, &text_ts, &children_code, tag, my_layout_index, flex_info_ref);
+            let base_inner = build_inner(visual, &text_ts, &children_code, tag, my_layout_index, flex_info_ref, is_flex_auto_child);
+            let hover_inner = build_inner(&hovered, &text_ts, &children_code, tag, my_layout_index, flex_info_ref, is_flex_auto_child);
 
             let base_code = if visual.needs_frame() {
                 let frame = build_frame_expr(visual);
@@ -179,7 +181,7 @@ pub fn generate_element(
             }
         } else {
             // Click apenas, sem hover — wrap em scope pra capturar rect
-            let inner_code = build_inner(visual, &text_ts, &children_code, tag, my_layout_index, flex_info_ref);
+            let inner_code = build_inner(visual, &text_ts, &children_code, tag, my_layout_index, flex_info_ref, is_flex_auto_child);
             let wrapped = if visual.needs_frame() {
                 let frame_expr = build_frame_expr(visual);
                 quote! { #frame_expr.show(ui, |ui| { #inner_code }); }
@@ -230,7 +232,7 @@ pub fn generate_element(
         }
     } else {
         // Sem hover, sem click — caminho simples
-        let inner_code = build_inner(visual, &text_ts, &children_code, tag, my_layout_index, flex_info_ref);
+        let inner_code = build_inner(visual, &text_ts, &children_code, tag, my_layout_index, flex_info_ref, is_flex_auto_child);
 
         if visual.needs_frame() {
             let frame_expr = build_frame_expr(visual);
@@ -268,6 +270,7 @@ fn build_inner(
     tag: &str,
     layout_index: usize,
     flex_info: Option<&[super::flex::FlexChildInfo]>,
+    fill_flex: bool,
 ) -> proc_macro2::TokenStream {
     let text_expr = text_ts.as_ref().map(|ts| build_rich_text_expr(ts, visual));
 
@@ -313,7 +316,19 @@ fn build_inner(
             }
             #inner
         },
-        WidthValue::Auto => inner,
+        // Filho Auto de flex: força o frame a preencher a share alocada pelo pai.
+        // ui.set_width(available) dentro do closure do Frame faz com que o Frame
+        // renderize visualmente na largura __den_flex_share (ao invés de content-size).
+        WidthValue::Auto => {
+            if fill_flex {
+                quote! {
+                    ui.set_width(ui.available_width());
+                    #inner
+                }
+            } else {
+                inner
+            }
+        }
     }
 }
 

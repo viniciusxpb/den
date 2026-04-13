@@ -20,6 +20,8 @@ pub struct DenVisual {
     pub border_radius: Option<f32>,
     pub width: WidthValue,
     pub cursor_pointer: bool,
+    /// `flex: 1` — cresce pra preencher o share do flex pai igualmente.
+    pub flex_grow: bool,
     /// Visual override quando hover. None = sem hover behavior.
     pub hover_override: Option<Box<DenVisual>>,
 }
@@ -37,6 +39,7 @@ impl DenVisual {
             border_radius: rule.border_radius,
             width: rule.width,
             cursor_pointer: rule.cursor_pointer,
+            flex_grow: rule.flex_grow,
             hover_override: rule
                 .hover
                 .as_ref()
@@ -72,6 +75,7 @@ impl DenVisual {
         if other.border_radius.is_some() { self.border_radius = other.border_radius; }
         if other.width != WidthValue::Auto { self.width = other.width; }
         if other.cursor_pointer { self.cursor_pointer = true; }
+        if other.flex_grow { self.flex_grow = true; }
     }
 
     /// Resolve o visual final em estado hover (base + overrides).

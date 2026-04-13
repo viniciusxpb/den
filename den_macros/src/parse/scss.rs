@@ -96,6 +96,8 @@ pub fn parse_scss(input: &str) -> StyleMap {
                 "border-radius" => rule.border_radius = parse_size_value(&value),
                 "width" => rule.width = parse_width_value(&value),
                 "cursor" if value == "pointer" => rule.cursor_pointer = true,
+                "flex" if value == "1" => rule.flex_grow = true,
+                "flex-grow" if value == "1" => rule.flex_grow = true,
                 _ => {}
             }
         }

@@ -8,6 +8,8 @@ pub(super) struct FlexChildInfo {
     pub layout_index: usize,
     /// Regra de largura declarada no SCSS.
     pub width: WidthValue,
+    /// `flex: 1` — participa da distribuição igual de espaço.
+    pub flex_grow: bool,
 }
 
 /// Coleta layout index + width de filhos DIRETOS de um flex container.
@@ -31,6 +33,7 @@ pub(super) fn collect_flex_children_info(
             infos.push(FlexChildInfo {
                 layout_index: idx,
                 width: el.visual.width,
+                flex_grow: el.visual.flex_grow,
             });
         }
     });
@@ -54,7 +57,9 @@ pub(super) fn build_flex_layout(
         return quote! { ui.horizontal(|ui| { #inner }); };
     };
 
-    let auto_count = infos.iter().filter(|i| i.width == WidthValue::Auto).count();
+    // Só filhos com flex_grow participam da distribuição igualitária.
+    // Filhos Auto sem flex_grow são content-sized (comportamento CSS padrão).
+    let auto_count = infos.iter().filter(|i| i.flex_grow).count();
 
     if auto_count == 0 {
         return quote! { ui.horizontal(|ui| { #inner }); };

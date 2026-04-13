@@ -52,6 +52,7 @@ $white:      #ffffff;
     border-radius: 8;
     padding: 14;
     border: 1px solid $border;
+    flex: 1;
 }
 
 .stat-label {
@@ -87,6 +88,7 @@ $white:      #ffffff;
     padding: 10;
     color: $dark-ink;
     font-size: 13;
+    flex: 1;
 }
 
 .btn-blue:hover {
@@ -101,6 +103,7 @@ $white:      #ffffff;
     padding: 10;
     color: $green;
     font-size: 13;
+    flex: 1;
 }
 
 .btn-green:hover {
@@ -116,6 +119,7 @@ $white:      #ffffff;
     padding: 10;
     color: $text-dim;
     font-size: 13;
+    flex: 1;
 }
 
 .btn-dim:hover {
@@ -178,6 +182,7 @@ $white:      #ffffff;
     border-radius: 8;
     padding: 14;
     border: 1px solid $border;
+    flex: 1;
 }
 
 .feat-card:hover {
