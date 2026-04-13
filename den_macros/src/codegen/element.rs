@@ -307,7 +307,7 @@ fn build_inner(
     // Percent: usa ui.available_width() inline — já desconta padding do frame pai.
     // Px: usa layout system — valor fixo, independente de padding.
     // Auto: não força largura — deixa o egui decidir pelo conteúdo.
-    match visual.width {
+    let inner = match visual.width {
         WidthValue::Percent(pct) => quote! {
             ui.set_width(ui.available_width() * #pct);
             #inner
@@ -331,6 +331,22 @@ fn build_inner(
                 inner
             }
         }
+    };
+
+    // Height: inline (sem layout system). Px escala com __den_scale.
+    match visual.height {
+        WidthValue::Percent(pct) => quote! {
+            ui.set_height(ui.available_height() * #pct);
+            #inner
+        },
+        WidthValue::Px(px) => {
+            let scaled = px;
+            quote! {
+                ui.set_height(#scaled * __den_scale);
+                #inner
+            }
+        },
+        WidthValue::Auto => inner,
     }
 }
 

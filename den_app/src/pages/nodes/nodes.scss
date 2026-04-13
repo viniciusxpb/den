@@ -1,0 +1,106 @@
+// -- Palette (espelha theme.rs) --------------------------------
+$bg:             #0d0d1a;
+$node-bg:        #141425;
+$node-header-bg: #1a1a35;
+$node-border:    #2a2a4a;
+$text:           #c8c8e0;
+$text-dim:       #6a6a8a;
+$blue:           #4fc3f7;
+$yellow:         #ffd54f;
+$green:          #81c784;
+$red:            #e94560;
+// --------------------------------------------------------------
+
+// -- Canvas ----------------------------------------------------
+
+.canvas {
+    background: $bg;
+    padding: 16;
+    width: 100%;
+    height: 100%;
+}
+
+// -- Node row (flex horizontal) --------------------------------
+
+.node-row {
+    display: flex;
+    width: 100%;
+}
+
+// -- Node card -------------------------------------------------
+
+.node {
+    background: $node-bg;
+    border: 1px solid $node-border;
+    border-radius: 8;
+    width: 260px;
+}
+
+.node-selected {
+    border: 2px solid $red;
+}
+
+// -- Accent line (div fino no topo) ----------------------------
+
+.accent {
+    padding: 1;
+    border-radius: 8;
+}
+
+.accent-blue {
+    background: $blue;
+}
+
+.accent-yellow {
+    background: $yellow;
+}
+
+.accent-green {
+    background: $green;
+}
+
+.accent-red {
+    background: $red;
+}
+
+// -- Header ----------------------------------------------------
+
+.node-header {
+    background: $node-header-bg;
+    padding: 10;
+}
+
+// -- Title (cor por node) --------------------------------------
+
+.node-title {
+    font-size: 13;
+}
+
+.title-blue {
+    color: $blue;
+}
+
+.title-yellow {
+    color: $yellow;
+}
+
+.title-green {
+    color: $green;
+}
+
+.title-red {
+    color: $red;
+}
+
+// -- Subtitle --------------------------------------------------
+
+.node-subtitle {
+    color: $text-dim;
+    font-size: 10;
+}
+
+// -- Body (vazio por enquanto, só altura) ----------------------
+
+.node-body {
+    padding: 20;
+}

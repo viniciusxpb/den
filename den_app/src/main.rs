@@ -6,10 +6,11 @@ mod pages;
 
 use eframe::egui;
 use node_editor::NodeEditorCanvas;
-use pages::HomePage;
+use pages::{HomePage, NodesPage};
 
 enum ActiveView {
     Home,
+    Nodes,
     NodeEditor,
 }
 
@@ -34,6 +35,7 @@ fn main() -> eframe::Result {
 
 struct DenApp {
     home: HomePage,
+    nodes_page: NodesPage,
     node_editor: NodeEditorCanvas,
     scale: f32,
     active_view: ActiveView,
@@ -43,15 +45,16 @@ impl DenApp {
     fn new() -> Self {
         Self {
             home: HomePage::default(),
+            nodes_page: NodesPage,
             node_editor: NodeEditorCanvas::new(),
             scale: app_config::DEFAULT_SCALE,
-            active_view: ActiveView::Home,
+            active_view: ActiveView::Nodes,
         }
     }
 
     fn render_zoom_controls(&mut self, ctx: &egui::Context) {
         let mut current_scale = match self.active_view {
-            ActiveView::Home => self.scale,
+            ActiveView::Home | ActiveView::Nodes => self.scale,
             ActiveView::NodeEditor => self.node_editor.scale,
         };
 
@@ -84,7 +87,7 @@ impl DenApp {
             });
 
         match self.active_view {
-            ActiveView::Home => self.scale = current_scale,
+            ActiveView::Home | ActiveView::Nodes => self.scale = current_scale,
             ActiveView::NodeEditor => self.node_editor.scale = current_scale,
         }
     }
@@ -95,14 +98,15 @@ impl eframe::App for DenApp {
         // F2: toggle view
         if ctx.input(|i| i.key_pressed(egui::Key::F2)) {
             self.active_view = match self.active_view {
-                ActiveView::Home => ActiveView::NodeEditor,
-                ActiveView::NodeEditor => ActiveView::Home,
+                ActiveView::Nodes => ActiveView::Home,
+                ActiveView::Home => ActiveView::Nodes,
+                ActiveView::NodeEditor => ActiveView::Nodes,
             };
         }
 
         // Zoom: roteia pro scale da view ativa
         let active_scale = match self.active_view {
-            ActiveView::Home => &mut self.scale,
+            ActiveView::Home | ActiveView::Nodes => &mut self.scale,
             ActiveView::NodeEditor => &mut self.node_editor.scale,
         };
 
@@ -130,6 +134,9 @@ impl eframe::App for DenApp {
         // Render
         egui::CentralPanel::default().show(ctx, |ui| {
             match self.active_view {
+                ActiveView::Nodes => {
+                    self.nodes_page.render(ui, self.scale);
+                }
                 ActiveView::Home => {
                     egui::ScrollArea::vertical().show(ui, |ui| {
                         self.home.render(ui, self.scale);

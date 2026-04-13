@@ -17,6 +17,7 @@ pub struct DenVisual {
     pub border: Option<BorderStyle>,
     pub border_radius: Option<f32>,
     pub width: WidthValue,
+    pub height: WidthValue,
     pub cursor_pointer: bool,
     /// `flex: 1` — cresce pra preencher o share do flex pai igualmente.
     pub flex_grow: bool,
@@ -36,6 +37,7 @@ impl DenVisual {
             border: rule.border,
             border_radius: rule.border_radius,
             width: rule.width,
+            height: rule.height,
             cursor_pointer: rule.cursor_pointer,
             flex_grow: rule.flex_grow,
             hover_override: rule
@@ -72,6 +74,7 @@ impl DenVisual {
         if other.border.is_some() { self.border = other.border; }
         if other.border_radius.is_some() { self.border_radius = other.border_radius; }
         if other.width != WidthValue::Auto { self.width = other.width; }
+        if other.height != WidthValue::Auto { self.height = other.height; }
         if other.cursor_pointer { self.cursor_pointer = true; }
         if other.flex_grow { self.flex_grow = true; }
     }

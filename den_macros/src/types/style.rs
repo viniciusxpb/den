@@ -45,6 +45,7 @@ pub struct StyleRule {
     pub border: Option<BorderStyle>,
     pub border_radius: Option<f32>,
     pub width: WidthValue,
+    pub height: WidthValue,
     pub cursor_pointer: bool,
     /// `flex: 1` / `flex-grow: 1` — elemento cresce pra preencher o share do flex pai.
     pub flex_grow: bool,
@@ -77,6 +78,9 @@ impl StyleRule {
         }
         if other.width != WidthValue::Auto {
             self.width = other.width;
+        }
+        if other.height != WidthValue::Auto {
+            self.height = other.height;
         }
         if other.cursor_pointer {
             self.cursor_pointer = true;
