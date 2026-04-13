@@ -1,7 +1,7 @@
 //! Geração de código pra elementos HTML regulares e containers flex.
 
 use super::click::{generate_style_struct, translate_click_arg};
-use super::flex::{build_flex_layout, collect_flex_children_info};
+use super::flex::build_flex_layout;
 use super::frame::{build_frame_expr, build_rich_text_expr};
 use super::input::generate_input_element;
 use super::navigation::generate_goto_call;
@@ -46,22 +46,8 @@ pub fn generate_element(
     let my_layout_index = ctx.layout_index;
     ctx.layout_index += 1;
 
-    // Se este elemento é flex, pré-coleta info dos filhos diretos pra computar
-    // a distribuição de largura em runtime. Usa um clone do layout_index pra
-    // não interferir com a geração real dos filhos.
-    let flex_children_info = if visual.display == DisplayMode::Flex {
-        let mut peek_index = ctx.layout_index;
-        Some(collect_flex_children_info(
-            &el.children,
-            my_layout_index,
-            &mut peek_index,
-        ))
-    } else {
-        None
-    };
-
     // Gera filhos. Se este elemento é flex, seta parent_is_flex pros filhos
-    // pra que filhos Auto saibam usar __den_flex_share.
+    // pra que filhos Auto sem flex-grow deixem o egui medir conteúdo.
     let prev_parent_is_flex = ctx.parent_is_flex;
     ctx.parent_is_flex = visual.display == DisplayMode::Flex;
 
@@ -135,12 +121,11 @@ pub fn generate_element(
         quote! {}
     };
 
-    let flex_info_ref = flex_children_info.as_deref();
-
     // Determina se este elemento tem flex-grow num container flex.
     // Só flex_grow=true cresce pra preencher o share — comportamento CSS `flex: 1`.
     // Auto sem flex_grow é content-sized (padrão CSS).
     let is_flex_auto_child = prev_parent_is_flex && visual.flex_grow;
+    let force_auto_width = !prev_parent_is_flex || visual.flex_grow;
 
     let mut element_code = if needs_interaction {
         let element_id = den_element_id(ctx.template_path, &ctx.tree_path, tag, &el.classes);
@@ -154,8 +139,7 @@ pub fn generate_element(
                 &children_code,
                 tag,
                 my_layout_index,
-                flex_info_ref,
-                is_flex_auto_child,
+                force_auto_width,
             );
             let hover_inner = build_inner(
                 &hovered,
@@ -163,8 +147,7 @@ pub fn generate_element(
                 &children_code,
                 tag,
                 my_layout_index,
-                flex_info_ref,
-                is_flex_auto_child,
+                force_auto_width,
             );
 
             let base_code = if visual.needs_frame() {
@@ -212,8 +195,7 @@ pub fn generate_element(
                 &children_code,
                 tag,
                 my_layout_index,
-                flex_info_ref,
-                is_flex_auto_child,
+                force_auto_width,
             );
             let wrapped = if visual.needs_frame() {
                 let frame_expr = build_frame_expr(visual);
@@ -282,8 +264,7 @@ pub fn generate_element(
             &children_code,
             tag,
             my_layout_index,
-            flex_info_ref,
-            is_flex_auto_child,
+            force_auto_width,
         );
 
         if visual.needs_frame() {
@@ -298,12 +279,15 @@ pub fn generate_element(
         }
     };
 
-    // Se este elemento é um filho Auto dentro de um flex container,
-    // limita sua largura ao share calculado pelo pai (__den_flex_share).
+    // Se este elemento é um filho `flex: 1`, limita sua largura ao tamanho
+    // calculado pelo layout runtime.
     if is_flex_auto_child {
         element_code = quote! {
+            let __den_child_width = __den_layout.sizes[#my_layout_index]
+                .unwrap_or_else(|| ui.available_width() / __den_scale)
+                * __den_scale;
             ui.allocate_ui_with_layout(
-                egui::vec2(__den_flex_share, ui.available_height()),
+                egui::vec2(__den_child_width, ui.available_height()),
                 egui::Layout::top_down(egui::Align::Min),
                 |ui| {
                     #element_code
@@ -321,10 +305,10 @@ fn build_inner(
     children_code: &[proc_macro2::TokenStream],
     tag: &str,
     layout_index: usize,
-    flex_info: Option<&[super::flex::FlexChildInfo]>,
-    fill_flex: bool,
+    force_auto_width: bool,
 ) -> proc_macro2::TokenStream {
     let text_expr = text_ts.as_ref().map(|ts| build_rich_text_expr(ts, visual));
+    let content_width_expr = layout_content_width_expr(layout_index, visual);
 
     let inner = match tag {
         "heading" | "h1" | "h2" | "h3" => {
@@ -349,32 +333,32 @@ fn build_inner(
     };
 
     let inner = if visual.display == DisplayMode::Flex {
-        build_flex_layout(inner, flex_info)
+        build_flex_layout(inner, visual.gap)
     } else {
-        inner
+        let gap = visual.gap.unwrap_or(0.0);
+        quote! {
+            ui.scope(|ui| {
+                ui.spacing_mut().item_spacing.y = #gap * __den_scale;
+                #inner
+            });
+        }
     };
 
-    // Percent: usa ui.available_width() inline — já desconta padding do frame pai.
-    // Px: usa layout system — valor fixo, independente de padding.
-    // Auto: não força largura — deixa o egui decidir pelo conteúdo.
+    // A largura vem do layout runtime. O pai decide o contexto dos filhos
+    // (block/flex/grid), então o render só obedece o tamanho resolvido.
     let inner = match visual.width {
-        WidthValue::Percent(pct) => quote! {
-            ui.set_width(ui.available_width() * #pct);
-            #inner
-        },
-        WidthValue::Px(_) => quote! {
-            if let Some(__lw) = __den_layout.sizes[#layout_index] {
-                ui.set_width(__lw * __den_scale);
+        WidthValue::Percent(_) | WidthValue::Px(_) => quote! {
+            if let Some(__den_content_width) = #content_width_expr {
+                ui.set_width(__den_content_width);
             }
             #inner
         },
-        // Filho Auto de flex: força o frame a preencher a share alocada pelo pai.
-        // ui.set_width(available) dentro do closure do Frame faz com que o Frame
-        // renderize visualmente na largura __den_flex_share (ao invés de content-size).
         WidthValue::Auto => {
-            if fill_flex {
+            if force_auto_width {
                 quote! {
-                    ui.set_width(ui.available_width());
+                    if let Some(__den_content_width) = #content_width_expr {
+                        ui.set_width(__den_content_width);
+                    }
                     #inner
                 }
             } else {
@@ -383,20 +367,25 @@ fn build_inner(
         }
     };
 
-    // Height: inline (sem layout system). Px escala com __den_scale.
+    // Height explícita vem do layout runtime. Auto fica com a altura natural do egui.
     match visual.height {
-        WidthValue::Percent(pct) => quote! {
-            ui.set_height(ui.available_height() * #pct);
+        WidthValue::Percent(_) | WidthValue::Px(_) => quote! {
+            let __den_h = __den_layout.rects[#layout_index].height;
+            if __den_h > 0.0 {
+                ui.set_height(__den_h * __den_scale);
+            }
             #inner
         },
-        WidthValue::Px(px) => {
-            let scaled = px;
-            quote! {
-                ui.set_height(#scaled * __den_scale);
-                #inner
-            }
-        }
         WidthValue::Auto => inner,
+    }
+}
+
+fn layout_content_width_expr(layout_index: usize, visual: &DenVisual) -> proc_macro2::TokenStream {
+    let horizontal_padding = visual.padding.unwrap_or(0.0) * 2.0;
+    quote! {
+        __den_layout.sizes[#layout_index].map(|__lw| {
+            ((__lw - #horizontal_padding as f32).max(0.0)) * __den_scale
+        })
     }
 }
 

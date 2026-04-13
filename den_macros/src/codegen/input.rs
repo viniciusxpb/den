@@ -66,18 +66,16 @@ pub fn generate_input_element(
     }
 
     // Constraint de largura — via desired_width no TextEdit.
-    // Px usa o layout system (mesma fonte de verdade que elementos regulares).
-    // Percent usa available_width inline (não passa pelo layout system).
+    // Px e Percent usam o layout system (mesma fonte de verdade que elementos regulares).
     // Auto: TextEdit preenche available_width por padrão no egui.
     textedit = match visual.width {
-        WidthValue::Percent(pct) => {
-            quote! { #textedit.desired_width(ui.available_width() * #pct) }
-        }
-        WidthValue::Px(_) => {
+        WidthValue::Percent(_) | WidthValue::Px(_) => {
             let idx = my_layout_index;
+            let horizontal_padding = visual.padding.unwrap_or(0.0) * 2.0;
             quote! {
                 #textedit.desired_width(
-                    __den_layout.sizes[#idx].unwrap_or(0.0) * __den_scale
+                    ((__den_layout.sizes[#idx].unwrap_or(0.0) - #horizontal_padding as f32)
+                        .max(0.0)) * __den_scale
                 )
             }
         }
@@ -96,12 +94,17 @@ pub fn generate_input_element(
         quote! { ui.add(#textedit); }
     };
 
-    // Filho Auto de flex: limita largura ao share calculado pelo pai
-    let is_flex_auto_child = ctx.parent_is_flex && visual.width == WidthValue::Auto;
+    // Filho `flex: 1`: limita largura ao tamanho calculado pelo layout runtime.
+    let is_flex_auto_child =
+        ctx.parent_is_flex && visual.width == WidthValue::Auto && visual.flex_grow;
     if is_flex_auto_child {
+        let idx = my_layout_index;
         return Ok(quote! {
+            let __den_child_width = __den_layout.sizes[#idx]
+                .unwrap_or_else(|| ui.available_width() / __den_scale)
+                * __den_scale;
             ui.allocate_ui_with_layout(
-                egui::vec2(__den_flex_share, ui.available_height()),
+                egui::vec2(__den_child_width, ui.available_height()),
                 egui::Layout::top_down(egui::Align::Min),
                 |ui| { #element_code },
             );

@@ -9,6 +9,7 @@ pub enum DisplayMode {
     #[default]
     Block,
     Flex,
+    Grid,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -46,6 +47,7 @@ pub struct StyleRule {
     pub border_radius: Option<f32>,
     pub width: WidthValue,
     pub height: WidthValue,
+    pub gap: Option<f32>,
     pub cursor_pointer: bool,
     /// `flex: 1` / `flex-grow: 1` — elemento cresce pra preencher o share do flex pai.
     pub flex_grow: bool,
@@ -81,6 +83,9 @@ impl StyleRule {
         }
         if other.height != WidthValue::Auto {
             self.height = other.height;
+        }
+        if other.gap.is_some() {
+            self.gap = other.gap;
         }
         if other.cursor_pointer {
             self.cursor_pointer = true;

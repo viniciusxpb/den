@@ -1,10 +1,8 @@
-//! Den Layout System — resolução iterativa de larguras em runtime.
+//! Den Layout System — resolução de layout em runtime.
 //!
-//! Flat list, múltiplas passadas, cada passada resolve o que pode
-//! usando o que a anterior salvou. Roda a cada frame (immediate mode).
-//!
-//! ESCOPO: só largura. Altura, posição vertical, margin, gap são
-//! problemas separados pra depois.
+//! Flat list em ordem DFS, com o `body` invisível no índice 0. O pai define o
+//! algoritmo de layout dos filhos: block, flex e futuramente grid. Roda a cada
+//! frame porque egui é immediate mode e a janela pode mudar de tamanho.
 
 mod router;
 
@@ -42,11 +40,21 @@ pub enum WidthRule {
     Percent(f32),
 }
 
+/// Caixa calculada para um elemento.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct LayoutRect {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+}
+
 /// Display mode do elemento.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DisplayMode {
     Block,
     Flex,
+    Grid,
 }
 
 /// Uma entrada na flat list de layout.
@@ -60,8 +68,16 @@ pub struct LayoutEntry {
     pub children: Vec<usize>,
     /// Regra de largura declarada no SCSS.
     pub width_rule: WidthRule,
+    /// Regra de altura declarada no SCSS.
+    pub height_rule: WidthRule,
     /// Display mode — determina como distribui espaço pros filhos.
     pub display: DisplayMode,
+    /// Padding uniforme em CSS pixels.
+    pub padding: f32,
+    /// Gap entre filhos diretos em CSS pixels.
+    pub gap: f32,
+    /// Peso de flex-grow. 0 = não cresce.
+    pub flex_grow: f32,
 }
 
 /// Tabela de layout que resolve larguras iterativamente.
@@ -72,6 +88,8 @@ pub struct LayoutTable {
     /// Larguras resolvidas. `None` = ainda não resolvido neste frame.
     /// Resetado no início de cada `resolve()`.
     pub sizes: Vec<Option<f32>>,
+    /// Retângulos calculados em CSS pixels.
+    pub rects: Vec<LayoutRect>,
     /// Máximo de iterações pra evitar loop infinito (na prática 2-3 bastam).
     pub max_passes: usize,
 }
@@ -84,6 +102,7 @@ impl LayoutTable {
         Self {
             entries,
             sizes: vec![None; len],
+            rects: vec![LayoutRect::default(); len],
             max_passes: 5,
         }
     }
@@ -91,146 +110,155 @@ impl LayoutTable {
     /// Resolve todas as larguras. Chamado todo frame antes do render.
     /// `available_width` vem de `ui.available_width()`.
     pub fn resolve(&mut self, available_width: f32) {
-        // Reset
+        self.resolve_in_viewport(available_width, 0.0);
+    }
+
+    /// Resolve layout a partir do viewport disponível, em CSS pixels.
+    pub fn resolve_in_viewport(&mut self, available_width: f32, available_height: f32) {
         for size in &mut self.sizes {
             *size = None;
         }
+        for rect in &mut self.rects {
+            *rect = LayoutRect::default();
+        }
 
-        // Body sempre = largura disponível do egui
         self.sizes[BODY_INDEX] = Some(available_width);
+        self.rects[BODY_INDEX] = LayoutRect {
+            x: 0.0,
+            y: 0.0,
+            width: available_width,
+            height: available_height,
+        };
 
-        // Loop até ponto fixo ou max_passes
-        for _ in 0..self.max_passes {
-            if !self.run_one_pass() {
-                break;
-            }
-        }
+        self.layout_children(BODY_INDEX);
     }
 
-    /// Uma passada de resolução. Retorna `true` se algum valor mudou.
-    fn run_one_pass(&mut self) -> bool {
-        let mut changed = false;
+    /// Compatibilidade com o codegen atual. Flex já é resolvido por `layout_children`.
+    pub fn distribute_flex(&mut self) {}
 
-        for i in 0..self.entries.len() {
-            if self.sizes[i].is_some() {
-                continue;
-            }
-
-            // Px e Percent não precisam dos children — clone só no branch Auto.
-            match self.entries[i].width_rule {
-                WidthRule::Px(px) => {
-                    self.sizes[i] = Some(px);
-                    changed = true;
-                }
-
-                WidthRule::Percent(pct) => {
-                    // Resolvido aqui pra que distribute_flex() possa tratar como
-                    // largura fixa. O codegen NÃO usa sizes[i] pra Percent —
-                    // usa ui.available_width() * pct inline (que já desconta padding).
-                    // Ver codegen/element.rs build_inner.
-                    let parent_width = self.entries[i].parent.and_then(|p| self.sizes[p]);
-                    if let Some(pw) = parent_width {
-                        self.sizes[i] = Some(pw * pct);
-                        changed = true;
-                    }
-                }
-
-                WidthRule::Auto => {
-                    let parent = self.entries[i].parent;
-                    let display = self.entries[i].display;
-                    // Clone só aqui, onde é necessário pra iterar com borrow split
-                    let children = self.entries[i].children.clone();
-
-                    if children.is_empty() {
-                        // Folha sem filhos: encaixa no pai
-                        if let Some(parent_width) = parent.and_then(|p| self.sizes[p]) {
-                            self.sizes[i] = Some(parent_width);
-                            changed = true;
-                        }
-                    } else {
-                        // Tem filhos: abraça se todos resolvidos
-                        let all_resolved = children.iter().all(|&c| self.sizes[c].is_some());
-                        if all_resolved {
-                            let total = self.calculate_children_width(&children, display);
-                            // Auto não cresce além do pai
-                            let capped = parent
-                                .and_then(|p| self.sizes[p])
-                                .map_or(total, |pw| total.min(pw));
-                            self.sizes[i] = Some(capped);
-                            changed = true;
-                        }
-                        // Se filhos não resolvidos, espera próxima passada
-                    }
-                }
-            }
-        }
-
-        changed
-    }
-
-    /// Pós-processamento: distribui espaço restante entre filhos `Auto`
-    /// em containers flex. Chamado depois de `resolve()`.
-    ///
-    /// Ordem importa: o loop é top-down (índice menor = mais próximo da raiz),
-    /// então containers flex aninhados são processados na ordem correta —
-    /// pai antes de filho. Isso é garantido pela construção da flat list
-    /// (DFS pré-ordem) em `from_den_nodes`.
-    ///
-    /// `Px` e `Percent` são tratados como **largura fixa** neste contexto:
-    /// `resolve()` já calculou seus valores, `distribute_flex` só aloca o resto.
-    /// Só filhos `Auto` recebem espaço distribuído.
-    pub fn distribute_flex(&mut self) {
-        for i in 0..self.entries.len() {
-            if self.entries[i].display != DisplayMode::Flex {
-                continue;
-            }
-            if self.entries[i].children.is_empty() {
-                continue;
-            }
-            let Some(parent_width) = self.sizes[i] else {
-                continue;
-            };
-
-            // Clone após os continues — não aloca se o elemento for ignorado
-            let children = self.entries[i].children.clone();
-
-            // Px e Percent já foram resolvidos por resolve() → tratados como fixos.
-            // Só Auto entra na distribuição de espaço restante.
-            let mut fixed_total: f32 = 0.0;
-            let mut flex_children: Vec<usize> = Vec::new();
-
-            for &child_idx in &children {
-                match self.entries[child_idx].width_rule {
-                    WidthRule::Auto => flex_children.push(child_idx),
-                    // Px e Percent: usa o tamanho já resolvido como fixo
-                    _ => fixed_total += self.sizes[child_idx].unwrap_or(0.0),
-                }
-            }
-
-            if flex_children.is_empty() {
-                continue;
-            }
-
-            // Espaço restante dividido igualmente entre filhos Auto
-            let remaining = (parent_width - fixed_total).max(0.0);
-            let per_child = remaining / flex_children.len() as f32;
-
-            for &child_idx in &flex_children {
-                self.sizes[child_idx] = Some(per_child);
-            }
-        }
-    }
-
-    /// Largura total dos filhos baseado no display mode do pai.
-    /// Usa iteradores sem alocar Vec (hot path, roda a cada frame).
-    fn calculate_children_width(&self, children: &[usize], display: DisplayMode) -> f32 {
-        let mut iter = children.iter().filter_map(|&c| self.sizes[c]).peekable();
-        if iter.peek().is_none() {
-            return 0.0;
-        }
+    fn layout_children(&mut self, parent_idx: usize) {
+        let display = self.entries[parent_idx].display;
         match display {
-            DisplayMode::Flex => iter.sum(),
-            DisplayMode::Block => iter.fold(0.0_f32, f32::max),
+            DisplayMode::Block | DisplayMode::Grid => self.layout_block_children(parent_idx),
+            DisplayMode::Flex => self.layout_flex_children(parent_idx),
+        }
+    }
+
+    fn layout_block_children(&mut self, parent_idx: usize) {
+        let parent_rect = self.rects[parent_idx];
+        let padding = self.entries[parent_idx].padding;
+        let gap = self.entries[parent_idx].gap;
+        let content_x = parent_rect.x + padding;
+        let content_width = (parent_rect.width - padding * 2.0).max(0.0);
+        let mut cursor_y = parent_rect.y + padding;
+        let children = self.entries[parent_idx].children.clone();
+
+        for (pos, child_idx) in children.iter().copied().enumerate() {
+            let width = self.resolve_child_width(child_idx, content_width);
+            let height = self.resolve_child_height(child_idx, 0.0);
+            self.sizes[child_idx] = Some(width);
+            self.rects[child_idx] = LayoutRect {
+                x: content_x,
+                y: cursor_y,
+                width,
+                height,
+            };
+            self.layout_children(child_idx);
+            cursor_y += self.rects[child_idx].height;
+            if pos + 1 < children.len() {
+                cursor_y += gap;
+            }
+        }
+
+        if self.entries[parent_idx].height_rule == WidthRule::Auto && parent_idx != BODY_INDEX {
+            self.rects[parent_idx].height = cursor_y - parent_rect.y + padding;
+        }
+    }
+
+    fn layout_flex_children(&mut self, parent_idx: usize) {
+        let parent_rect = self.rects[parent_idx];
+        let padding = self.entries[parent_idx].padding;
+        let gap = self.entries[parent_idx].gap;
+        let content_x = parent_rect.x + padding;
+        let content_width = (parent_rect.width - padding * 2.0).max(0.0);
+        let children = self.entries[parent_idx].children.clone();
+        if children.is_empty() {
+            return;
+        }
+
+        let gap_total = gap * children.len().saturating_sub(1) as f32;
+        let mut fixed_total = 0.0;
+        let mut grow_total = 0.0;
+
+        for &child_idx in &children {
+            let grow = self.entries[child_idx].flex_grow;
+            if grow > 0.0 && self.entries[child_idx].width_rule == WidthRule::Auto {
+                grow_total += grow;
+            } else if self.entries[child_idx].width_rule == WidthRule::Auto {
+                // Auto sem flex-grow é content-sized no render egui. O layout
+                // ainda não mede conteúdo, então não desconta do espaço flex.
+            } else {
+                fixed_total += self.resolve_child_width(child_idx, content_width);
+            }
+        }
+
+        let remaining = (content_width - fixed_total - gap_total).max(0.0);
+        let mut cursor_x = content_x;
+        let content_y = parent_rect.y + padding;
+        let mut max_height = 0.0f32;
+
+        for (pos, child_idx) in children.iter().copied().enumerate() {
+            let grow = self.entries[child_idx].flex_grow;
+            let width = if grow > 0.0 && self.entries[child_idx].width_rule == WidthRule::Auto {
+                if grow_total > 0.0 {
+                    remaining * (grow / grow_total)
+                } else {
+                    0.0
+                }
+            } else if self.entries[child_idx].width_rule == WidthRule::Auto {
+                0.0
+            } else {
+                self.resolve_child_width(child_idx, content_width)
+            };
+            let height = self.resolve_child_height(child_idx, 0.0);
+            self.sizes[child_idx] =
+                if self.entries[child_idx].width_rule == WidthRule::Auto && grow <= 0.0 {
+                    None
+                } else {
+                    Some(width)
+                };
+            self.rects[child_idx] = LayoutRect {
+                x: cursor_x,
+                y: content_y,
+                width,
+                height,
+            };
+            self.layout_children(child_idx);
+            max_height = max_height.max(self.rects[child_idx].height);
+            cursor_x += width;
+            if pos + 1 < children.len() {
+                cursor_x += gap;
+            }
+        }
+
+        if self.entries[parent_idx].height_rule == WidthRule::Auto && parent_idx != BODY_INDEX {
+            self.rects[parent_idx].height = max_height + padding * 2.0;
+        }
+    }
+
+    fn resolve_child_width(&self, child_idx: usize, parent_content_width: f32) -> f32 {
+        match self.entries[child_idx].width_rule {
+            WidthRule::Px(px) => px,
+            WidthRule::Percent(pct) => parent_content_width * pct,
+            WidthRule::Auto => parent_content_width,
+        }
+    }
+
+    fn resolve_child_height(&self, child_idx: usize, parent_content_height: f32) -> f32 {
+        match self.entries[child_idx].height_rule {
+            WidthRule::Px(px) => px,
+            WidthRule::Percent(pct) => parent_content_height * pct,
+            WidthRule::Auto => 0.0,
         }
     }
 }
@@ -258,7 +286,11 @@ mod tests {
             parent: None,
             children: vec![],
             width_rule: WidthRule::Auto,
+            height_rule: WidthRule::Auto,
             display: DisplayMode::Block,
+            padding: 0.0,
+            gap: 0.0,
+            flex_grow: 0.0,
         }
     }
 
@@ -269,7 +301,11 @@ mod tests {
             parent: Some(parent),
             children: vec![],
             width_rule: rule,
+            height_rule: WidthRule::Auto,
             display: DisplayMode::Block,
+            padding: 0.0,
+            gap: 0.0,
+            flex_grow: 0.0,
         }
     }
 
@@ -278,7 +314,25 @@ mod tests {
             parent: Some(parent),
             children: vec![],
             width_rule: rule,
+            height_rule: WidthRule::Auto,
             display: DisplayMode::Flex,
+            padding: 0.0,
+            gap: 0.0,
+            flex_grow: 0.0,
+        }
+    }
+
+    fn flex_grow_entry(parent: usize) -> LayoutEntry {
+        LayoutEntry {
+            flex_grow: 1.0,
+            ..entry(parent, WidthRule::Auto)
+        }
+    }
+
+    fn padded_entry(parent: usize, rule: WidthRule, padding: f32) -> LayoutEntry {
+        LayoutEntry {
+            padding,
+            ..entry(parent, rule)
         }
     }
 
@@ -318,8 +372,8 @@ mod tests {
     }
 
     #[test]
-    fn auto_block_container_embraces_largest_child() {
-        // pai auto (block), filho fixo 300px → pai fica 300px (capped ao body 800)
+    fn auto_block_container_fills_parent_context() {
+        // Block auto segue o contexto do pai, como uma div CSS normal.
         let mut t = make_table(vec![
             body(),
             entry(0, WidthRule::Auto), // container block auto
@@ -327,7 +381,7 @@ mod tests {
         ]);
         t.resolve(800.0);
         assert_eq!(t.sizes[2], Some(300.0));
-        assert_eq!(t.sizes[1], Some(300.0));
+        assert_eq!(t.sizes[1], Some(800.0));
     }
 
     #[test]
@@ -336,9 +390,9 @@ mod tests {
         let mut t = make_table(vec![
             body(),
             flex_entry(0, WidthRule::Percent(1.0)), // flex container 100%
-            entry(1, WidthRule::Auto),
-            entry(1, WidthRule::Auto),
-            entry(1, WidthRule::Auto),
+            flex_grow_entry(1),
+            flex_grow_entry(1),
+            flex_grow_entry(1),
         ]);
         t.resolve(600.0);
         t.distribute_flex();
@@ -355,7 +409,7 @@ mod tests {
             body(),
             flex_entry(0, WidthRule::Percent(1.0)),
             entry(1, WidthRule::Px(200.0)),
-            entry(1, WidthRule::Auto),
+            flex_grow_entry(1),
         ]);
         t.resolve(600.0);
         t.distribute_flex();
@@ -375,6 +429,20 @@ mod tests {
         t.resolve(800.0);
         assert_eq!(t.sizes[1], Some(600.0));
         assert_eq!(t.sizes[2], Some(300.0)); // 50% de 600, NÃO de 800
+    }
+
+    #[test]
+    fn percent_child_uses_parent_content_width() {
+        // pai 600px com padding 20 → content width 560.
+        // filho 100% deve usar 560, não a largura externa do pai.
+        let mut t = make_table(vec![
+            body(),
+            padded_entry(0, WidthRule::Px(600.0), 20.0),
+            entry(1, WidthRule::Percent(1.0)),
+        ]);
+        t.resolve(800.0);
+        assert_eq!(t.sizes[1], Some(600.0));
+        assert_eq!(t.sizes[2], Some(560.0));
     }
 
     #[test]
@@ -403,7 +471,7 @@ mod tests {
             body(),
             flex_entry(0, WidthRule::Px(600.0)),
             entry(1, WidthRule::Percent(0.75)),
-            entry(1, WidthRule::Auto),
+            flex_grow_entry(1),
         ]);
         t.resolve(800.0);
         t.distribute_flex();
@@ -421,10 +489,13 @@ mod tests {
         let mut t = make_table(vec![
             body(),                                 // 0
             flex_entry(0, WidthRule::Percent(1.0)), // 1: L1 flex
-            flex_entry(1, WidthRule::Auto),         // 2: L2 flex (filho do L1)
-            entry(2, WidthRule::Auto),              // 3: neto A
-            entry(2, WidthRule::Auto),              // 4: neto B
-            entry(1, WidthRule::Auto),              // 5: L2 simples (irmão)
+            LayoutEntry {
+                display: DisplayMode::Flex,
+                ..flex_grow_entry(1)
+            }, // 2: L2 flex (filho do L1)
+            flex_grow_entry(2),                     // 3: neto A
+            flex_grow_entry(2),                     // 4: neto B
+            flex_grow_entry(1),                     // 5: L2 simples (irmão)
         ]);
 
         t.resolve(800.0);
@@ -439,8 +510,7 @@ mod tests {
 
     #[test]
     fn auto_does_not_exceed_parent() {
-        // container auto (block) com um filho maior que o pai → capped no pai
-        // block mode usa MAX dos filhos: 700 > 600 → capped em 600
+        // container auto (block) preenche o pai; filho fixo pode exceder.
         let mut t = make_table(vec![
             body(),
             entry(0, WidthRule::Auto),      // container auto
@@ -448,6 +518,6 @@ mod tests {
         ]);
         t.resolve(600.0);
         assert_eq!(t.sizes[2], Some(700.0)); // filho não é capped (só o container é)
-        assert_eq!(t.sizes[1], Some(600.0)); // container capped no pai
+        assert_eq!(t.sizes[1], Some(600.0)); // container segue o pai
     }
 }

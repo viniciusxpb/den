@@ -22,8 +22,7 @@ pub(crate) struct CodegenCtx<'a> {
     /// 0 é reservado pro body (invisível, raiz). Começa em 1.
     pub layout_index: usize,
     /// `true` quando o pai direto deste elemento é `display: flex`.
-    /// Filhos Auto de flex usam `__den_flex_share` (calculado pelo pai)
-    /// em vez de deixar o egui decidir pelo conteúdo.
+    /// Filhos Auto sem flex-grow deixam o egui medir conteúdo.
     pub parent_is_flex: bool,
 }
 
@@ -61,8 +60,11 @@ pub fn generate(
             }
             __DEN_LAYOUT_STORE.with(|__tl| {
                 let mut __den_layout = __tl.borrow_mut();
-                // resolve() em CSS pixels; render multiplica por __den_scale
-                __den_layout.resolve(ui.available_width() / __den_scale);
+                // resolve_in_viewport() em CSS pixels; render multiplica por __den_scale
+                __den_layout.resolve_in_viewport(
+                    ui.available_width() / __den_scale,
+                    ui.available_height() / __den_scale,
+                );
                 __den_layout.distribute_flex();
                 #( #stmts )*
             });
@@ -90,7 +92,11 @@ pub(crate) fn generate_node(
 struct FlatEntry {
     parent: usize,
     width: WidthValue,
+    height: WidthValue,
     display: DisplayMode,
+    padding: Option<f32>,
+    gap: Option<f32>,
+    flex_grow: bool,
 }
 
 /// Coleta flat entries usando `walk_den_nodes` (fonte única de verdade pra DFS).
@@ -102,7 +108,11 @@ fn collect_flat_entries(nodes: &[DenNode]) -> Vec<FlatEntry> {
         entries.push(FlatEntry {
             parent,
             width: el.visual.width,
+            height: el.visual.height,
             display: el.visual.display,
+            padding: el.visual.padding,
+            gap: el.visual.gap,
+            flex_grow: el.visual.flex_grow,
         });
     });
 
@@ -122,7 +132,11 @@ fn generate_layout_init(nodes: &[DenNode]) -> proc_macro2::TokenStream {
             parent: None,
             children: vec![],
             width_rule: den_layout::WidthRule::Auto,
+            height_rule: den_layout::WidthRule::Auto,
             display: den_layout::DisplayMode::Block,
+            padding: 0.0,
+            gap: 0.0,
+            flex_grow: 0.0,
         }
     }];
 
@@ -133,17 +147,29 @@ fn generate_layout_init(nodes: &[DenNode]) -> proc_macro2::TokenStream {
             WidthValue::Px(v) => quote! { den_layout::WidthRule::Px(#v) },
             WidthValue::Percent(v) => quote! { den_layout::WidthRule::Percent(#v) },
         };
-        let display_ts = if e.display == DisplayMode::Flex {
-            quote! { den_layout::DisplayMode::Flex }
-        } else {
-            quote! { den_layout::DisplayMode::Block }
+        let height_ts = match e.height {
+            WidthValue::Auto => quote! { den_layout::WidthRule::Auto },
+            WidthValue::Px(v) => quote! { den_layout::WidthRule::Px(#v) },
+            WidthValue::Percent(v) => quote! { den_layout::WidthRule::Percent(#v) },
         };
+        let display_ts = match e.display {
+            DisplayMode::Flex => quote! { den_layout::DisplayMode::Flex },
+            DisplayMode::Grid => quote! { den_layout::DisplayMode::Grid },
+            DisplayMode::Block => quote! { den_layout::DisplayMode::Block },
+        };
+        let padding = e.padding.unwrap_or(0.0);
+        let gap = e.gap.unwrap_or(0.0);
+        let flex_grow = if e.flex_grow { 1.0 } else { 0.0 };
         entries_code.push(quote! {
             den_layout::LayoutEntry {
                 parent: Some(#parent),
                 children: vec![],
                 width_rule: #width_ts,
+                height_rule: #height_ts,
                 display: #display_ts,
+                padding: #padding as f32,
+                gap: #gap as f32,
+                flex_grow: #flex_grow as f32,
             }
         });
     }
