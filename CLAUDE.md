@@ -11,7 +11,7 @@ Den is a Rust framework that compiles HTML + SCSS templates into native egui des
 ```bash
 cargo build                    # Build everything
 cargo run --bin den_app        # Run the demo application (F2 toggles Node Editor)
-cargo test                     # Run all tests (29 total: 13 layout + 16 parse)
+cargo test                     # Run all tests (33 total: 13 layout + 20 parse)
 cargo clippy                   # Lint
 make dev                       # Hot reload dev mode (requires cargo-watch)
 make preview                   # Generate HTML preview of dev-tagged components
@@ -36,7 +36,10 @@ make help                      # List all makefile commands
   parse/scss.rs            RawNode + StyleMap         codegen/control_flow.rs
   parse/text.rs            → DenNode tree             codegen/frame.rs
   parse/color.rs           (with DenVisual)           codegen/text.rs
-  → RawNode + StyleMap                                codegen/mod.rs
+  → RawNode + StyleMap                                codegen/click.rs
+                                                      codegen/flex.rs
+                                                      codegen/input.rs
+                                                      codegen/mod.rs
                                                       → TokenStream
 ```
 
@@ -49,7 +52,11 @@ make help                      # List all makefile commands
 **Key source files**:
 - `lib.rs` — Entry point (~60 lines), wires the 3 phases
 - `input.rs` — `DenTemplateInput` syn parsing
-- `types.rs` — All shared types: `RawNode`, `RawElement`, `DenNode`, `DenElement`, `DenVisual`, `StyleRule`, `TextSegment`, plus `walk_den_nodes()` (canonical DFS traversal)
+- `types/` — Shared types split into submodules:
+  - `raw.rs` — `RawNode`, `RawElement` (Phase 1 output)
+  - `resolved.rs` — `DenNode`, `DenElement`, `DenVisual` (Phase 2 output)
+  - `style.rs` — `StyleRule`, `TextSegment`
+  - `walk.rs` — `walk_den_nodes()` (canonical DFS traversal)
 
 All errors become `compile_error!` — users see IDE errors immediately.
 
@@ -92,7 +99,7 @@ All errors become `compile_error!` — users see IDE errors immediately.
 - Controls: Ctrl+=/Ctrl+-/Ctrl+0/Ctrl+scroll, +/-/% widget at bottom-right
 - Per-view zoom: Home and NodeEditor have independent scale values
 
-### Flex distribution (`codegen/element.rs`)
+### Flex distribution (`codegen/flex.rs` + `codegen/element.rs`)
 
 - `parent_is_flex` in `CodegenCtx` tracks flex parent context
 - `collect_flex_children_info` uses `walk_den_nodes` to pre-collect child width rules
@@ -102,12 +109,12 @@ All errors become `compile_error!` — users see IDE errors immediately.
 
 ### DFS traversal invariant
 
-`walk_den_nodes()` in `types.rs` is the **single source of truth** for DFS order. All functions that assign layout indices or iterate elements MUST use it. Currently used by:
+`walk_den_nodes()` in `types/walk.rs` is the **single source of truth** for DFS order. All functions that assign layout indices or iterate elements MUST use it. Currently used by:
 - `collect_flat_entries` (codegen/mod.rs)
 - `collect_flex_children_info` (codegen/element.rs)
 - `generate_element` increments `ctx.layout_index` in the same DFS order
 
-### Click handler codegen
+### Click handler codegen (`codegen/click.rs`)
 
 When `(click)` has arguments:
 1. Validate `den-bind` exists → `compile_error!` if missing
