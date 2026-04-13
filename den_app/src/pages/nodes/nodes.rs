@@ -2,6 +2,7 @@ use crate::AppRoute;
 use den_layout::DenRouter;
 use eframe::egui;
 
+#[derive(Default)]
 pub struct NodesPage;
 
 impl NodesPage {

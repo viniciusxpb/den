@@ -22,3 +22,9 @@ impl UsuarioPage {
         den_macros::den_template!("pages/usuario/usuario", self);
     }
 }
+
+impl Default for UsuarioPage {
+    fn default() -> Self {
+        Self::new()
+    }
+}

@@ -2,7 +2,6 @@
 
 mod app_config;
 mod models;
-mod node_editor;
 mod pages;
 mod routes;
 
@@ -46,11 +45,7 @@ impl DenApp {
     }
 
     fn render_zoom_controls(&mut self, ctx: &egui::Context) {
-        let mut current_scale = match self.router.current() {
-            AppRoute::NodeEditor => self.pages.node_editor_scale(),
-            _ => self.scale,
-        };
-
+        let mut current_scale = self.scale;
         egui::Area::new(egui::Id::new("den_zoom_controls"))
             .anchor(egui::Align2::RIGHT_BOTTOM, egui::vec2(-16.0, -16.0))
             .order(egui::Order::Foreground)
@@ -79,36 +74,17 @@ impl DenApp {
                     });
             });
 
-        match self.router.current() {
-            AppRoute::NodeEditor => self.pages.set_node_editor_scale(current_scale),
-            _ => self.scale = current_scale,
-        }
-    }
-
-    fn queue_next_route(&mut self) {
-        self.router
-            .goto(routes::demo_next_route(self.router.current()));
+        self.scale = current_scale;
     }
 }
 
 impl eframe::App for DenApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // F2: ciclo manual de rotas enquanto o goto HTML ainda não existe.
-        if ctx.input(|i| i.key_pressed(egui::Key::F2)) {
-            self.queue_next_route();
-        }
-
         if self.router.flush() {
             self.pages.sync_from_route(self.router.current());
         }
 
-        // Zoom: roteia pro scale da view ativa
-        let is_node_editor = matches!(self.router.current(), AppRoute::NodeEditor);
-        let mut active_scale = if is_node_editor {
-            self.pages.node_editor_scale()
-        } else {
-            self.scale
-        };
+        let mut active_scale = self.scale;
 
         if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(egui::Key::Equals)) {
             active_scale = (active_scale + app_config::SCALE_STEP).min(app_config::MAX_SCALE);
@@ -118,9 +94,6 @@ impl eframe::App for DenApp {
         }
         if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(egui::Key::Num0)) {
             active_scale = app_config::DEFAULT_SCALE;
-            if is_node_editor {
-                self.pages.reset_node_editor_pan();
-            }
         }
         let scroll_delta = ctx.input(|i| {
             if i.modifiers.ctrl {
@@ -134,11 +107,7 @@ impl eframe::App for DenApp {
             active_scale = (active_scale + steps * app_config::SCALE_STEP)
                 .clamp(app_config::MIN_SCALE, app_config::MAX_SCALE);
         }
-        if is_node_editor {
-            self.pages.set_node_editor_scale(active_scale);
-        } else {
-            self.scale = active_scale;
-        }
+        self.scale = active_scale;
 
         // Render
         egui::CentralPanel::default().show(ctx, |ui| {
