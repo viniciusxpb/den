@@ -99,6 +99,8 @@ impl eframe::App for DenApp {
         if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(egui::Key::Num0)) {
             active_scale = app_config::DEFAULT_SCALE;
         }
+        // Ctrl+scroll = zoom. Consumimos o delta aqui ANTES de `CentralPanel` renderizar,
+        // pra que o `ScrollArea` interno não receba esse scroll e role a página junto.
         let scroll_delta = ctx.input(|i| {
             if i.modifiers.ctrl {
                 i.raw_scroll_delta.y
@@ -110,12 +112,23 @@ impl eframe::App for DenApp {
             let steps = (scroll_delta / app_config::SCROLL_SENSITIVITY).clamp(-1.0, 1.0);
             active_scale = (active_scale + steps * app_config::SCALE_STEP)
                 .clamp(app_config::MIN_SCALE, app_config::MAX_SCALE);
+            // Zera o scroll desse frame pro ScrollArea não rolar junto.
+            ctx.input_mut(|i| {
+                i.raw_scroll_delta.y = 0.0;
+                i.smooth_scroll_delta.y = 0.0;
+            });
         }
         self.scale = active_scale;
 
-        // Render
+        // Render com scroll vertical nativo do egui — o body do Den cresce com o
+        // conteúdo (`paint_tree` aloca `rect = max(viewport, content_height)`),
+        // e a `ScrollArea` cuida de clip + scrollbar.
         egui::CentralPanel::default().show(ctx, |ui| {
-            self.pages.render_current(ui, self.scale, &mut self.router);
+            egui::ScrollArea::vertical()
+                .auto_shrink([false; 2])
+                .show(ui, |ui| {
+                    self.pages.render_current(ui, self.scale, &mut self.router);
+                });
         });
 
         self.render_zoom_controls(ctx);
