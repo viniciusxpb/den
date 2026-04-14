@@ -69,12 +69,12 @@ Também falta decidir como mapear peso/estilo para faces reais (`font-weight: 70
 
 ## Política para `display: grid`
 
-Hoje o parser aceita `display: grid`, mas `den_layout::LayoutTable` trata `Grid` como fluxo block. Isso é útil para experimentação, porém pode induzir usuário a achar que grid real já existe.
+Hoje o parser aceita `display: grid`, mas `den_layout::LayoutTable` trata `Grid` como fluxo block (`table.rs:69`). Isso é útil para experimentação, porém pode induzir usuário a achar que grid real já existe.
 
 **Decisão pendente**: escolher entre:
 1. gerar erro/aviso forte para `display: grid` até existir grid real;
 2. manter fallback para block e documentar como experimental;
-3. implementar um grid mínimo no layout engine.
+3. implementar um grid mínimo no layout engine (mínimo viável: `grid-template-columns` com `fr` + `px` + `%`, necessário para a sidebar da tela ndnm).
 
 ---
 
@@ -89,11 +89,11 @@ O input atual é pintado manualmente e cobre foco, caret, texto, backspace/delet
 ## Quebra de módulos grandes
 
 Arquivos ainda grandes:
-- `den_app/src/bin/style_editor.rs`
-- `den_app/src/bin/preview.rs`
-- `den_layout/src/table.rs`
-- `den_app/src/den_paint.rs`
-- `den_macros/src/parse/html.rs`
+- `den_app/src/bin/preview.rs` (~1.0k linhas)
+- `den_app/src/bin/style_editor.rs` (~770 linhas)
+- `den_app/src/den_paint.rs` (~760 linhas)
+- `den_layout/src/table.rs` (~600 linhas)
+- `den_macros/src/parse/html.rs` (~520 linhas)
 
 **Fix futuro**: dividir por responsabilidade sem mudar comportamento. Sugestão inicial:
 - `preview`: discovery, scss_to_css, html_convert, render_html.
@@ -110,3 +110,35 @@ O `paint_tree` mora em `den_app/src/den_paint.rs` como função concreta. Pra tr
 3. O macro gera `crate::den_paint::paint_tree(...)` — trocar o módulo no crate root troca o backend.
 
 Nenhum código de `den_layout` / `den_macros` precisa mudar.
+
+---
+
+## Gap visual entre o runtime nativo e a tela React (página `ndnm`)
+
+O HTML/CSS da tela ndnm já está dentro do projeto (`den_app/src/pages/ndnm/`) e a rota inicial já aponta pra ela. O preview no browser consegue reproduzir a tela porque delega tudo ao CSS real; o runtime Den nativo, porém, ignora a maioria das propriedades que essa tela depende. Lista do que falta pra paridade visual:
+
+**Posicionamento e transformações**
+- `position: absolute`, `left`, `top`, `z-index` e posicionamento livre de nós no canvas. Hoje o CSS tá no arquivo, o browser usa, mas o runtime Den ignora — todo nó cai no fluxo block/flex.
+- `transform: rotate(...)` pra desenhar wires como linhas inclinadas.
+- `pointer-events`, `cursor` granular por região, drag, pan e zoom interativos no canvas.
+
+**Gráficos vetoriais**
+- SVG / canvas / path real pra wires Bezier. No HTML/CSS atual deixei wires como divs estáticas aproximadas.
+- Ícones SVG do `lucide-react`. Por enquanto convertidos para marcadores textuais curtos tipo `DB`, `LY`, `SH`.
+
+**Pintura avançada**
+- `background-image`, `radial-gradient` e `repeating-linear-gradient` (usados em grid de pontos e scanline).
+- `box-shadow`, glow e sombras coloridas em nós/ports.
+- `opacity`, `rgba(...)`, `transparent` e alpha real nas cores.
+- `overflow: hidden`/`visible`, clipping e scroll interno por nó.
+
+**Layout**
+- `flex-direction`, `align-items`, `justify-content`, `flex-shrink` e `min-width: 0` pra flex compatível com o que o browser faz.
+- `grid-template-columns` (mínimo `fr` + `px` + `%`) pros stats da sidebar — conecta com a seção de `display: grid` acima.
+
+**Tipografia e animação**
+- Seletores/propriedades CSS mais completas: `border-left`, `border-top-width`, `background-color` (separado de `background`), `white-space`, `text-overflow`.
+- Fontes externas / Google Fonts e seleção real por peso/estilo. Hoje uso uma stack mono compatível com o que já existe — conecta com a seção `@font-face` acima.
+- Animações / `@keyframes` (pulse nos ports, motion nos wires).
+
+**Resumo**: a estrutura e o CSS da tela já vivem no projeto. O gap é quase todo no motor visual/layout do runtime nativo — principalmente posicionamento absoluto, transforms, sombras/alpha e wires vetoriais.
