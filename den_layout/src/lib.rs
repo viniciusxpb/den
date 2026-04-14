@@ -10,11 +10,13 @@ mod element_style;
 mod entry;
 mod flex;
 mod geometry;
+mod height;
 mod render;
 mod router;
 mod spacing;
 mod state;
 mod table;
+mod width;
 
 pub use dimension::DimensionRule;
 pub use display::DisplayMode;

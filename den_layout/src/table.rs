@@ -1,7 +1,7 @@
 //! Tabela flat que calcula retângulos de layout para a árvore Den.
 
 use crate::{
-    BODY_INDEX, DimensionRule, DisplayMode, LayoutEntry, LayoutRect, dimension, flex, spacing,
+    BODY_INDEX, DimensionRule, DisplayMode, LayoutEntry, LayoutRect, flex, height, spacing, width,
 };
 use std::sync::OnceLock;
 
@@ -89,12 +89,13 @@ impl LayoutTable {
         let gap = self.entries[parent_idx].gap;
         let content_x = parent_rect.x + padding;
         let content_width = spacing::content_width(parent_rect, padding);
-        let parent_content_height = crate::height::parent_content_height_for(
+        let parent_content_height = height::parent_content_height_for(
             self.entries[parent_idx].height_rule,
             parent_idx == BODY_INDEX,
             parent_rect.height,
             padding,
         );
+        let mut cursor_y = parent_rect.y + padding;
         let children = self.entries[parent_idx].children.clone();
 
         if children.is_empty() {
@@ -128,8 +129,16 @@ impl LayoutTable {
             }
         }
 
-        if self.entries[parent_idx].height_rule == DimensionRule::Auto && parent_idx != BODY_INDEX {
-            self.rects[parent_idx].height = cursor_y - parent_rect.y + padding;
+        if self.entries[parent_idx].height_rule == DimensionRule::Auto {
+            let content_height = cursor_y - parent_rect.y + padding;
+            if parent_idx == BODY_INDEX {
+                // Body cresce com o conteúdo mas nunca encolhe abaixo do viewport —
+                // garante que o background do body cobre a tela toda mesmo em páginas
+                // curtas, e acompanha o scroll em páginas longas.
+                self.rects[parent_idx].height = parent_rect.height.max(content_height);
+            } else {
+                self.rects[parent_idx].height = content_height;
+            }
         }
     }
 
@@ -140,6 +149,12 @@ impl LayoutTable {
         let gap = self.entries[parent_idx].gap;
         let content_x = parent_rect.x + padding;
         let content_width = spacing::content_width(parent_rect, padding);
+        let parent_content_height = height::parent_content_height_for(
+            self.entries[parent_idx].height_rule,
+            parent_idx == BODY_INDEX,
+            parent_rect.height,
+            padding,
+        );
         let children = self.entries[parent_idx].children.clone();
         if children.is_empty() {
             return;
@@ -185,7 +200,7 @@ impl LayoutTable {
                 remaining,
                 grow_total,
             );
-            let resolved_height = self.resolve_child_height(child_idx, 0.0);
+            let resolved_height = self.resolve_child_height(child_idx, parent_content_height);
             self.sizes[child_idx] = Some(resolved_width);
             self.rects[child_idx] = LayoutRect {
                 x: cursor_x + margin,
@@ -207,14 +222,14 @@ impl LayoutTable {
         }
     }
 
-    /// Resolve a largura de um filho no contexto do pai.
+    /// Resolve a largura de um filho no contexto do pai (delega pra `width` module).
     fn resolve_child_width(&self, child_idx: usize, parent_content_width: f32) -> f32 {
-        dimension::resolve_width(self.entries[child_idx].width_rule, parent_content_width)
+        width::resolve(self.entries[child_idx].width_rule, parent_content_width)
     }
 
-    /// Resolve a altura de um filho no contexto do pai.
+    /// Resolve a altura de um filho no contexto do pai (delega pra `height` module).
     fn resolve_child_height(&self, child_idx: usize, parent_content_height: f32) -> f32 {
-        dimension::resolve_height(self.entries[child_idx].height_rule, parent_content_height)
+        height::resolve(self.entries[child_idx].height_rule, parent_content_height)
     }
 
     /// Emite no stderr um snapshot da tabela resolvida.
