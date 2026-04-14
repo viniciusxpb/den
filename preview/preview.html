@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta http-equiv="refresh" content="3">
-  <title>Den Preview — home</title>
+  <title>Den Preview</title>
   <style>
 @font-face {
     font-family: "DenProportional";
@@ -20,12 +20,49 @@ html, body { margin: 0; padding: 0; }
 body {
     min-height: 100vh;
     font-family: "DenProportional", sans-serif;
+    background: #f2f4f8;
+    color: #18202f;
 }
 code, pre { font-family: "DenMonospace", monospace; }
+.den-preview-nav {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    gap: 8px;
+    padding: 12px;
+    background: rgba(242, 244, 248, 0.94);
+    border-bottom: 1px solid #d8deea;
+}
+.den-preview-nav a {
+    color: #18202f;
+    text-decoration: none;
+    font-size: 14px;
+    padding: 6px 10px;
+    border: 1px solid #c8d0de;
+    border-radius: 6px;
+    background: #ffffff;
+}
+.den-preview-pages {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    padding: 24px 0 48px;
+}
+.den-page-frame {
+    scroll-margin-top: 64px;
+}
+.den-page-frame h2 {
+    width: 1200px;
+    margin: 0 auto 8px;
+    font-size: 18px;
+    font-weight: 600;
+}
 .den-viewport {
     width: 1200px;
-    min-height: 100vh;
+    min-height: 480px;
     margin: 0 auto;
+    overflow: hidden;
 }
 .den-placeholder {
     /* Marcação visual pra `{{ self.campo }}` quando o preview não tem data real. */
@@ -40,13 +77,28 @@ input {
     outline: none;
 }
 
-/* ── Page stylesheet (CSS do SCSS da página, incluindo seletor `body`) ── */
-body {
+/* ── Page stylesheets escopados por página ── */
+.den-page-hello .page {
+    background: #eef8f3;
+    padding: 16px;
+    width: 100%;
+}
+.den-page-hello .message {
+    background: #ffffff;
+    border: 1px solid #cfe7db;
+    border-radius: 8px;
+    padding: 18px;
+    color: #15915b;
+    font-size: 26px;
+    width: 100%;
+}
+
+.den-page-home {
     background: #12121f;
     color: #c0c0d8;
     font-size: 13px;
 }
-.outer {
+.den-page-home .outer {
     background: #12121f;
     border-radius: 12px;
     padding: 12px;
@@ -54,22 +106,22 @@ body {
     width: 100%;
     gap: 12px;
 }
-.hero {
+.den-page-home .hero {
     background: #1a1a30;
     border-radius: 10px;
     padding: 20px;
     border: 1px solid #2a2a45;
     width: 100%;
 }
-.hero-title {
+.den-page-home .hero-title {
     color: #7eb8f7;
     font-size: 26px;
 }
-.hero-sub {
+.den-page-home .hero-sub {
     color: #6a6a8a;
     font-size: 13px;
 }
-.hero-action {
+.den-page-home .hero-action {
     background: #7eb8f7;
     border-radius: 6px;
     padding: 10px;
@@ -77,38 +129,38 @@ body {
     font-size: 13px;
     width: 200px;
 }
-.hero-action:hover {
+.den-page-home .hero-action:hover {
     background: #9ecafb;
     cursor: pointer;
 }
-.stat-card {
+.den-page-home .stat-card {
     background: #1a1a30;
     border-radius: 8px;
     padding: 14px;
     border: 1px solid #2a2a45;
     flex: 1;
 }
-.stat-label {
+.den-page-home .stat-label {
     color: #4a4a6a;
     font-size: 10px;
 }
-.stat-val-blue {
+.den-page-home .stat-val-blue {
     color: #7eb8f7;
     font-size: 22px;
 }
-.stat-val-green {
+.den-page-home .stat-val-green {
     color: #5cdb95;
     font-size: 22px;
 }
-.stat-val-red {
+.den-page-home .stat-val-red {
     color: #e94560;
     font-size: 22px;
 }
-.stat-val-orange {
+.den-page-home .stat-val-orange {
     color: #f0a050;
     font-size: 22px;
 }
-.btn-blue {
+.den-page-home .btn-blue {
     background: #7eb8f7;
     border-radius: 6px;
     padding: 10px;
@@ -116,11 +168,11 @@ body {
     font-size: 13px;
     flex: 1;
 }
-.btn-blue:hover {
+.den-page-home .btn-blue:hover {
     background: #9ecafb;
     cursor: pointer;
 }
-.btn-green {
+.den-page-home .btn-green {
     background: #12121f;
     border: 1px solid #5cdb95;
     border-radius: 6px;
@@ -129,12 +181,12 @@ body {
     font-size: 13px;
     flex: 1;
 }
-.btn-green:hover {
+.den-page-home .btn-green:hover {
     background: #5cdb95;
     color: #0d1b2a;
     cursor: pointer;
 }
-.btn-dim {
+.den-page-home .btn-dim {
     background: #12121f;
     border: 1px solid #3a3a55;
     border-radius: 6px;
@@ -143,12 +195,12 @@ body {
     font-size: 13px;
     flex: 1;
 }
-.btn-dim:hover {
+.den-page-home .btn-dim:hover {
     border: 1px solid #8a8aa8;
     color: #8a8aa8;
     cursor: pointer;
 }
-.input-section {
+.den-page-home .input-section {
     background: #1a1a30;
     border-radius: 10px;
     padding: 14px;
@@ -156,19 +208,19 @@ body {
     width: 100%;
     gap: 10px;
 }
-.section-label {
+.den-page-home .section-label {
     color: #6a6a8a;
     font-size: 11px;
 }
-.input-col {
+.den-page-home .input-col {
     padding: 4px;
     flex: 1;
 }
-.input-label {
+.den-page-home .input-label {
     color: #4a4a6a;
     font-size: 10px;
 }
-.text-input {
+.den-page-home .text-input {
     background: #12121f;
     border: 1px solid #3a3a55;
     border-radius: 6px;
@@ -177,36 +229,36 @@ body {
     font-size: 13px;
     width: 100%;
 }
-.preview-box {
+.den-page-home .preview-box {
     background: #12121f;
     border-radius: 6px;
     padding: 10px;
     border: 1px solid #2a2a45;
     width: 100%;
 }
-.preview-text {
+.den-page-home .preview-text {
     color: #8a8aa8;
     font-size: 13px;
 }
-.feat-card {
+.den-page-home .feat-card {
     background: #1a1a30;
     border-radius: 8px;
     padding: 14px;
     border: 1px solid #2a2a45;
     flex: 1;
 }
-.feat-card:hover {
+.den-page-home .feat-card:hover {
     border: 1px solid #7eb8f7;
 }
-.feat-title {
+.den-page-home .feat-title {
     color: #c0c0d8;
     font-size: 13px;
 }
-.feat-body {
+.den-page-home .feat-body {
     color: #6a6a8a;
     font-size: 11px;
 }
-.tags-box {
+.den-page-home .tags-box {
     background: #1a1a30;
     border-radius: 10px;
     padding: 14px;
@@ -214,7 +266,7 @@ body {
     width: 100%;
     gap: 8px;
 }
-.tag {
+.den-page-home .tag {
     background: #12121f;
     border: 1px solid #3a3a55;
     border-radius: 20px;
@@ -222,11 +274,11 @@ body {
     color: #7eb8f7;
     font-size: 12px;
 }
-.tag:hover {
+.den-page-home .tag:hover {
     border: 1px solid #7eb8f7;
     cursor: pointer;
 }
-.bar-100 {
+.den-page-home .bar-100 {
     background: #7eb8f7;
     border-radius: 4px;
     padding: 6px;
@@ -234,7 +286,7 @@ body {
     font-size: 11px;
     width: 100%;
 }
-.bar-75 {
+.den-page-home .bar-75 {
     background: #5cdb95;
     border-radius: 4px;
     padding: 6px;
@@ -242,7 +294,7 @@ body {
     font-size: 11px;
     width: 75%;
 }
-.bar-50 {
+.den-page-home .bar-50 {
     background: #f0a050;
     border-radius: 4px;
     padding: 6px;
@@ -250,7 +302,7 @@ body {
     font-size: 11px;
     width: 50%;
 }
-.bar-25 {
+.den-page-home .bar-25 {
     background: #e94560;
     border-radius: 4px;
     padding: 6px;
@@ -258,7 +310,7 @@ body {
     font-size: 11px;
     width: 25%;
 }
-.css-lab {
+.den-page-home .css-lab {
     background: #1a1a30;
     border-radius: 10px;
     padding: 14px;
@@ -266,7 +318,7 @@ body {
     width: 100%;
     gap: 10px;
 }
-.rule-color-font {
+.den-page-home .rule-color-font {
     background: #12121f;
     color: #f0a050;
     font-size: 18px;
@@ -274,14 +326,14 @@ body {
     border-radius: 6px;
     width: 100%;
 }
-.rule-padding-margin-wrap {
+.den-page-home .rule-padding-margin-wrap {
     background: #12121f;
     border: 1px solid #3a3a55;
     border-radius: 6px;
     padding: 4px;
     width: 100%;
 }
-.rule-padding-margin {
+.den-page-home .rule-padding-margin {
     background: #5cdb95;
     color: #0d1b2a;
     font-size: 12px;
@@ -290,10 +342,10 @@ body {
     border-radius: 6px;
     width: 220px;
 }
-.rule-gap-row {
+.den-page-home .rule-gap-row {
     gap: 12px;
 }
-.rule-flex-child {
+.den-page-home .rule-flex-child {
     background: #12121f;
     border: 1px solid #7eb8f7;
     border-radius: 6px;
@@ -302,7 +354,7 @@ body {
     font-size: 12px;
     flex: 1;
 }
-.rule-flex-fixed {
+.den-page-home .rule-flex-fixed {
     background: #7eb8f7;
     border-radius: 6px;
     padding: 10px;
@@ -310,10 +362,10 @@ body {
     font-size: 12px;
     width: 160px;
 }
-.rule-size-row {
+.den-page-home .rule-size-row {
     gap: 10px;
 }
-.rule-width-fixed {
+.den-page-home .rule-width-fixed {
     background: #e94560;
     border-radius: 6px;
     padding: 8px;
@@ -321,7 +373,7 @@ body {
     font-size: 12px;
     width: 180px;
 }
-.rule-width-percent {
+.den-page-home .rule-width-percent {
     background: #f0a050;
     border-radius: 6px;
     padding: 8px;
@@ -329,7 +381,7 @@ body {
     font-size: 12px;
     width: 40%;
 }
-.rule-height-fixed {
+.den-page-home .rule-height-fixed {
     background: #5cdb95;
     border-radius: 6px;
     padding: 8px;
@@ -338,7 +390,7 @@ body {
     width: 180px;
     height: 52px;
 }
-.rule-hover {
+.den-page-home .rule-hover {
     background: #12121f;
     border: 1px solid #3a3a55;
     border-radius: 6px;
@@ -347,12 +399,12 @@ body {
     font-size: 12px;
     width: 220px;
 }
-.rule-hover:hover {
+.den-page-home .rule-hover:hover {
     background: #7eb8f7;
     color: #0d1b2a;
     cursor: pointer;
 }
-.rule-grid-demo {
+.den-page-home .rule-grid-demo {
     display: grid;
     background: #12121f;
     border: 1px solid #2a2a45;
@@ -360,7 +412,7 @@ body {
     padding: 8px;
     width: 100%;
 }
-.rule-grid-child {
+.den-page-home .rule-grid-child {
     background: #3a3a55;
     color: #c0c0d8;
     font-size: 12px;
@@ -368,25 +420,142 @@ body {
     border-radius: 6px;
     width: 320px;
 }
-.display__flex {
+.den-page-home .display__flex {
     display: flex;
     width: 100%;
     gap: 10px;
 }
-.footer {
+.den-page-home .footer {
     padding: 8px;
     width: 100%;
 }
-.footer-text {
+.den-page-home .footer-text {
     color: #3a3a55;
     font-size: 11px;
+}
+
+.den-page-nodes .canvas {
+    background: #0d0d1a;
+    padding: 16px;
+    width: 100%;
+    height: 100%;
+}
+.den-page-nodes .node-row {
+    display: flex;
+    width: 100%;
+}
+.den-page-nodes .node {
+    background: #141425;
+    border: 1px solid #2a2a4a;
+    border-radius: 8px;
+    width: 260px;
+}
+.den-page-nodes .node-selected {
+    border: 2px solid #e94560;
+}
+.den-page-nodes .accent {
+    padding: 1px;
+    border-radius: 8px;
+}
+.den-page-nodes .accent-blue {
+    background: #4fc3f7;
+}
+.den-page-nodes .accent-yellow {
+    background: #ffd54f;
+}
+.den-page-nodes .accent-green {
+    background: #81c784;
+}
+.den-page-nodes .accent-red {
+    background: #e94560;
+}
+.den-page-nodes .node-header {
+    background: #1a1a35;
+    padding: 10px;
+}
+.den-page-nodes .node-title {
+    font-size: 13px;
+}
+.den-page-nodes .title-blue {
+    color: #4fc3f7;
+}
+.den-page-nodes .title-yellow {
+    color: #ffd54f;
+}
+.den-page-nodes .title-green {
+    color: #81c784;
+}
+.den-page-nodes .title-red {
+    color: #e94560;
+}
+.den-page-nodes .node-subtitle {
+    color: #c8c8e0-dim;
+    font-size: 10px;
+}
+.den-page-nodes .node-body {
+    padding: 20px;
+}
+
+.den-page-usuario .page {
+    background: #f5f7fb;
+    padding: 16px;
+    width: 100%;
+}
+.den-page-usuario .title {
+    background: #ffffff;
+    border: 1px solid #d8deea;
+    border-radius: 8px;
+    padding: 14px;
+    color: #2f8cff;
+    font-size: 24px;
+    width: 100%;
+}
+.den-page-usuario .text-input {
+    background: #ffffff;
+    border: 1px solid #d8deea;
+    border-radius: 8px;
+    padding: 14px;
+    color: #18202f;
+    font-size: 16px;
+    width: 100%;
+}
+.den-page-usuario .button {
+    background: #2f8cff;
+    border-radius: 8px;
+    padding: 14px;
+    color: #ffffff;
+    font-size: 16px;
+    width: 220px;
+}
+.den-page-usuario .button:hover {
+    background: #54a8ff;
+    cursor: pointer;
 }
 
   </style>
 </head>
 <body>
-  <div class="den-viewport">
-div class="outer">
+  <nav class="den-preview-nav">
+    <a href="#page-hello">hello</a>
+    <a href="#page-home">home</a>
+    <a href="#page-nodes">nodes</a>
+    <a href="#page-usuario">usuario</a>
+  </nav>
+  <main class="den-preview-pages">
+<section id="page-hello" class="den-page-frame">
+  <h2>hello</h2>
+  <div class="den-viewport den-page-hello">
+<div class="page">
+    <div class="message">Oi, <span class="den-placeholder">[usuario.nome]</span></div>
+</div>
+
+  </div>
+</section>
+
+<section id="page-home" class="den-page-frame">
+  <h2>home</h2>
+  <div class="den-viewport den-page-home">
+<div class="outer">
 
     
     <div class="hero">
@@ -413,7 +582,7 @@ div class="outer">
             <div class="stat-label">TAGS</div>
             <div class="stat-val-orange">5</div>
         </div>
-    
+    </div>
 
     
     <div class="display__flex">
@@ -506,5 +675,71 @@ div class="outer">
 
 
   </div>
+</section>
+
+<section id="page-nodes" class="den-page-frame">
+  <h2>nodes</h2>
+  <div class="den-viewport den-page-nodes">
+<div class="canvas">
+    <div class="node-row">
+
+        
+        <div class="node">
+            <div class="accent accent-blue"></div>
+            <div class="node-header">
+                <div class="node-title title-blue">Hermes</div>
+                <div class="node-subtitle">Message Router</div>
+            </div>
+            <div class="node-body"></div>
+        </div>
+
+        
+        <div class="node">
+            <div class="accent accent-yellow"></div>
+            <div class="node-header">
+                <div class="node-title title-yellow">Atlas</div>
+                <div class="node-subtitle">State Manager</div>
+            </div>
+            <div class="node-body"></div>
+        </div>
+
+        
+        <div class="node">
+            <div class="accent accent-green"></div>
+            <div class="node-header">
+                <div class="node-title title-green">Argus</div>
+                <div class="node-subtitle">Monitor</div>
+            </div>
+            <div class="node-body"></div>
+        </div>
+
+        
+        <div class="node node-selected">
+            <div class="accent accent-red"></div>
+            <div class="node-header">
+                <div class="node-title title-red">Athena</div>
+                <div class="node-subtitle">Decision Engine</div>
+            </div>
+            <div class="node-body"></div>
+        </div>
+
+    </div>
+</div>
+
+  </div>
+</section>
+
+<section id="page-usuario" class="den-page-frame">
+  <h2>usuario</h2>
+  <div class="den-viewport den-page-usuario">
+<div class="page">
+    <div class="title">Digite seu nome</div>
+    <input type="text" class="text-input" placeholder="Seu nome..." value="[usuario.nome]" readonly>
+    <div class="button" data-goto="HelloPage">Enviar usuario</div>
+</div>
+
+  </div>
+</section>
+  </main>
 </body>
 </html>

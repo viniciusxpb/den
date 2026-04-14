@@ -1,15 +1,16 @@
 //! Den Preview Generator
 //!
-//! Renderiza cada página (`.html` + `.scss` pair em `src/pages/`) como um HTML
-//! estático IDÊNTICO ao que o egui desenharia — mesma largura de viewport,
-//! mesmo box-sizing, mesmo layout engine (CSS flex match do runtime Den).
+//! Renderiza todas as páginas (`.html` + `.scss` pair em `src/pages/`) num
+//! único HTML estático — mesma largura de viewport, mesmo box-sizing, mesmo
+//! layout engine (CSS flex match do runtime Den).
 //!
-//! Saída: um arquivo por página em `preview/<pagename>.html`.
+//! Saída: `preview/preview.html`.
 //!
 //! Uso: `cargo run --bin preview`.
 
 use std::collections::HashMap;
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 
 /// Largura da janela egui em pixels (deve coincidir com `app_config::WINDOW_WIDTH = 1200`).
@@ -17,37 +18,41 @@ use std::path::{Path, PathBuf};
 /// contra o mesmo espaço disponível que o app nativo enxerga.
 const EGUI_WINDOW_WIDTH: u32 = 1200;
 
+/// Nome do único arquivo HTML gerado pelo preview.
+const PREVIEW_FILE_NAME: &str = "preview.html";
+
+/// Nome legado gerado pela versão antiga do preview.
+const LEGACY_INDEX_FILE_NAME: &str = "index.html";
+
+/// Intervalo de auto-refresh do preview no browser.
+const AUTO_REFRESH_SECONDS: u32 = 3;
+
 /// Quantas iterações simular em `<for>` quando não temos dados reais.
 const FOR_LOOP_ITERATIONS: usize = 3;
 
-fn main() {
+/// Página Den convertida para HTML estático, pronta para entrar no preview.
+struct PagePreview {
+    name: String,
+    css: String,
+    body_html: String,
+}
+
+fn main() -> io::Result<()> {
     let manifest = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
     let pages_dir = Path::new(&manifest).join("src/pages");
     let preview_dir = Path::new(&manifest).join("../preview");
 
-    fs::create_dir_all(&preview_dir).ok();
+    fs::create_dir_all(&preview_dir)?;
+    write_preview_fonts(&preview_dir)?;
 
-    // Escreve as fontes default do egui no preview dinamicamente.
-    // Os bytes vêm direto do crate `epaint_default_fonts` (mesmos bytes que o
-    // egui usa em runtime), então o browser renderiza com métricas idênticas.
-    let fonts_dir = preview_dir.join("fonts");
-    fs::create_dir_all(&fonts_dir).ok();
-    let _ = fs::write(
-        fonts_dir.join("Ubuntu-Light.ttf"),
-        epaint_default_fonts::UBUNTU_LIGHT,
-    );
-    let _ = fs::write(
-        fonts_dir.join("Hack-Regular.ttf"),
-        epaint_default_fonts::HACK_REGULAR,
-    );
-
-    let pairs = find_template_pairs(&pages_dir);
+    let mut pairs = find_template_pairs(&pages_dir);
+    pairs.sort_by(|a, b| a.0.cmp(&b.0));
     if pairs.is_empty() {
         eprintln!("preview: nenhum template em {}", pages_dir.display());
-        return;
+        return Ok(());
     }
 
-    let mut index_links: Vec<(String, String)> = Vec::new();
+    let mut pages = Vec::new();
 
     for (html_path, scss_path) in &pairs {
         let Some(page_name) = html_path
@@ -75,26 +80,81 @@ fn main() {
 
         let css = scss_to_css(&scss);
         let body_html = convert_page_body(&html);
-        let page_html = render_page(&page_name, &css, &body_html);
-
-        let out_file = preview_dir.join(format!("{page_name}.html"));
-        fs::write(&out_file, &page_html).expect("write preview page");
-        println!("preview: {} → {}", page_name, out_file.display());
-
-        index_links.push((page_name.clone(), format!("{page_name}.html")));
+        pages.push(PagePreview {
+            name: page_name,
+            css,
+            body_html,
+        });
     }
 
-    // Index com links pra cada página.
-    let index_html = render_index(&index_links);
-    let index_path = preview_dir.join("index.html");
-    fs::write(&index_path, index_html).expect("write index.html");
+    if pages.is_empty() {
+        eprintln!(
+            "preview: nenhum template pôde ser lido em {}",
+            pages_dir.display()
+        );
+        return Ok(());
+    }
 
-    // Sempre abre o index — não tem watch mode aqui, então não gera spam.
+    remove_legacy_preview_files(&preview_dir, &pages);
+
+    let preview_html = render_preview(&pages);
+    let preview_path = preview_dir.join(PREVIEW_FILE_NAME);
+    fs::write(&preview_path, preview_html)?;
+    println!(
+        "preview: {} páginas → {}",
+        pages.len(),
+        preview_path.display()
+    );
+
+    // Sempre abre o arquivo único — não tem watch mode aqui, então não gera spam.
     // Browsers costumam focar na tab existente se a URL já está aberta.
-    std::process::Command::new("xdg-open")
-        .arg(&index_path)
-        .spawn()
-        .ok();
+    open_preview_file(&preview_path);
+
+    Ok(())
+}
+
+/// Escreve as fontes default do egui no diretório do preview.
+fn write_preview_fonts(preview_dir: &Path) -> io::Result<()> {
+    // Os bytes vêm direto do crate `epaint_default_fonts` (mesmos bytes que o
+    // egui usa em runtime), então o browser renderiza com métricas idênticas.
+    let fonts_dir = preview_dir.join("fonts");
+    fs::create_dir_all(&fonts_dir)?;
+    fs::write(
+        fonts_dir.join("Ubuntu-Light.ttf"),
+        epaint_default_fonts::UBUNTU_LIGHT,
+    )?;
+    fs::write(
+        fonts_dir.join("Hack-Regular.ttf"),
+        epaint_default_fonts::HACK_REGULAR,
+    )?;
+    Ok(())
+}
+
+/// Remove HTMLs gerados pela versão antiga de preview por página.
+fn remove_legacy_preview_files(preview_dir: &Path, pages: &[PagePreview]) {
+    remove_legacy_preview_file(&preview_dir.join(LEGACY_INDEX_FILE_NAME));
+    for page in pages {
+        remove_legacy_preview_file(&preview_dir.join(format!("{}.html", page.name)));
+    }
+}
+
+/// Remove um arquivo legado se existir, avisando no stderr quando falhar.
+fn remove_legacy_preview_file(path: &Path) {
+    match fs::remove_file(path) {
+        Ok(()) => {}
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+        Err(err) => eprintln!("preview: falha ao remover {}: {err}", path.display()),
+    }
+}
+
+/// Abre o preview no browser padrão quando o sistema possui `xdg-open`.
+fn open_preview_file(path: &Path) {
+    if let Err(err) = std::process::Command::new("xdg-open").arg(path).spawn() {
+        eprintln!(
+            "preview: gerado, mas falhou abrir {}: {err}",
+            path.display()
+        );
+    }
 }
 
 // ============================================================================
@@ -549,20 +609,57 @@ fn den_tag_to_html(tag: &str) -> &str {
 // Output HTML
 // ============================================================================
 
-/// Renderiza a página completa com CSS injetado. Sem labels, sem chrome — o
-/// container externo tem o tamanho exato da janela egui (`EGUI_WINDOW_WIDTH`).
-fn render_page(page_name: &str, css: &str, body_html: &str) -> String {
+/// Renderiza o arquivo completo de preview com todas as páginas empilhadas.
+fn render_preview(pages: &[PagePreview]) -> String {
+    let nav_items = pages
+        .iter()
+        .map(|page| {
+            let slug = page_slug(&page.name);
+            let name = escape_html(&page.name);
+            format!(r##"<a href="#page-{slug}">{name}</a>"##)
+        })
+        .collect::<Vec<_>>()
+        .join("\n    ");
+
+    let page_styles = pages
+        .iter()
+        .map(|page| {
+            let page_class = format!("den-page-{}", page_slug(&page.name));
+            scope_page_css(&page_class, &page.css)
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let sections = pages
+        .iter()
+        .map(|page| {
+            let slug = page_slug(&page.name);
+            let page_class = format!("den-page-{slug}");
+            let name = escape_html(&page.name);
+            format!(
+                r#"<section id="page-{slug}" class="den-page-frame">
+  <h2>{name}</h2>
+  <div class="den-viewport {page_class}">
+{body_html}
+  </div>
+</section>"#,
+                body_html = page.body_html
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n");
+
     // Reset mínimo + box-sizing (igual ao layout engine Den, border-box).
     // Font-face usa os mesmos bytes TTF que o egui embarca (Ubuntu-Light p/ proporcional,
     // Hack p/ mono). Os arquivos são escritos pelo `main` em `preview/fonts/`.
-    // NÃO define background/color do body — vem 100% do SCSS via seletor `body`.
+    // O CSS de cada página é escopado no wrapper dela pra evitar colisão de classes.
     format!(
         r#"<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="refresh" content="3">
-  <title>Den Preview — {page_name}</title>
+  <meta http-equiv="refresh" content="{AUTO_REFRESH_SECONDS}">
+  <title>Den Preview</title>
   <style>
 @font-face {{
     font-family: "DenProportional";
@@ -579,12 +676,49 @@ html, body {{ margin: 0; padding: 0; }}
 body {{
     min-height: 100vh;
     font-family: "DenProportional", sans-serif;
+    background: #f2f4f8;
+    color: #18202f;
 }}
 code, pre {{ font-family: "DenMonospace", monospace; }}
+.den-preview-nav {{
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    gap: 8px;
+    padding: 12px;
+    background: rgba(242, 244, 248, 0.94);
+    border-bottom: 1px solid #d8deea;
+}}
+.den-preview-nav a {{
+    color: #18202f;
+    text-decoration: none;
+    font-size: 14px;
+    padding: 6px 10px;
+    border: 1px solid #c8d0de;
+    border-radius: 6px;
+    background: #ffffff;
+}}
+.den-preview-pages {{
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    padding: 24px 0 48px;
+}}
+.den-page-frame {{
+    scroll-margin-top: 64px;
+}}
+.den-page-frame h2 {{
+    width: {EGUI_WINDOW_WIDTH}px;
+    margin: 0 auto 8px;
+    font-size: 18px;
+    font-weight: 600;
+}}
 .den-viewport {{
     width: {EGUI_WINDOW_WIDTH}px;
-    min-height: 100vh;
+    min-height: 480px;
     margin: 0 auto;
+    overflow: hidden;
 }}
 .den-placeholder {{
     /* Marcação visual pra `{{{{ self.campo }}}}` quando o preview não tem data real. */
@@ -599,47 +733,86 @@ input {{
     outline: none;
 }}
 
-/* ── Page stylesheet (CSS do SCSS da página, incluindo seletor `body`) ── */
-{css}
+/* ── Page stylesheets escopados por página ── */
+{page_styles}
   </style>
 </head>
 <body>
-  <div class="den-viewport">
-{body_html}
-  </div>
+  <nav class="den-preview-nav">
+    {nav_items}
+  </nav>
+  <main class="den-preview-pages">
+{sections}
+  </main>
 </body>
 </html>"#
     )
 }
 
-fn render_index(links: &[(String, String)]) -> String {
-    // Index é uma lista simples de páginas disponíveis. Sem cores hardcoded.
-    let items: String = links
-        .iter()
-        .map(|(name, href)| format!(r#"<li><a href="{href}">{name}</a></li>"#))
-        .collect::<Vec<_>>()
-        .join("\n");
-    format!(
-        r#"<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8">
-  <title>Den Preview — Index</title>
-  <style>
-body {{ font-family: -apple-system, sans-serif; padding: 40px; }}
-h1 {{ font-weight: 300; }}
-ul {{ list-style: none; padding: 0; }}
-li {{ margin: 8px 0; font-size: 18px; }}
-  </style>
-</head>
-<body>
-  <h1>Den — Preview</h1>
-  <ul>
-{items}
-  </ul>
-</body>
-</html>"#
-    )
+/// Escopa um CSS de página para o wrapper da página agregada no preview.
+fn scope_page_css(page_class: &str, css: &str) -> String {
+    let mut out = String::new();
+    for line in css.lines() {
+        let trimmed = line.trim();
+        if trimmed.ends_with('{') && !trimmed.starts_with('@') {
+            let selector = trimmed.trim_end_matches('{').trim();
+            let scoped = selector
+                .split(',')
+                .map(|part| scope_selector(page_class, part.trim()))
+                .collect::<Vec<_>>()
+                .join(", ");
+            out.push_str(&scoped);
+            out.push_str(" {\n");
+        } else {
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+    out
+}
+
+/// Prefixa um seletor CSS simples com a classe da página.
+fn scope_selector(page_class: &str, selector: &str) -> String {
+    if selector == "body" || selector == "html" {
+        return format!(".{page_class}");
+    }
+    if let Some(rest) = selector.strip_prefix("body") {
+        return format!(".{page_class}{rest}");
+    }
+    if let Some(rest) = selector.strip_prefix("html") {
+        return format!(".{page_class}{rest}");
+    }
+    if selector.starts_with(':') {
+        return format!(".{page_class}{selector}");
+    }
+    format!(".{page_class} {selector}")
+}
+
+/// Converte nome de página para id/classe CSS previsível.
+fn page_slug(name: &str) -> String {
+    let mut slug = String::new();
+    for ch in name.chars() {
+        if ch.is_ascii_alphanumeric() {
+            slug.push(ch.to_ascii_lowercase());
+        } else if !slug.ends_with('-') {
+            slug.push('-');
+        }
+    }
+    let slug = slug.trim_matches('-');
+    if slug.is_empty() {
+        "page".to_string()
+    } else {
+        slug.to_string()
+    }
+}
+
+/// Escapa texto usado em labels do HTML gerado.
+fn escape_html(input: &str) -> String {
+    input
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 
 // ============================================================================

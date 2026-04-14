@@ -5,7 +5,7 @@ dev: ## Hot reload (requires cargo-watch)
 	cargo watch -w den_app/src -w den_macros/src -i den_macros/src/lib.rs \
 		-s 'touch den_macros/src/lib.rs && cargo run --bin den_app'
 
-preview: ## Gera preview HTML dos componentes com atributo dev
+preview: ## Gera preview/preview.html com todas as páginas
 	cargo run --bin preview
 
 review: ## Copia REVIEW_PROMPT.md + diff para o clipboard

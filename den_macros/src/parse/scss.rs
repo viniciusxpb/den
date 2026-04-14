@@ -19,6 +19,9 @@ pub fn parse_scss(input: &str) -> StyleMap {
         if pos >= bytes.len() {
             break;
         }
+        if skip_comment(bytes, &mut pos) {
+            continue;
+        }
 
         // Pula declarações de variáveis ($var: value;)
         if bytes[pos] == b'$' {
@@ -72,6 +75,9 @@ pub fn parse_scss(input: &str) -> StyleMap {
 
         loop {
             skip_whitespace(bytes, &mut pos);
+            if skip_comment(bytes, &mut pos) {
+                continue;
+            }
             if pos >= bytes.len() || bytes[pos] == b'}' {
                 if pos < bytes.len() {
                     pos += 1; // skip '}'
@@ -82,7 +88,13 @@ pub fn parse_scss(input: &str) -> StyleMap {
             let prop_name = read_css_identifier(bytes, &mut pos);
             skip_whitespace(bytes, &mut pos);
 
+            if prop_name.is_empty() {
+                pos += 1;
+                continue;
+            }
+
             if pos >= bytes.len() || bytes[pos] != b':' {
+                skip_invalid_declaration(bytes, &mut pos);
                 continue;
             }
             pos += 1; // skip ':'
@@ -154,6 +166,9 @@ fn collect_variables(input: &str) -> HashMap<String, String> {
         skip_whitespace(bytes, &mut pos);
         if pos >= bytes.len() {
             break;
+        }
+        if skip_comment(bytes, &mut pos) {
+            continue;
         }
 
         if bytes[pos] == b'$' {
@@ -233,6 +248,42 @@ fn skip_whitespace(bytes: &[u8], pos: &mut usize) {
     }
 }
 
+/// Pula comentários `// ...` e `/* ... */`, retornando se consumiu algo.
+fn skip_comment(bytes: &[u8], pos: &mut usize) -> bool {
+    if *pos + 1 >= bytes.len() || bytes[*pos] != b'/' {
+        return false;
+    }
+
+    if bytes[*pos + 1] == b'/' {
+        *pos += 2;
+        while *pos < bytes.len() && bytes[*pos] != b'\n' {
+            *pos += 1;
+        }
+        return true;
+    }
+
+    if bytes[*pos + 1] == b'*' {
+        *pos += 2;
+        while *pos + 1 < bytes.len() && !(bytes[*pos] == b'*' && bytes[*pos + 1] == b'/') {
+            *pos += 1;
+        }
+        *pos = (*pos + 2).min(bytes.len());
+        return true;
+    }
+
+    false
+}
+
+/// Avança até o fim de uma declaração inválida sem consumir a chave de fechamento.
+fn skip_invalid_declaration(bytes: &[u8], pos: &mut usize) {
+    while *pos < bytes.len() && bytes[*pos] != b';' && bytes[*pos] != b'}' {
+        *pos += 1;
+    }
+    if *pos < bytes.len() && bytes[*pos] == b';' {
+        *pos += 1;
+    }
+}
+
 fn read_identifier(bytes: &[u8], pos: &mut usize) -> String {
     let start = *pos;
     while *pos < bytes.len() && is_ident_char(bytes[*pos]) {
@@ -258,4 +309,56 @@ fn read_css_identifier(bytes: &[u8], pos: &mut usize) -> String {
     std::str::from_utf8(&bytes[start..*pos])
         .unwrap_or("")
         .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_scss;
+
+    #[test]
+    fn line_comment_inside_rule_is_ignored() {
+        let styles = parse_scss(
+            r#"
+            .card {
+                color: #fff;
+                // comentário entre declarações
+                background: #000;
+            }
+            "#,
+        );
+
+        let card = styles.get("card").expect("card style");
+        assert_eq!(card.color, Some((255, 255, 255)));
+        assert_eq!(card.background, Some((0, 0, 0)));
+    }
+
+    #[test]
+    fn block_comment_inside_rule_is_ignored() {
+        let styles = parse_scss(
+            r#"
+            .card {
+                /* comentário entre declarações */
+                padding: 12px;
+            }
+            "#,
+        );
+
+        let card = styles.get("card").expect("card style");
+        assert_eq!(card.padding, Some(12.0));
+    }
+
+    #[test]
+    fn invalid_declaration_advances_to_next_property() {
+        let styles = parse_scss(
+            r#"
+            .card {
+                /
+                color: #123456;
+            }
+            "#,
+        );
+
+        let card = styles.get("card").expect("card style");
+        assert_eq!(card.color, Some((18, 52, 86)));
+    }
 }

@@ -9,8 +9,7 @@
 //! pros handlers (`(click)`, `goto`, `InputChanged` pra two-way binding).
 
 use den_layout::{
-    DenNodeId, DenRouteState, LayoutRect, LayoutTable, PaintStyle, RenderKind, RenderNode,
-    RenderTree, Rgb,
+    DenNodeId, DenRouteState, LayoutRect, LayoutTable, PaintStyle, RenderKind, RenderTree, Rgb,
 };
 use eframe::egui::{self, Color32, FontId, Id, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, Vec2};
 
@@ -241,9 +240,6 @@ fn paint_node(
             events.push(PaintEvent::Goto { slot: g });
         }
     }
-
-    let _ = (node, events); // suppress warnings while features incomplete
-    let _ = RenderNode::new; // força referência ao construtor; silencia dead_code se não usado
 }
 
 /// Converte um `LayoutRect` (CSS px) pra `Rect` do egui em espaço de tela.
@@ -350,10 +346,13 @@ fn paint_input(
         .unwrap_or_default();
 
     // Posição do caret (mantida entre frames).
-    let mut cursor = state
-        .cursor_of(node_id)
-        .unwrap_or(value.len())
-        .min(value.len());
+    let mut cursor = clamp_char_boundary(
+        &value,
+        state
+            .cursor_of(node_id)
+            .unwrap_or(value.len())
+            .min(value.len()),
+    );
 
     // Processa eventos de teclado quando focado. Emite InputChanged se o valor muda.
     let mut new_value = value.clone();
@@ -436,7 +435,7 @@ fn paint_input(
     }
 
     // Persiste a posição do caret clampada ao novo valor.
-    cursor = cursor.min(new_value.len());
+    cursor = clamp_char_boundary(&new_value, cursor.min(new_value.len()));
     state.set_cursor(node_id, cursor);
 
     if changed {
@@ -491,7 +490,9 @@ fn paint_input(
                 .color
                 .map(rgb_to_color)
                 .unwrap_or(Color32::from_gray(220));
-            let pre = &display_value[..cursor.min(display_value.len())];
+            let display_cursor =
+                clamp_char_boundary(&display_value, cursor.min(display_value.len()));
+            let pre = &display_value[..display_cursor];
             let pre_galley = ui.fonts_mut(|f| f.layout_no_wrap(pre.to_string(), font, caret_color));
             let caret_x = text_pos.x + pre_galley.rect.width();
             let top = rect.min.y + INPUT_TEXT_PADDING_Y * scale;
@@ -504,6 +505,15 @@ fn paint_input(
         // Solicita repaint contínuo pra piscar o caret.
         ui.ctx().request_repaint();
     }
+}
+
+/// Ajusta um offset para o boundary UTF-8 anterior, se necessário.
+fn clamp_char_boundary(s: &str, offset: usize) -> usize {
+    let mut i = offset.min(s.len());
+    while i > 0 && !s.is_char_boundary(i) {
+        i -= 1;
+    }
+    i
 }
 
 /// Retorna o byte offset do caractere anterior ao offset dado (UTF-8 safe).
@@ -534,4 +544,25 @@ fn next_char_boundary(s: &str, offset: usize) -> usize {
 /// Conversão RGB → Color32 opaco.
 fn rgb_to_color(rgb: Rgb) -> Color32 {
     Color32::from_rgb(rgb.0, rgb.1, rgb.2)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{clamp_char_boundary, next_char_boundary, prev_char_boundary};
+
+    #[test]
+    fn clamps_cursor_to_previous_utf8_boundary() {
+        let value = "açb";
+
+        assert_eq!(clamp_char_boundary(value, 2), 1);
+        assert_eq!(clamp_char_boundary(value, value.len() + 8), value.len());
+    }
+
+    #[test]
+    fn moves_cursor_across_utf8_chars() {
+        let value = "açb";
+
+        assert_eq!(next_char_boundary(value, 1), 3);
+        assert_eq!(prev_char_boundary(value, 3), 1);
+    }
 }

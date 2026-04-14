@@ -4,7 +4,7 @@
 
 **Write HTML + SCSS. Compile to native desktop UI.**
 
-Den is a Rust framework that transforms familiar web templates into native [egui](https://github.com/emilg/egui) code at compile time. No runtime overhead. No webview. Just fast, native GUI with a developer experience you already know.
+Den is a Rust framework that transforms familiar web templates into native [egui](https://github.com/emilg/egui) code at compile time. No runtime template parsing. No webview. Just fast, native GUI with a developer experience you already know.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.88%2B-orange.svg)](https://www.rust-lang.org)
@@ -281,13 +281,13 @@ Watches `den_app/src` and `den_macros/src`, recompiles and reruns on every chang
 
 ### HTML Preview (`make preview`)
 
-Generates `preview/index.html` with all elements tagged `dev` in your templates:
+Generates `preview/preview.html` with every page in one auto-refreshing file:
 
 ```html
-<div dev class="my-component">...</div>
+<div class="my-component">...</div>
 ```
 
-Components render as static HTML with real CSS, placeholder values for `{{ expr }}`, and auto-refresh every 3 seconds.
+Pages render as static HTML with real CSS, scoped page styles, placeholder values for `{{ expr }}`, and auto-refresh every 3 seconds.
 
 ### Style Editor (`cargo run --bin style_editor`)
 
@@ -303,25 +303,26 @@ Changes write back to disk with 300ms debounce. The `cargo-watch` in `make dev` 
 
 | SCSS Property    | Maps To                    | Example              |
 |------------------|----------------------------|----------------------|
-| `color`          | `RichText::color()`        | `#e94560`            |
-| `font-size`      | `RichText::size()`         | `24` or `24px`       |
-| `background`     | `Frame::fill()`            | `#1a1a2e`            |
-| `padding`        | `Frame::inner_margin()`    | `16` or `16px`       |
-| `margin`         | `Frame::outer_margin()` + layout | `16` or `16px` |
-| `display: flex`  | `ui.horizontal()`          | `display: flex`      |
-| `border`         | `Frame::stroke()`          | `1px solid #e94560`  |
-| `border-radius`  | `Frame::corner_radius()`   | `8` or `8px`         |
-| `width`          | `ui.set_width()`           | `100%`, `200px`      |
-| `height`         | `ui.set_height()`          | `100%`, `200px`      |
-| `gap`            | egui item spacing + layout | `8` or `8px`         |
+| `color`          | `PaintStyle.color` / text galley | `#e94560`            |
+| `font-size`      | `FontId::proportional()`   | `24` or `24px`       |
+| `background`     | `painter.rect_filled()`    | `#1a1a2e`            |
+| `padding`        | `LayoutIntent.padding`     | `16` or `16px`       |
+| `margin`         | layout positioning         | `16` or `16px`       |
+| `display: flex`  | `DisplayMode::Flex`        | `display: flex`      |
+| `border`         | `painter.rect_stroke()`    | `1px solid #e94560`  |
+| `border-radius`  | rect corner radius         | `8` or `8px`         |
+| `width`          | `DimensionRule`            | `100%`, `200px`      |
+| `height`         | `DimensionRule`            | `100%`, `200px`      |
+| `gap`            | `LayoutIntent.gap`         | `8` or `8px`         |
 | `cursor: pointer`| `CursorIcon::PointingHand` | in `:hover` blocks   |
 
 ## Supported HTML Tags
 
 | Tag                          | Maps To          |
 |------------------------------|------------------|
-| `<div>`, `<span>`, `<p>`    | `ui.label()`     |
-| `<heading>`, `<h1>`--`<h3>` | `ui.heading()`   |
+| `<div>`, `<span>`, `<p>`    | `RenderKind::Text` or `Container` |
+| `<heading>`, `<h1>`--`<h3>` | `RenderKind::Text { heading: true }` |
+| `<input>`                    | `RenderKind::Input` |
 | `<for>`                      | `for` loop       |
 | `<if>` / `<else>`           | `if` / `else`    |
 
@@ -334,13 +335,13 @@ den/
 │       ├── lib.rs           # Entry point (~60 lines)
 │       ├── input.rs         # Macro input parsing (syn)
 │       ├── types/           # Shared types (RawNode, DenNode, DenVisual, StyleRule)
-│       │   ├── raw.rs, style.rs, resolved.rs, walk.rs
+│       │   ├── raw.rs, style.rs, resolved.rs
 │       ├── resolve.rs       # Phase 2: style resolution
 │       ├── parse/           # Phase 1: HTML + SCSS parsers
 │       │   ├── html.rs, scss.rs, text.rs, color.rs
 │       └── codegen/         # Phase 3: egui code generation
 │           ├── element.rs, click.rs, flex.rs, input.rs
-│           ├── control_flow.rs, egui_backend.rs, text.rs
+│           ├── control_flow.rs, render_tree.rs, text.rs
 ├── den_layout/              # Runtime layout system
 │   └── src/
 │       ├── lib.rs           # LayoutTable, rect-based layout runtime

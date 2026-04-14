@@ -11,13 +11,14 @@ Den is a Rust framework that compiles HTML + SCSS templates into native egui des
 ```bash
 cargo build                    # Build everything
 cargo run --bin den_app        # Run the demo application
-cargo test                     # Run all tests (22 layout + 22 parse)
+cargo test --workspace         # Run all workspace tests
 cargo test -p den_layout       # Layout engine + RenderTree tests only
 cargo test -p den_macros       # Parser tests only
 cargo test test_name           # Run a single test by name
-cargo clippy                   # Lint
+cargo clippy --workspace --all-targets -- -W clippy::all
+cargo fmt --check              # Verify formatting
 make dev                       # Hot reload dev mode (requires cargo-watch)
-make preview                   # Generate HTML preview of dev-tagged components
+make preview                   # Generate preview/preview.html with all pages
 make help                      # List all makefile commands
 ```
 
@@ -257,7 +258,7 @@ Supported HTML tags: `div`, `span`, `p`, `heading`/`h1`-`h3`, `input`, `for`, `i
 
 ### Dev tools (binaries in `den_app/src/bin/`)
 
-- `preview.rs` — Generates `preview/index.html` with all `dev`-tagged elements as static HTML. Has its own HTML/SCSS parsers (duplicated from `den_macros` — see PENDING.md).
+- `preview.rs` — Generates a single `preview/preview.html` containing all pages as static HTML. Page CSS is scoped per preview section to avoid class collisions. Has its own HTML/SCSS helpers (duplicated from `den_macros` — see PENDING.md).
 - `style_editor.rs` — Separate egui window with visual controls per SCSS class. Writes back with surgical byte-offset replacement and 300ms debounce. Resolves `$variables` to literals on write-back.
 
 ### Known limitations

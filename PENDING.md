@@ -16,8 +16,6 @@ Com args, hoje o codegen retorna erro explícito. O bloqueio: args dentro de `<f
 
 ## Elemento raiz `<panel>` nos templates Den
 
-## Elemento raiz `<panel>` nos templates Den
-
 Ideia: templates deveriam ter um elemento raiz explícito (`<panel>` ou similar) que mapeia pro `CentralPanel` no egui e pro container do preview no browser.
 
 Hoje `home.html` começa direto com os filhos. O correto seria:
@@ -32,7 +30,7 @@ No egui, `<panel>` mapearia para `ScrollArea::vertical()` ou simplesmente o cont
 
 Benefício: `width: 100%` em qualquer filho sempre resolve relativo ao painel pai, sincronizando preview e egui naturalmente — sem hardcodar largura.
 
-`EGUI_WINDOW_WIDTH` em `preview.rs` está reservado pra quando isso for implementado.
+`EGUI_WINDOW_WIDTH` em `preview.rs` continua sendo o encaixe atual, mas a decisão de API (`<panel>`, atributo no template, ou configuração de app) ainda precisa ser tomada.
 
 ---
 
@@ -49,6 +47,43 @@ Isso é um comportamento intencional por ora (o usuário pode intencionalmente q
 ## Extração pra `den_core` (elimina parsers duplicados)
 
 Os parsers HTML/SCSS estão duplicados entre `den_macros`, `preview.rs` e `style_editor.rs`. Criar um crate `den_core` com parsers + types compartilhados eliminaria a triplicação de `collect_scss_vars` e helpers de HTML.
+
+**Decisão pendente**: definir se `den_core` deve ser uma crate pública do workspace (API reutilizável por apps) ou apenas uma crate interna para dividir responsabilidades entre macro, preview e style editor.
+
+---
+
+## Política para `display: grid`
+
+Hoje o parser aceita `display: grid`, mas `den_layout::LayoutTable` trata `Grid` como fluxo block. Isso é útil para experimentação, porém pode induzir usuário a achar que grid real já existe.
+
+**Decisão pendente**: escolher entre:
+1. gerar erro/aviso forte para `display: grid` até existir grid real;
+2. manter fallback para block e documentar como experimental;
+3. implementar um grid mínimo no layout engine.
+
+---
+
+## Modelo avançado de input
+
+O input atual é pintado manualmente e cobre foco, caret, texto, backspace/delete, setas, home/end e blur. Ainda faltam seleção, clipboard, tab focus, mouse positioning e composição IME.
+
+**Decisão pendente**: continuar evoluindo o input manual para preservar o painter puro do Den, ou introduzir uma ponte controlada para widgets egui nativos em inputs complexos.
+
+---
+
+## Quebra de módulos grandes
+
+Arquivos ainda grandes:
+- `den_app/src/bin/style_editor.rs`
+- `den_app/src/bin/preview.rs`
+- `den_layout/src/table.rs`
+- `den_app/src/den_paint.rs`
+- `den_macros/src/parse/html.rs`
+
+**Fix futuro**: dividir por responsabilidade sem mudar comportamento. Sugestão inicial:
+- `preview`: discovery, scss_to_css, html_convert, render_html.
+- `style_editor`: model, parser, writer, controls, app.
+- `den_paint`: tree, node, text, input, geometry.
 
 ---
 
