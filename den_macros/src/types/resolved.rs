@@ -19,6 +19,10 @@ pub struct DenVisual {
     pub border_radius: Option<f32>,
     pub width: WidthValue,
     pub height: WidthValue,
+    pub min_width: Option<WidthValue>,
+    pub max_width: Option<WidthValue>,
+    pub min_height: Option<WidthValue>,
+    pub max_height: Option<WidthValue>,
     pub gap: Option<f32>,
     pub cursor_pointer: bool,
     /// `flex: 1` — cresce pra preencher o share do flex pai igualmente.
@@ -41,6 +45,10 @@ impl DenVisual {
             border_radius: rule.border_radius,
             width: rule.width,
             height: rule.height,
+            min_width: rule.min_width,
+            max_width: rule.max_width,
+            min_height: rule.min_height,
+            max_height: rule.max_height,
             gap: rule.gap,
             cursor_pointer: rule.cursor_pointer,
             flex_grow: rule.flex_grow,
@@ -86,6 +94,18 @@ impl DenVisual {
         }
         if other.height != WidthValue::Auto {
             self.height = other.height;
+        }
+        if other.min_width.is_some() {
+            self.min_width = other.min_width;
+        }
+        if other.max_width.is_some() {
+            self.max_width = other.max_width;
+        }
+        if other.min_height.is_some() {
+            self.min_height = other.min_height;
+        }
+        if other.max_height.is_some() {
+            self.max_height = other.max_height;
         }
         if other.gap.is_some() {
             self.gap = other.gap;

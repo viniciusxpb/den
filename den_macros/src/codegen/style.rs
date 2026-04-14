@@ -64,8 +64,10 @@ pub(super) fn layout_intent_tokens(el: &DenElement) -> proc_macro2::TokenStream 
     let visual = &el.visual;
     let width_rule = dimension_rule_tokens(visual.width);
     let height_rule = dimension_rule_tokens(visual.height);
-    // Usa `flex::is_flex_container` pra garantir que a detecção de flex mora
-    // num lugar só (reaproveita quando precisar de lógica mais fina por flex).
+    let min_width = optional_dimension_tokens(visual.min_width);
+    let max_width = optional_dimension_tokens(visual.max_width);
+    let min_height = optional_dimension_tokens(visual.min_height);
+    let max_height = optional_dimension_tokens(visual.max_height);
     let display = display_mode_tokens(if is_flex_container(el) {
         DisplayMode::Flex
     } else {
@@ -74,6 +76,7 @@ pub(super) fn layout_intent_tokens(el: &DenElement) -> proc_macro2::TokenStream 
     let padding = visual.padding.unwrap_or(0.0);
     let margin = visual.margin.unwrap_or(0.0);
     let gap = visual.gap.unwrap_or(0.0);
+    let border_width = visual.border.map(|b| b.width).unwrap_or(0.0);
     let flex_grow: f32 = if has_flex_grow(el) { 1.0 } else { 0.0 };
     let intrinsic_width = intrinsic_width_for(el);
     let intrinsic_height = intrinsic_height_for(el);
@@ -82,13 +85,29 @@ pub(super) fn layout_intent_tokens(el: &DenElement) -> proc_macro2::TokenStream 
         den_layout::LayoutIntent {
             width_rule: #width_rule,
             height_rule: #height_rule,
+            min_width: #min_width,
+            max_width: #max_width,
+            min_height: #min_height,
+            max_height: #max_height,
             display: #display,
             padding: #padding as f32,
+            border_width: #border_width as f32,
             margin: #margin as f32,
             gap: #gap as f32,
             flex_grow: #flex_grow as f32,
             intrinsic_width: #intrinsic_width as f32,
             intrinsic_height: #intrinsic_height as f32,
+        }
+    }
+}
+
+/// Emite `Option<DimensionRule>` pra min/max-width/height.
+pub(super) fn optional_dimension_tokens(w: Option<WidthValue>) -> proc_macro2::TokenStream {
+    match w {
+        None => quote! { None },
+        Some(v) => {
+            let rule = dimension_rule_tokens(v);
+            quote! { Some(#rule) }
         }
     }
 }

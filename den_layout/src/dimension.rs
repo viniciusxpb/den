@@ -3,12 +3,13 @@
 //! Os resolvers específicos vivem em `width.rs` e `height.rs`.
 
 /// Como uma dimensão foi declarada no SCSS.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum DimensionRule {
     /// Sem width/height no SCSS.
     ///
     /// - Com filhos: segue o contexto do pai.
     /// - Sem filhos: encaixa no pai para largura, altura natural para altura.
+    #[default]
     Auto,
     /// Valor fixo em pixels: `width: 200px` ou `height: 200px`.
     Px(f32),

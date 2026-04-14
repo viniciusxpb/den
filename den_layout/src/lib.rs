@@ -4,6 +4,7 @@
 //! algoritmo de layout dos filhos: block, flex e futuramente grid. Roda a cada
 //! frame porque a janela pode mudar de tamanho.
 
+mod config;
 mod dimension;
 mod display;
 mod element_style;
@@ -11,9 +12,9 @@ mod entry;
 mod flex;
 mod geometry;
 mod height;
+mod margin;
 mod render;
 mod router;
-mod spacing;
 mod state;
 mod table;
 mod width;

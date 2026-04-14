@@ -50,16 +50,27 @@ pub enum RenderKind {
 }
 
 /// Dados que alimentam uma `LayoutEntry` na tabela de layout.
+/// Caixa externa (margin) envolve caixa da borda (border) envolve caixa de padding
+/// envolve caixa de conteúdo. O box model CSS canônico.
 #[derive(Debug, Clone)]
 pub struct LayoutIntent {
     pub width_rule: DimensionRule,
     pub height_rule: DimensionRule,
+    /// Limite mínimo aplicado depois do `width_rule` resolver.
+    pub min_width: Option<DimensionRule>,
+    /// Limite máximo aplicado depois do `width_rule` resolver.
+    pub max_width: Option<DimensionRule>,
+    pub min_height: Option<DimensionRule>,
+    pub max_height: Option<DimensionRule>,
     pub display: DisplayMode,
     pub padding: f32,
+    pub border_width: f32,
     pub margin: f32,
     pub gap: f32,
     pub flex_grow: f32,
+    /// Largura do CONTEÚDO próprio (texto/input), sem padding e sem border.
     pub intrinsic_width: f32,
+    /// Altura do CONTEÚDO próprio, sem padding e sem border.
     pub intrinsic_height: f32,
 }
 
@@ -68,8 +79,13 @@ impl Default for LayoutIntent {
         Self {
             width_rule: DimensionRule::Auto,
             height_rule: DimensionRule::Auto,
+            min_width: None,
+            max_width: None,
+            min_height: None,
+            max_height: None,
             display: DisplayMode::Block,
             padding: 0.0,
+            border_width: 0.0,
             margin: 0.0,
             gap: 0.0,
             flex_grow: 0.0,
@@ -182,8 +198,13 @@ impl RenderTree {
                 .collect(),
             width_rule: DimensionRule::Auto,
             height_rule: DimensionRule::Auto,
+            min_width: None,
+            max_width: None,
+            min_height: None,
+            max_height: None,
             display: DisplayMode::Block,
             padding: 0.0,
+            border_width: 0.0,
             margin: 0.0,
             gap: 0.0,
             flex_grow: 0.0,
@@ -203,8 +224,13 @@ impl RenderTree {
                     .collect(),
                 width_rule: l.width_rule,
                 height_rule: l.height_rule,
+                min_width: l.min_width,
+                max_width: l.max_width,
+                min_height: l.min_height,
+                max_height: l.max_height,
                 display: l.display,
                 padding: l.padding,
+                border_width: l.border_width,
                 margin: l.margin,
                 gap: l.gap,
                 flex_grow: l.flex_grow,

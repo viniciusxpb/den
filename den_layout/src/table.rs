@@ -1,18 +1,10 @@
 //! Tabela flat que calcula retângulos de layout para a árvore Den.
 
 use crate::{
-    BODY_INDEX, DimensionRule, DisplayMode, LayoutEntry, LayoutRect, flex, height, spacing, width,
+    BODY_INDEX, DimensionRule, DisplayMode, LayoutEntry, LayoutRect, config, flex, height, margin,
+    width,
 };
 use std::sync::OnceLock;
-
-/// Limite reservado para algoritmos iterativos futuros.
-const DEFAULT_MAX_PASSES: usize = 5;
-
-/// Variável de ambiente que habilita dump textual do layout.
-const LAYOUT_DEBUG_ENV: &str = "DEN_DEBUG_LAYOUT";
-
-/// Valor textual que liga o debug quando usado na variável de ambiente.
-const LAYOUT_DEBUG_ON: &str = "1";
 
 /// Tabela de layout que resolve retângulos em CSS pixels.
 ///
@@ -37,7 +29,7 @@ impl LayoutTable {
             entries,
             sizes: vec![None; len],
             rects: vec![LayoutRect::default(); len],
-            max_passes: DEFAULT_MAX_PASSES,
+            max_passes: config::DEFAULT_MAX_PASSES,
         }
     }
 
@@ -86,35 +78,38 @@ impl LayoutTable {
     fn layout_block_children(&mut self, parent_idx: usize) {
         let parent_rect = self.rects[parent_idx];
         let padding = self.entries[parent_idx].padding;
+        let border = self.entries[parent_idx].border_width;
         let gap = self.entries[parent_idx].gap;
-        let content_x = parent_rect.x + padding;
-        let content_width = spacing::content_width(parent_rect, padding);
+        // Conteúdo começa DEPOIS do padding + border (por lado).
+        let edge = padding + border;
+        let content_x = parent_rect.x + edge;
+        let content_width = content_axis(parent_rect.width, edge);
         let parent_content_height = height::parent_content_height_for(
             self.entries[parent_idx].height_rule,
             parent_idx == BODY_INDEX,
             parent_rect.height,
             padding,
+            border,
         );
-        let mut cursor_y = parent_rect.y + padding;
+        let mut cursor_y = parent_rect.y + edge;
         let children = self.entries[parent_idx].children.clone();
 
         if children.is_empty() {
             if self.entries[parent_idx].height_rule == DimensionRule::Auto
                 && parent_idx != BODY_INDEX
             {
-                self.rects[parent_idx].height = self.rects[parent_idx].height.max(
-                    self.entries[parent_idx].intrinsic_height
-                        + spacing::uniform_padding_extent(padding),
-                );
+                self.rects[parent_idx].height = self.rects[parent_idx]
+                    .height
+                    .max(height::resolve_auto_leaf(&self.entries[parent_idx]));
             }
             return;
         }
 
         for (pos, child_idx) in children.iter().copied().enumerate() {
             let margin = self.entries[child_idx].margin;
-            let child_width_context = spacing::child_content_width(content_width, margin);
-            let resolved_width = self.resolve_child_width(child_idx, child_width_context);
-            let resolved_height = self.resolve_child_height(child_idx, parent_content_height);
+            let child_width_context = margin::child_content_width(content_width, margin);
+            let resolved_width = width::resolve(&self.entries[child_idx], child_width_context);
+            let resolved_height = height::resolve(&self.entries[child_idx], parent_content_height);
             self.sizes[child_idx] = Some(resolved_width);
             self.rects[child_idx] = LayoutRect {
                 x: content_x + margin,
@@ -123,18 +118,17 @@ impl LayoutTable {
                 height: resolved_height,
             };
             self.layout_children(child_idx);
-            cursor_y += spacing::uniform_margin_extent(margin) + self.rects[child_idx].height;
+            cursor_y += margin::uniform_extent(margin) + self.rects[child_idx].height;
             if pos + 1 < children.len() {
                 cursor_y += gap;
             }
         }
 
         if self.entries[parent_idx].height_rule == DimensionRule::Auto {
-            let content_height = cursor_y - parent_rect.y + padding;
+            // Altura natural do container = children + padding*2 + border*2.
+            let content_height = cursor_y - parent_rect.y + edge;
             if parent_idx == BODY_INDEX {
-                // Body cresce com o conteúdo mas nunca encolhe abaixo do viewport —
-                // garante que o background do body cobre a tela toda mesmo em páginas
-                // curtas, e acompanha o scroll em páginas longas.
+                // Body cresce com o conteúdo mas nunca encolhe abaixo do viewport.
                 self.rects[parent_idx].height = parent_rect.height.max(content_height);
             } else {
                 self.rects[parent_idx].height = content_height;
@@ -146,14 +140,17 @@ impl LayoutTable {
     fn layout_flex_children(&mut self, parent_idx: usize) {
         let parent_rect = self.rects[parent_idx];
         let padding = self.entries[parent_idx].padding;
+        let border = self.entries[parent_idx].border_width;
+        let edge = padding + border;
         let gap = self.entries[parent_idx].gap;
-        let content_x = parent_rect.x + padding;
-        let content_width = spacing::content_width(parent_rect, padding);
+        let content_x = parent_rect.x + edge;
+        let content_width = content_axis(parent_rect.width, edge);
         let parent_content_height = height::parent_content_height_for(
             self.entries[parent_idx].height_rule,
             parent_idx == BODY_INDEX,
             parent_rect.height,
             padding,
+            border,
         );
         let children = self.entries[parent_idx].children.clone();
         if children.is_empty() {
@@ -163,44 +160,46 @@ impl LayoutTable {
         let gap_total = flex::gap_total(gap, children.len());
         let margin_total: f32 = children
             .iter()
-            .map(|&child_idx| spacing::uniform_margin_extent(self.entries[child_idx].margin))
+            .map(|&child_idx| margin::uniform_extent(self.entries[child_idx].margin))
             .sum();
         let mut fixed_total = 0.0;
         let mut grow_total = 0.0;
 
         for &child_idx in &children {
             let grow = self.entries[child_idx].flex_grow;
-            if grow > 0.0 && self.entries[child_idx].width_rule == DimensionRule::Auto {
+            let child = &self.entries[child_idx];
+            if grow > 0.0 && child.width_rule == DimensionRule::Auto {
                 grow_total += grow;
-            } else if self.entries[child_idx].width_rule == DimensionRule::Auto {
-                fixed_total += self.entries[child_idx].intrinsic_width;
+            } else if child.width_rule == DimensionRule::Auto {
+                // Auto sem flex-grow empacota no tamanho da border-box: content + padding + border.
+                fixed_total += width::resolve_auto_leaf(child);
             } else {
-                fixed_total += self.resolve_child_width(child_idx, content_width);
+                fixed_total += width::resolve(child, content_width);
             }
         }
 
         let remaining = (content_width - fixed_total - margin_total - gap_total).max(0.0);
         let mut cursor_x = content_x;
-        let content_y = parent_rect.y + padding;
+        let content_y = parent_rect.y + edge;
         let mut max_height = 0.0f32;
 
         for (pos, child_idx) in children.iter().copied().enumerate() {
             let margin = self.entries[child_idx].margin;
             let grow = self.entries[child_idx].flex_grow;
-            let fixed_width =
-                if self.entries[child_idx].width_rule == DimensionRule::Auto && grow == 0.0 {
-                    self.entries[child_idx].intrinsic_width
-                } else {
-                    self.resolve_child_width(child_idx, content_width)
-                };
+            let child = &self.entries[child_idx];
+            let fixed_width = if child.width_rule == DimensionRule::Auto && grow == 0.0 {
+                width::resolve_auto_leaf(child)
+            } else {
+                width::resolve(child, content_width)
+            };
             let resolved_width = flex::distribute_flex_width(
-                self.entries[child_idx].width_rule,
+                child.width_rule,
                 grow,
                 fixed_width,
                 remaining,
                 grow_total,
             );
-            let resolved_height = self.resolve_child_height(child_idx, parent_content_height);
+            let resolved_height = height::resolve(child, parent_content_height);
             self.sizes[child_idx] = Some(resolved_width);
             self.rects[child_idx] = LayoutRect {
                 x: cursor_x + margin,
@@ -210,27 +209,19 @@ impl LayoutTable {
             };
             self.layout_children(child_idx);
             max_height = max_height
-                .max(self.rects[child_idx].height + spacing::uniform_margin_extent(margin));
-            cursor_x += spacing::uniform_margin_extent(margin) + resolved_width;
+                .max(self.rects[child_idx].height + margin::uniform_extent(margin));
+            cursor_x += margin::uniform_extent(margin) + resolved_width;
             if pos + 1 < children.len() {
                 cursor_x += gap;
             }
         }
 
         if self.entries[parent_idx].height_rule == DimensionRule::Auto && parent_idx != BODY_INDEX {
-            self.rects[parent_idx].height = max_height + spacing::uniform_padding_extent(padding);
+            // Altura natural = max child height + padding*2 + border*2.
+            self.rects[parent_idx].height = max_height + edge * 2.0;
         }
     }
 
-    /// Resolve a largura de um filho no contexto do pai (delega pra `width` module).
-    fn resolve_child_width(&self, child_idx: usize, parent_content_width: f32) -> f32 {
-        width::resolve(self.entries[child_idx].width_rule, parent_content_width)
-    }
-
-    /// Resolve a altura de um filho no contexto do pai (delega pra `height` module).
-    fn resolve_child_height(&self, child_idx: usize, parent_content_height: f32) -> f32 {
-        height::resolve(self.entries[child_idx].height_rule, parent_content_height)
-    }
 
     /// Emite no stderr um snapshot da tabela resolvida.
     pub fn debug_dump(&self, template_path: &str, labels: &[&str]) {
@@ -244,13 +235,18 @@ impl LayoutTable {
             let rect = self.rects.get(idx).copied().unwrap_or_default();
             let size = self.sizes.get(idx).copied().flatten();
             eprintln!(
-                "  [{idx}] {label} parent={:?} children={:?} display={:?} width={:?} height={:?} padding={} margin={} gap={} flex_grow={} intrinsic_width={} intrinsic_height={} size={:?} rect=({}, {}, {}, {})",
+                "  [{idx}] {label} parent={:?} children={:?} display={:?} width={:?} height={:?} min_w={:?} max_w={:?} min_h={:?} max_h={:?} padding={} border={} margin={} gap={} flex_grow={} intrinsic_width={} intrinsic_height={} size={:?} rect=({}, {}, {}, {})",
                 entry.parent,
                 entry.children,
                 entry.display,
                 entry.width_rule,
                 entry.height_rule,
+                entry.min_width,
+                entry.max_width,
+                entry.min_height,
+                entry.max_height,
                 entry.padding,
+                entry.border_width,
                 entry.margin,
                 entry.gap,
                 entry.flex_grow,
@@ -267,14 +263,19 @@ impl LayoutTable {
 }
 
 /// Retorna se o dump de layout está habilitado no ambiente.
+/// Largura/altura de conteúdo disponível dentro de um rect: tira padding + border (2 lados).
+fn content_axis(outer: f32, edge: f32) -> f32 {
+    (outer - edge * 2.0).max(0.0)
+}
+
 pub fn layout_debug_enabled() -> bool {
     static CACHED: OnceLock<bool> = OnceLock::new();
 
-    *CACHED.get_or_init(|| match std::env::var(LAYOUT_DEBUG_ENV) {
-        Ok(value) => value == LAYOUT_DEBUG_ON || value.eq_ignore_ascii_case("true"),
+    *CACHED.get_or_init(|| match std::env::var(config::LAYOUT_DEBUG_ENV) {
+        Ok(value) => value == config::DEBUG_ON || value.eq_ignore_ascii_case("true"),
         Err(std::env::VarError::NotPresent) => false,
         Err(err) => {
-            eprintln!("Den: falha ao ler {LAYOUT_DEBUG_ENV}: {err}");
+            eprintln!("Den: falha ao ler {}: {err}", config::LAYOUT_DEBUG_ENV);
             false
         }
     })
@@ -296,35 +297,15 @@ mod tests {
 
     /// Cria a entry raiz invisível.
     fn body() -> LayoutEntry {
-        LayoutEntry {
-            parent: None,
-            children: vec![],
-            width_rule: DimensionRule::Auto,
-            height_rule: DimensionRule::Auto,
-            display: DisplayMode::Block,
-            padding: 0.0,
-            margin: 0.0,
-            gap: 0.0,
-            flex_grow: 0.0,
-            intrinsic_width: 0.0,
-            intrinsic_height: 0.0,
-        }
+        LayoutEntry::default()
     }
 
     /// Cria uma entry block com parent e regra de largura.
     fn entry(parent: usize, rule: DimensionRule) -> LayoutEntry {
         LayoutEntry {
             parent: Some(parent),
-            children: vec![],
             width_rule: rule,
-            height_rule: DimensionRule::Auto,
-            display: DisplayMode::Block,
-            padding: 0.0,
-            margin: 0.0,
-            gap: 0.0,
-            flex_grow: 0.0,
-            intrinsic_width: 0.0,
-            intrinsic_height: 0.0,
+            ..LayoutEntry::default()
         }
     }
 
@@ -332,16 +313,9 @@ mod tests {
     fn flex_entry(parent: usize, rule: DimensionRule) -> LayoutEntry {
         LayoutEntry {
             parent: Some(parent),
-            children: vec![],
             width_rule: rule,
-            height_rule: DimensionRule::Auto,
             display: DisplayMode::Flex,
-            padding: 0.0,
-            margin: 0.0,
-            gap: 0.0,
-            flex_grow: 0.0,
-            intrinsic_width: 0.0,
-            intrinsic_height: 0.0,
+            ..LayoutEntry::default()
         }
     }
 

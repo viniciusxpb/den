@@ -48,6 +48,10 @@ pub struct StyleRule {
     pub border_radius: Option<f32>,
     pub width: WidthValue,
     pub height: WidthValue,
+    pub min_width: Option<WidthValue>,
+    pub max_width: Option<WidthValue>,
+    pub min_height: Option<WidthValue>,
+    pub max_height: Option<WidthValue>,
     pub gap: Option<f32>,
     pub cursor_pointer: bool,
     /// `flex: 1` / `flex-grow: 1` — elemento cresce pra preencher o share do flex pai.
@@ -87,6 +91,18 @@ impl StyleRule {
         }
         if other.height != WidthValue::Auto {
             self.height = other.height;
+        }
+        if other.min_width.is_some() {
+            self.min_width = other.min_width;
+        }
+        if other.max_width.is_some() {
+            self.max_width = other.max_width;
+        }
+        if other.min_height.is_some() {
+            self.min_height = other.min_height;
+        }
+        if other.max_height.is_some() {
+            self.max_height = other.max_height;
         }
         if other.gap.is_some() {
             self.gap = other.gap;

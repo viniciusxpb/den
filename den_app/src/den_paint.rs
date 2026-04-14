@@ -94,48 +94,51 @@ pub fn paint_tree(
     events
 }
 
-/// Mede cada `RenderKind::Text` e atualiza `LayoutIntent::intrinsic_{width,height}`.
-/// Usa `layout_no_wrap` em CSS pixels (scale=1.0), que é o espaço do layout engine.
+/// Mede o CONTEÚDO (texto puro) de cada nó e atualiza `LayoutIntent::intrinsic_{width,height}`.
+///
+/// Contrato: `intrinsic_*` = dimensão do conteúdo SEM padding e SEM border.
+/// O layout engine (`height::resolve`, `width::resolve`) é quem adiciona
+/// padding + border em volta. Assim o box model CSS fica centralizado lá e
+/// nada é aplicado duas vezes.
 fn measure_tree_text(ui: &Ui, tree: &mut RenderTree) {
     for node in &mut tree.nodes {
-        if let RenderKind::Text { content, heading } = &node.kind {
-            if content.is_empty() {
-                node.layout.intrinsic_width = 0.0;
-                node.layout.intrinsic_height = 0.0;
-                continue;
+        match &node.kind {
+            RenderKind::Text { content, heading } => {
+                if content.is_empty() {
+                    node.layout.intrinsic_width = 0.0;
+                    node.layout.intrinsic_height = 0.0;
+                    continue;
+                }
+                let base = if node.style.font_size > 0.0 {
+                    node.style.font_size
+                } else if *heading {
+                    20.0
+                } else {
+                    14.0
+                };
+                let font = FontId::proportional(base);
+                let galley = ui.fonts_mut(|f| {
+                    f.layout_no_wrap(content.clone(), font, Color32::WHITE)
+                });
+                node.layout.intrinsic_width = galley.rect.width();
+                node.layout.intrinsic_height = galley.rect.height();
             }
-            let base = if node.style.font_size > 0.0 {
-                node.style.font_size
-            } else if *heading {
-                20.0
-            } else {
-                14.0
-            };
-            let font = FontId::proportional(base);
-            let galley = ui.fonts_mut(|f| {
-                f.layout_no_wrap(content.clone(), font, Color32::WHITE)
-            });
-            // Intrinsic é a caixa externa do nó: texto + padding + border em ambos os lados.
-            // Sem isso, padding aplica dentro de um rect com tamanho exato do texto e
-            // o conteúdo "vaza" visualmente (rects ficam colados porque não têm folga).
-            let padding_extent = node.layout.padding * 2.0;
-            let border_extent = node.style.border_width * 2.0;
-            node.layout.intrinsic_width = galley.rect.width() + padding_extent + border_extent;
-            node.layout.intrinsic_height = galley.rect.height() + padding_extent + border_extent;
-        } else if matches!(&node.kind, RenderKind::Input { .. }) {
-            // Inputs também precisam reservar a caixa externa completa.
-            let base = if node.style.font_size > 0.0 {
-                node.style.font_size
-            } else {
-                14.0
-            };
-            let padding_extent = node.layout.padding * 2.0;
-            let border_extent = node.style.border_width * 2.0;
-            // Altura = uma linha de texto + padding + border.
-            node.layout.intrinsic_height = base + padding_extent + border_extent;
-            // Largura base já vem do codegen (DEFAULT_INPUT_WIDTH). Só garante min.
-            if node.layout.intrinsic_width < 40.0 + padding_extent + border_extent {
-                node.layout.intrinsic_width = 40.0 + padding_extent + border_extent;
+            RenderKind::Input { .. } => {
+                // Input: uma linha de texto (font_size ou default 14).
+                let base = if node.style.font_size > 0.0 {
+                    node.style.font_size
+                } else {
+                    14.0
+                };
+                node.layout.intrinsic_height = base;
+                // Se o codegen não pré-preencheu intrinsic_width (via DEFAULT_INPUT_WIDTH),
+                // garante um mínimo razoável pro input ser clicável.
+                if node.layout.intrinsic_width < 40.0 {
+                    node.layout.intrinsic_width = 40.0;
+                }
+            }
+            RenderKind::Container => {
+                // Containers não têm conteúdo próprio; a altura/largura vem dos filhos.
             }
         }
     }

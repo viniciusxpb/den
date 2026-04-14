@@ -1,18 +1,10 @@
 //! Estado runtime mantido por rota durante a renderização Den.
 
+use crate::config;
 use std::{
     collections::{HashMap, HashSet},
     sync::OnceLock,
 };
-
-/// Variável de ambiente que habilita dumps de estado por rota.
-const ROUTE_STATE_DEBUG_ENV: &str = "DEN_DEBUG_ROUTE_STATE";
-
-/// Valor textual que liga o debug quando usado na variável de ambiente.
-const ROUTE_STATE_DEBUG_ON: &str = "1";
-
-/// Capacidade inicial para inputs controlados por uma rota.
-const DEFAULT_INPUT_STATE_CAPACITY: usize = 4;
 
 /// Identificador estável de um nó Den durante o runtime.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -43,7 +35,7 @@ impl DenInputState {
     /// Cria um estado vazio para inputs de uma rota.
     pub fn new() -> Self {
         Self {
-            values: HashMap::with_capacity(DEFAULT_INPUT_STATE_CAPACITY),
+            values: HashMap::with_capacity(config::DEFAULT_INPUT_STATE_CAPACITY),
         }
     }
 
@@ -223,11 +215,11 @@ impl DenRouteState {
 fn route_state_debug_enabled() -> bool {
     static CACHED: OnceLock<bool> = OnceLock::new();
 
-    *CACHED.get_or_init(|| match std::env::var(ROUTE_STATE_DEBUG_ENV) {
-        Ok(value) => value == ROUTE_STATE_DEBUG_ON || value.eq_ignore_ascii_case("true"),
+    *CACHED.get_or_init(|| match std::env::var(config::ROUTE_STATE_DEBUG_ENV) {
+        Ok(value) => value == config::DEBUG_ON || value.eq_ignore_ascii_case("true"),
         Err(std::env::VarError::NotPresent) => false,
         Err(err) => {
-            eprintln!("Den: falha ao ler {ROUTE_STATE_DEBUG_ENV}: {err}");
+            eprintln!("Den: falha ao ler {}: {err}", config::ROUTE_STATE_DEBUG_ENV);
             false
         }
     })
