@@ -1,1 +1,116 @@
-<div>Teste</div>
+div class="outer">
+
+    <!-- Hero -->
+    <div class="hero">
+        <div class="hero-title">Den Framework</div>
+        <div class="hero-sub">Write templates. Compile to native. Ship fast.</div>
+        <div class="hero-action" goto="UsuarioPage">Abrir usuario</div>
+    </div>
+
+    <!-- Stats Row -->
+    <div class="display__flex">
+        <div class="stat-card">
+            <div class="stat-label">CLICKS</div>
+            <div class="stat-val-blue">{{ self.count }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">STATUS</div>
+            <if cond="self.active">
+                <div class="stat-val-green">Active</div>
+            </if>
+            <else>
+                <div class="stat-val-red">Inactive</div>
+            </else>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">TAGS</div>
+            <div class="stat-val-orange">5</div>
+        </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="display__flex">
+        <div dev class="btn-blue" (click)="increment_count()">Increment</div>
+        <div dev class="btn-green" (click)="toggle_status()">Toggle</div>
+        <div dev class="btn-dim" (click)="reset()">Reset</div>
+    </div>
+
+    <!-- Input + Live Preview -->
+    <div class="input-section">
+        <div class="section-label">Live preview</div>
+        <div class="display__flex">
+            <div class="input-col">
+                <div class="input-label">Name</div>
+                <input bind="self.name" placeholder="Your name..." class="text-input" />
+            </div>
+            <div class="input-col">
+                <div class="input-label">Message</div>
+                <input bind="self.message" placeholder="Type here..." class="text-input" />
+            </div>
+        </div>
+        <div class="preview-box">
+            <div class="preview-text">Hello {{ self.name }} — "{{ self.message }}"</div>
+        </div>
+    </div>
+
+    <!-- Feature Cards -->
+    <div class="display__flex">
+        <div class="feat-card">
+            <div class="feat-title">Compile-time</div>
+            <div class="feat-body">Zero runtime. Templates become native Rust at build.</div>
+        </div>
+        <div class="feat-card">
+            <div class="feat-title">Type safe</div>
+            <div class="feat-body">Template errors are compiler errors. IDE catches them.</div>
+        </div>
+        <div class="feat-card">
+            <div class="feat-title">Two-way bind</div>
+            <div class="feat-body">Inputs bind to fields. No signals, no boilerplate.</div>
+        </div>
+    </div>
+
+    <!-- Dynamic Tags -->
+    <div class="tags-box">
+        <div class="section-label">Dynamic tags</div>
+        <div class="display__flex">
+            <for each="tag" in="self.tags">
+                <div class="tag">{{ tag }}</div>
+            </for>
+        </div>
+    </div>
+
+    <!-- Width System -->
+    <div class="bar-100">100%</div>
+    <div class="bar-75">75%</div>
+    <div class="bar-50">50%</div>
+    <div class="bar-25">25%</div>
+
+    <!-- CSS Rules Lab -->
+    <div dev class="css-lab">
+        <div class="section-label">CSS rules lab</div>
+        <div class="rule-color-font">color + font-size + background</div>
+        <div class="rule-padding-margin-wrap">
+            <div class="rule-padding-margin">padding + margin</div>
+        </div>
+        <div class="display__flex rule-gap-row">
+            <div class="rule-flex-child">flex: 1</div>
+            <div class="rule-flex-child">flex: 1</div>
+            <div class="rule-flex-fixed">width: 160px</div>
+        </div>
+        <div class="display__flex rule-size-row">
+            <div class="rule-width-fixed">width: 180px</div>
+            <div class="rule-width-percent">width: 40%</div>
+            <div class="rule-height-fixed">height: 52px</div>
+        </div>
+        <div class="rule-hover">hover + cursor</div>
+        <div class="rule-grid-demo">
+            <div class="rule-grid-child">display: grid currently flows as block</div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+        <div class="footer-text">Den v0.1.0</div>
+    </div>
+
+</div>

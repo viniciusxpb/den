@@ -27,6 +27,20 @@ fn main() {
 
     fs::create_dir_all(&preview_dir).ok();
 
+    // Escreve as fontes default do egui no preview dinamicamente.
+    // Os bytes vêm direto do crate `epaint_default_fonts` (mesmos bytes que o
+    // egui usa em runtime), então o browser renderiza com métricas idênticas.
+    let fonts_dir = preview_dir.join("fonts");
+    fs::create_dir_all(&fonts_dir).ok();
+    let _ = fs::write(
+        fonts_dir.join("Ubuntu-Light.ttf"),
+        epaint_default_fonts::UBUNTU_LIGHT,
+    );
+    let _ = fs::write(
+        fonts_dir.join("Hack-Regular.ttf"),
+        epaint_default_fonts::HACK_REGULAR,
+    );
+
     let pairs = find_template_pairs(&pages_dir);
     if pairs.is_empty() {
         eprintln!("preview: nenhum template em {}", pages_dir.display());
@@ -225,12 +239,17 @@ fn add_px_to_unitless(line: &str) -> String {
 // ============================================================================
 
 /// Converte o body inteiro de uma página Den em HTML padrão.
-/// Processa `<for>`, `<if>/<else>`, `{{ expr }}`, `<input bind=...>`, `goto=`.
+/// Processa `<for>`, `<if>/<else>`, `{{ expr }}`, `<input bind=...>`, `goto=`,
+/// e pula comentários HTML `<!-- ... -->`.
 fn convert_page_body(html: &str) -> String {
     let chars: Vec<char> = html.chars().collect();
     let mut out = String::new();
     let mut pos = 0;
     while pos < chars.len() {
+        if is_html_comment_start(&chars, pos) {
+            pos = skip_html_comment(&chars, pos);
+            continue;
+        }
         if chars[pos] == '<' {
             if pos + 1 < chars.len() && chars[pos + 1] == '/' {
                 pos = skip_until_gt(&chars, pos);
@@ -267,6 +286,27 @@ fn convert_page_body(html: &str) -> String {
         }
     }
     out
+}
+
+/// `true` se em `pos` começa `<!--`.
+fn is_html_comment_start(chars: &[char], pos: usize) -> bool {
+    pos + 3 < chars.len()
+        && chars[pos] == '<'
+        && chars[pos + 1] == '!'
+        && chars[pos + 2] == '-'
+        && chars[pos + 3] == '-'
+}
+
+/// Avança `pos` pra DEPOIS do próximo `-->`. Se não achar, vai até o fim.
+fn skip_html_comment(chars: &[char], start: usize) -> usize {
+    let mut pos = start + 4; // pula `<!--`
+    while pos + 2 < chars.len() {
+        if chars[pos] == '-' && chars[pos + 1] == '-' && chars[pos + 2] == '>' {
+            return pos + 3;
+        }
+        pos += 1;
+    }
+    chars.len()
 }
 
 /// Converte um elemento Den em HTML, preservando tag → tag (ex.: `heading` → `h2`).
@@ -368,11 +408,16 @@ fn convert_element(chars: &[char], start: usize) -> (String, usize) {
     )
 }
 
-/// Lê conteúdo interno até `</>`. Processa control flow e interpolação aninhados.
+/// Lê conteúdo interno até `</>`. Processa control flow e interpolação aninhados,
+/// e pula comentários HTML `<!-- ... -->` (não leakam como texto).
 fn read_inner(chars: &[char], start: usize) -> (String, usize) {
     let mut pos = start;
     let mut out = String::new();
     while pos < chars.len() {
+        if is_html_comment_start(chars, pos) {
+            pos = skip_html_comment(chars, pos);
+            continue;
+        }
         if chars[pos] == '<' {
             if pos + 1 < chars.len() && chars[pos + 1] == '/' {
                 pos = skip_until_gt(chars, pos);
@@ -411,8 +456,9 @@ fn read_inner(chars: &[char], start: usize) -> (String, usize) {
     (out, pos)
 }
 
-/// `<for each="var" in="expr">...</for>` — renderiza N iterações simuladas
-/// com placeholders distintos pra visualizar o layout final.
+/// `<for each="var" in="expr">...</for>` — renderiza N iterações simuladas.
+/// A cada iteração, substitui as ocorrências de `[each_var]` (saídas do
+/// convert_interpolation aplicado a `{{ each_var }}`) por `[each_var #N]`.
 fn convert_for(chars: &[char], start: usize) -> (String, usize) {
     let mut pos = start + 1;
     skip_ws(chars, &mut pos);
@@ -440,12 +486,13 @@ fn convert_for(chars: &[char], start: usize) -> (String, usize) {
     let body_start = pos;
     let (body_template, end) = read_inner(chars, body_start);
 
-    // Renderiza N vezes, trocando `each_var` por "[var #n]" pra distinguir.
+    // `convert_interpolation` já transformou `{{ each_var }}` em `[each_var]` dentro
+    // de um span. Aqui trocamos essa string pela versão numerada por iteração.
+    let needle = format!("[{each_var}]");
     let mut out = String::new();
     for i in 0..FOR_LOOP_ITERATIONS {
-        let label = format!("[{each_var} #{}]", i + 1);
-        let rendered = replace_identifier(&body_template, &each_var, &label);
-        out.push_str(&rendered);
+        let replacement = format!("[{each_var} #{}]", i + 1);
+        out.push_str(&body_template.replace(&needle, &replacement));
     }
     (out, end)
 }
@@ -479,19 +526,6 @@ fn convert_interpolation(chars: &[char], start: usize) -> (String, usize) {
     (format!(r#"<span class="den-placeholder">[{label}]</span>"#), pos)
 }
 
-/// Substitui `{{ var ... }}` → `{{ label ... }}` dentro do body do `<for>`.
-/// Preserva outros identificadores; só troca ocorrências do nome exato.
-fn replace_identifier(src: &str, var: &str, label: &str) -> String {
-    // Substituição de {{ var }} primeiro.
-    let mut out = src.to_string();
-    let needle_exact = format!("{{{{ {var} }}}}");
-    out = out.replace(&needle_exact, &format!("<span class=\"den-placeholder\">{label}</span>"));
-    // Também {{var}} sem espaços.
-    let needle_tight = format!("{{{{{var}}}}}");
-    out = out.replace(&needle_tight, &format!("<span class=\"den-placeholder\">{label}</span>"));
-    out
-}
-
 fn den_tag_to_html(tag: &str) -> &str {
     match tag {
         "heading" => "h2",
@@ -508,8 +542,9 @@ fn den_tag_to_html(tag: &str) -> &str {
 /// container externo tem o tamanho exato da janela egui (`EGUI_WINDOW_WIDTH`).
 fn render_page(page_name: &str, css: &str, body_html: &str) -> String {
     // Reset mínimo + box-sizing (igual ao layout engine Den, border-box).
-    // NÃO define background/color/font do body — isso vem 100% do SCSS da página
-    // via seletor `body { ... }`. Se o SCSS não declarar, o browser usa o default.
+    // Font-face usa os mesmos bytes TTF que o egui embarca (Ubuntu-Light p/ proporcional,
+    // Hack p/ mono). Os arquivos são escritos pelo `main` em `preview/fonts/`.
+    // NÃO define background/color do body — vem 100% do SCSS via seletor `body`.
     format!(
         r#"<!DOCTYPE html>
 <html lang="pt-BR">
@@ -518,12 +553,23 @@ fn render_page(page_name: &str, css: &str, body_html: &str) -> String {
   <meta http-equiv="refresh" content="3">
   <title>Den Preview — {page_name}</title>
   <style>
+@font-face {{
+    font-family: "DenProportional";
+    src: url("fonts/Ubuntu-Light.ttf") format("truetype");
+    font-display: block;
+}}
+@font-face {{
+    font-family: "DenMonospace";
+    src: url("fonts/Hack-Regular.ttf") format("truetype");
+    font-display: block;
+}}
 *, *::before, *::after {{ box-sizing: border-box; }}
 html, body {{ margin: 0; padding: 0; }}
 body {{
     min-height: 100vh;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-family: "DenProportional", sans-serif;
 }}
+code, pre {{ font-family: "DenMonospace", monospace; }}
 .den-viewport {{
     width: {EGUI_WINDOW_WIDTH}px;
     min-height: 100vh;

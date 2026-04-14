@@ -20,3 +20,6 @@ den_macros = { path = "../den_macros" }
 den_layout = { path = "../den_layout" }
 eframe = "0.33"
 env_logger = "0.11"
+# Bytes das fontes default do egui — usado pelo binário `preview` pra servir
+# `Ubuntu-Light.ttf` via @font-face e casar a renderização do browser com egui.
+epaint_default_fonts = "0.33"

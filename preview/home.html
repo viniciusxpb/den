@@ -5,12 +5,23 @@
   <meta http-equiv="refresh" content="3">
   <title>Den Preview — home</title>
   <style>
+@font-face {
+    font-family: "DenProportional";
+    src: url("fonts/Ubuntu-Light.ttf") format("truetype");
+    font-display: block;
+}
+@font-face {
+    font-family: "DenMonospace";
+    src: url("fonts/Hack-Regular.ttf") format("truetype");
+    font-display: block;
+}
 *, *::before, *::after { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
 body {
     min-height: 100vh;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-family: "DenProportional", sans-serif;
 }
+code, pre { font-family: "DenMonospace", monospace; }
 .den-viewport {
     width: 1200px;
     min-height: 100vh;
@@ -125,7 +136,7 @@ body {
 }
 .btn-dim {
     background: #12121f;
-    border: 1px solid #2a2a45-sub;
+    border: 1px solid #3a3a55;
     border-radius: 6px;
     padding: 10px;
     color: #6a6a8a;
@@ -159,7 +170,7 @@ body {
 }
 .text-input {
     background: #12121f;
-    border: 1px solid #2a2a45-sub;
+    border: 1px solid #3a3a55;
     border-radius: 6px;
     padding: 8px;
     color: #c0c0d8;
@@ -205,7 +216,7 @@ body {
 }
 .tag {
     background: #12121f;
-    border: 1px solid #2a2a45-sub;
+    border: 1px solid #3a3a55;
     border-radius: 20px;
     padding: 6px;
     color: #7eb8f7;
@@ -265,7 +276,7 @@ body {
 }
 .rule-padding-margin-wrap {
     background: #12121f;
-    border: 1px solid #2a2a45-sub;
+    border: 1px solid #3a3a55;
     border-radius: 6px;
     padding: 4px;
     width: 100%;
@@ -329,7 +340,7 @@ body {
 }
 .rule-hover {
     background: #12121f;
-    border: 1px solid #2a2a45-sub;
+    border: 1px solid #3a3a55;
     border-radius: 6px;
     padding: 10px;
     color: #8a8aa8;
@@ -350,7 +361,7 @@ body {
     width: 100%;
 }
 .rule-grid-child {
-    background: #2a2a45-sub;
+    background: #3a3a55;
     color: #c0c0d8;
     font-size: 12px;
     padding: 8px;
@@ -367,7 +378,7 @@ body {
     width: 100%;
 }
 .footer-text {
-    color: #2a2a45-sub;
+    color: #3a3a55;
     font-size: 11px;
 }
 
@@ -375,7 +386,125 @@ body {
 </head>
 <body>
   <div class="den-viewport">
-<div class="">Teste</div>
+div class="outer">
+
+    
+    <div class="hero">
+        <div class="hero-title">Den Framework</div>
+        <div class="hero-sub">Write templates. Compile to native. Ship fast.</div>
+        <div class="hero-action" data-goto="UsuarioPage">Abrir usuario</div>
+    </div>
+
+    
+    <div class="display__flex">
+        <div class="stat-card">
+            <div class="stat-label">CLICKS</div>
+            <div class="stat-val-blue"><span class="den-placeholder">[count]</span></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">STATUS</div>
+            
+                <div class="stat-val-green">Active</div>
+            
+            
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">TAGS</div>
+            <div class="stat-val-orange">5</div>
+        </div>
+    
+
+    
+    <div class="display__flex">
+        <div class="btn-blue">Increment</div>
+        <div class="btn-green">Toggle</div>
+        <div class="btn-dim">Reset</div>
+    </div>
+
+    
+    <div class="input-section">
+        <div class="section-label">Live preview</div>
+        <div class="display__flex">
+            <div class="input-col">
+                <div class="input-label">Name</div>
+                <input type="text" class="text-input" placeholder="Your name..." value="[name]" readonly>
+            </div>
+            <div class="input-col">
+                <div class="input-label">Message</div>
+                <input type="text" class="text-input" placeholder="Type here..." value="[message]" readonly>
+            </div>
+        </div>
+        <div class="preview-box">
+            <div class="preview-text">Hello <span class="den-placeholder">[name]</span> — "<span class="den-placeholder">[message]</span>"</div>
+        </div>
+    </div>
+
+    
+    <div class="display__flex">
+        <div class="feat-card">
+            <div class="feat-title">Compile-time</div>
+            <div class="feat-body">Zero runtime. Templates become native Rust at build.</div>
+        </div>
+        <div class="feat-card">
+            <div class="feat-title">Type safe</div>
+            <div class="feat-body">Template errors are compiler errors. IDE catches them.</div>
+        </div>
+        <div class="feat-card">
+            <div class="feat-title">Two-way bind</div>
+            <div class="feat-body">Inputs bind to fields. No signals, no boilerplate.</div>
+        </div>
+    </div>
+
+    
+    <div class="tags-box">
+        <div class="section-label">Dynamic tags</div>
+        <div class="display__flex">
+            
+                <div class="tag"><span class="den-placeholder">[tag #1]</span></div>
+            
+                <div class="tag"><span class="den-placeholder">[tag #2]</span></div>
+            
+                <div class="tag"><span class="den-placeholder">[tag #3]</span></div>
+            
+        </div>
+    </div>
+
+    
+    <div class="bar-100">100%</div>
+    <div class="bar-75">75%</div>
+    <div class="bar-50">50%</div>
+    <div class="bar-25">25%</div>
+
+    
+    <div class="css-lab">
+        <div class="section-label">CSS rules lab</div>
+        <div class="rule-color-font">color + font-size + background</div>
+        <div class="rule-padding-margin-wrap">
+            <div class="rule-padding-margin">padding + margin</div>
+        </div>
+        <div class="display__flex rule-gap-row">
+            <div class="rule-flex-child">flex: 1</div>
+            <div class="rule-flex-child">flex: 1</div>
+            <div class="rule-flex-fixed">width: 160px</div>
+        </div>
+        <div class="display__flex rule-size-row">
+            <div class="rule-width-fixed">width: 180px</div>
+            <div class="rule-width-percent">width: 40%</div>
+            <div class="rule-height-fixed">height: 52px</div>
+        </div>
+        <div class="rule-hover">hover + cursor</div>
+        <div class="rule-grid-demo">
+            <div class="rule-grid-child">display: grid currently flows as block</div>
+        </div>
+    </div>
+
+    
+    <div class="footer">
+        <div class="footer-text">Den v0.1.0</div>
+    </div>
+
+
   </div>
 </body>
 </html>

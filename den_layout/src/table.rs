@@ -89,7 +89,12 @@ impl LayoutTable {
         let gap = self.entries[parent_idx].gap;
         let content_x = parent_rect.x + padding;
         let content_width = spacing::content_width(parent_rect, padding);
-        let mut cursor_y = parent_rect.y + padding;
+        let parent_content_height = crate::height::parent_content_height_for(
+            self.entries[parent_idx].height_rule,
+            parent_idx == BODY_INDEX,
+            parent_rect.height,
+            padding,
+        );
         let children = self.entries[parent_idx].children.clone();
 
         if children.is_empty() {
@@ -108,7 +113,7 @@ impl LayoutTable {
             let margin = self.entries[child_idx].margin;
             let child_width_context = spacing::child_content_width(content_width, margin);
             let resolved_width = self.resolve_child_width(child_idx, child_width_context);
-            let resolved_height = self.resolve_child_height(child_idx, 0.0);
+            let resolved_height = self.resolve_child_height(child_idx, parent_content_height);
             self.sizes[child_idx] = Some(resolved_width);
             self.rects[child_idx] = LayoutRect {
                 x: content_x + margin,

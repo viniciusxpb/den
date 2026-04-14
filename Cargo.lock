@@ -786,6 +786,7 @@ dependencies = [
  "den_macros",
  "eframe",
  "env_logger",
+ "epaint_default_fonts",
 ]
 
 [[package]]
