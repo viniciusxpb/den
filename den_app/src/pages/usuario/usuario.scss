@@ -7,36 +7,36 @@ $border: #d8deea;
 
 .page {
     background: $bg;
-    padding: 16;
+    padding: 16px;
     width: 100%;
 }
 
 .title {
     background: $card;
     border: 1px solid $border;
-    border-radius: 8;
-    padding: 14;
+    border-radius: 8px;
+    padding: 14px;
     color: $accent;
-    font-size: 24;
+    font-size: 24px;
     width: 100%;
 }
 
 .text-input {
     background: $card;
     border: 1px solid $border;
-    border-radius: 8;
-    padding: 14;
+    border-radius: 8px;
+    padding: 14px;
     color: $text;
-    font-size: 16;
+    font-size: 16px;
     width: 100%;
 }
 
 .button {
     background: $accent;
-    border-radius: 8;
-    padding: 14;
+    border-radius: 8px;
+    padding: 14px;
     color: $card;
-    font-size: 16;
+    font-size: 16px;
     width: 220px;
 }
 

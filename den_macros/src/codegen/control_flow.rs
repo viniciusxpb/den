@@ -1,12 +1,15 @@
-//! Geração de código pra `<for>` e `<if>`/`<else>`.
+//! Emissão de `<for>` e `<if>/<else>` como controle de fluxo Rust em volta
+//! dos pushes de `RenderNode` na tree.
 
-use super::{CodegenCtx, generate_node};
+use super::render_tree::{BuildCtx, emit_build_node};
 use crate::types::{DenForLoop, DenIfChain};
 use quote::quote;
 
-pub fn generate_for_loop(
+/// `<for each="var" in="expr">children</for>` → `for (idx, var) in (expr).iter().enumerate() { children_push }`.
+/// Incrementa `ctx.loop_depth` durante a recursão nos filhos — usado pro sal do `node_id`.
+pub(super) fn emit_for_loop(
     fl: &DenForLoop,
-    ctx: &mut CodegenCtx,
+    ctx: &mut BuildCtx,
 ) -> Result<proc_macro2::TokenStream, String> {
     let var_ident: proc_macro2::TokenStream = fl
         .each_var
@@ -16,62 +19,63 @@ pub fn generate_for_loop(
         .iterable_expr
         .parse()
         .map_err(|e| format!("Invalid iterable '{}': {e}", fl.iterable_expr))?;
-
     let idx_ident: proc_macro2::TokenStream = format!("__den_idx_{}", ctx.loop_depth)
         .parse()
         .map_err(|e| format!("Internal error building loop index ident: {e}"))?;
 
     ctx.loop_depth += 1;
-    let mut children_code = Vec::new();
+    let mut children_stmts = Vec::new();
     for (i, child) in fl.children.iter().enumerate() {
         ctx.tree_path.push(i);
-        children_code.push(generate_node(child, ctx)?);
+        children_stmts.push(emit_build_node(child, ctx)?);
         ctx.tree_path.pop();
     }
     ctx.loop_depth -= 1;
 
     Ok(quote! {
         for (#idx_ident, #var_ident) in (#iter_expr).iter().enumerate() {
-            #( #children_code )*
+            #( #children_stmts )*
         }
     })
 }
 
-pub fn generate_if_chain(
+/// `<if cond="...">then</if><else>else</else>` → `if cond { then_push } else { else_push }`.
+/// Branch ausente emite zero nós (sem ramo else).
+pub(super) fn emit_if_chain(
     ic: &DenIfChain,
-    ctx: &mut CodegenCtx,
+    ctx: &mut BuildCtx,
 ) -> Result<proc_macro2::TokenStream, String> {
     let cond: proc_macro2::TokenStream = ic
         .condition
         .parse()
         .map_err(|e| format!("Invalid condition '{}': {e}", ic.condition))?;
 
-    let mut then_code = Vec::new();
+    let mut then_stmts = Vec::new();
     for (i, child) in ic.then_children.iter().enumerate() {
         ctx.tree_path.push(i);
-        then_code.push(generate_node(child, ctx)?);
+        then_stmts.push(emit_build_node(child, ctx)?);
         ctx.tree_path.pop();
     }
 
     if ic.else_children.is_empty() {
-        Ok(quote! {
+        return Ok(quote! {
             if #cond {
-                #( #then_code )*
+                #( #then_stmts )*
             }
-        })
-    } else {
-        let mut else_code = Vec::new();
-        for (i, child) in ic.else_children.iter().enumerate() {
-            ctx.tree_path.push(i);
-            else_code.push(generate_node(child, ctx)?);
-            ctx.tree_path.pop();
-        }
-        Ok(quote! {
-            if #cond {
-                #( #then_code )*
-            } else {
-                #( #else_code )*
-            }
-        })
+        });
     }
+
+    let mut else_stmts = Vec::new();
+    for (i, child) in ic.else_children.iter().enumerate() {
+        ctx.tree_path.push(i);
+        else_stmts.push(emit_build_node(child, ctx)?);
+        ctx.tree_path.pop();
+    }
+    Ok(quote! {
+        if #cond {
+            #( #then_stmts )*
+        } else {
+            #( #else_stmts )*
+        }
+    })
 }

@@ -1,45 +1,24 @@
-//! Fase 3 do pipeline: geração de código egui via `quote!`.
+//! Fase 3 do pipeline: geração de código que constrói a `RenderTree`.
+//!
+//! O `den_template!` gera código que:
+//! 1. BUILD — empurra `RenderNode`s numa `__den_tree` a cada frame.
+//! 2. RESOLVE — alimenta a `LayoutTable` com `to_layout_entries()` e chama `resolve_in_viewport`.
+//! 3. PAINT — delega pro `crate::den_paint::paint_tree` (egui-specific vive lá).
+//! 4. DISPATCH — roteia `PaintEvent`s pros handlers registrados no build.
 
 mod click;
 mod control_flow;
-mod egui_backend;
 mod element;
 mod flex;
 mod input;
 mod navigation;
+mod render_tree;
+mod style;
 mod text;
 
-use crate::types::{DenNode, DisplayMode, TextSegment, WidthValue};
+use crate::types::DenNode;
 use quote::quote;
-
-/// Altura de linha usada quando texto não define `font-size`.
-const DEFAULT_TEXT_LINE_HEIGHT: f32 = 14.0;
-
-/// Altura de linha usada para inputs sem `font-size`.
-const DEFAULT_INPUT_LINE_HEIGHT: f32 = 16.0;
-
-/// Largura média de glifo usada na estimativa textual.
-const AVERAGE_GLYPH_WIDTH_RATIO: f32 = 0.55;
-
-/// Largura estimada para expressões dinâmicas desconhecidas.
-const DEFAULT_EXPR_TEXT_WIDTH: f32 = 48.0;
-
-/// Largura estimada para inputs sem largura explícita.
-const DEFAULT_INPUT_WIDTH: f32 = 180.0;
-
-/// Contexto passado pelo codegen pra rastrear posição na árvore.
-pub(crate) struct CodegenCtx<'a> {
-    pub has_self: bool,
-    pub template_path: &'a str,
-    pub tree_path: Vec<usize>,
-    pub loop_depth: usize,
-    /// Índice deste elemento na LayoutTable. Incrementado a cada elemento.
-    /// 0 é reservado pro body (invisível, raiz). Começa em 1.
-    pub layout_index: usize,
-    /// `true` quando o pai direto deste elemento é `display: flex`.
-    /// Filhos Auto sem flex-grow usam largura intrínseca estimada.
-    pub parent_is_flex: bool,
-}
+use render_tree::{BuildCtx, emit_build_node};
 
 /// Gera TokenStream a partir da árvore resolvida.
 pub fn generate(
@@ -47,245 +26,110 @@ pub fn generate(
     has_self: bool,
     template_path: &str,
 ) -> Result<proc_macro2::TokenStream, String> {
-    // Pré-passo: coleta entries pra LayoutTable (mesma ordem DFS do codegen).
-    let entries_init = generate_layout_init(nodes);
-    let layout_labels = generate_layout_labels(nodes);
+    let mut ctx = BuildCtx::new(has_self, template_path);
 
-    let mut ctx = CodegenCtx {
-        has_self,
-        template_path,
-        tree_path: Vec::new(),
-        loop_depth: 0,
-        layout_index: 1, // 0 é o body
-        parent_is_flex: false,
-    };
-
-    let mut stmts = Vec::new();
+    let mut build_stmts = Vec::new();
     for (i, node) in nodes.iter().enumerate() {
         ctx.tree_path.push(i);
-        stmts.push(generate_node(node, &mut ctx)?);
+        build_stmts.push(emit_build_node(node, &mut ctx)?);
         ctx.tree_path.pop();
     }
 
-    // Envolve o render num thread_local pra reutilizar a LayoutTable entre frames.
+    // Tabelas de dispatch
+    let click_arms = ctx
+        .handlers
+        .iter()
+        .enumerate()
+        .map(|(idx, call)| {
+            let slot = idx as u32;
+            quote! { #slot => { #call; } }
+        })
+        .collect::<Vec<_>>();
+
+    let goto_arms = ctx
+        .goto_slots
+        .iter()
+        .enumerate()
+        .map(|(idx, nav)| {
+            let slot = idx as u32;
+            quote! { #slot => { #nav } }
+        })
+        .collect::<Vec<_>>();
+
+    let input_mirrors = ctx.input_mirrors.clone();
+
     Ok(quote! {
         {
+            // Constrói a RenderTree a cada frame.
+            let mut __den_tree = den_layout::RenderTree::new();
+            {
+                let __den_parent: usize = usize::MAX;
+                let _ = __den_parent; // evita warning em templates sem filhos
+                #( #build_stmts )*
+            }
+
+            // LayoutTable em thread_local — reutiliza allocation entre frames.
             ::std::thread_local! {
                 static __DEN_LAYOUT_STORE: ::std::cell::RefCell<den_layout::LayoutTable> =
-                    ::std::cell::RefCell::new(den_layout::LayoutTable::new(#entries_init));
+                    ::std::cell::RefCell::new(den_layout::LayoutTable::new(::std::vec::Vec::new()));
                 static __DEN_LAYOUT_DEBUG_DUMPED: ::std::cell::Cell<bool> =
                     ::std::cell::Cell::new(false);
             }
-            __DEN_LAYOUT_STORE.with(|__tl| {
+
+            // PAINT + RESOLVE + MEASURE tudo no backend egui.
+            let __den_events = __DEN_LAYOUT_STORE.with(|__tl| {
                 let mut __den_layout = __tl.borrow_mut();
-                // resolve_in_viewport() em CSS pixels; render multiplica por __den_scale
-                __den_layout.resolve_in_viewport(
-                    ui.available_width() / __den_scale,
-                    ui.available_height() / __den_scale,
+                let __events = crate::den_paint::paint_tree(
+                    ui,
+                    __den_scale,
+                    &mut __den_tree,
+                    &mut __den_layout,
+                    __den_route_state,
                 );
-                __den_layout.distribute_flex();
+
                 if den_layout::layout_debug_enabled() {
                     __DEN_LAYOUT_DEBUG_DUMPED.with(|__dumped| {
                         if !__dumped.get() {
-                            __den_layout.debug_dump(#template_path, #layout_labels);
+                            let __len = __den_layout.entries.len();
+                            let __labels: Vec<String> = (0..__len)
+                                .map(|i| {
+                                    if i == 0 {
+                                        "body".to_string()
+                                    } else {
+                                        format!("node#{}", i)
+                                    }
+                                })
+                                .collect();
+                            let __label_refs: Vec<&str> =
+                                __labels.iter().map(String::as_str).collect();
+                            __den_layout.debug_dump(#template_path, &__label_refs);
                             __dumped.set(true);
                         }
                     });
                 }
-                #( #stmts )*
+
+                __events
             });
+
+            // DISPATCH (fora do borrow da LayoutTable, handlers podem tocar self).
+            for __ev in __den_events {
+                match __ev {
+                    crate::den_paint::PaintEvent::Click { handler } => match handler {
+                        #( #click_arms )*
+                        _ => {}
+                    },
+                    crate::den_paint::PaintEvent::Goto { slot } => match slot {
+                        #( #goto_arms )*
+                        _ => {}
+                    },
+                    crate::den_paint::PaintEvent::InputChanged { node_id: __ev_node_id, value: __ev_value } => {
+                        __den_route_state
+                            .inputs_mut()
+                            .set(__ev_node_id, __ev_value.clone());
+                        #( #input_mirrors )*
+                    }
+                }
+            }
         }
     })
-}
-
-/// Dispatch por tipo de nó.
-pub(crate) fn generate_node(
-    node: &DenNode,
-    ctx: &mut CodegenCtx,
-) -> Result<proc_macro2::TokenStream, String> {
-    match node {
-        DenNode::Element(el) => element::generate_element(el, ctx),
-        DenNode::ForLoop(fl) => control_flow::generate_for_loop(fl, ctx),
-        DenNode::IfChain(ic) => control_flow::generate_if_chain(ic, ctx),
-    }
-}
-
-// ============================================================================
-// Layout entries — pré-passo que espelha exatamente a ordem DFS do codegen
-// ============================================================================
-
-/// Entrada temporária pro pré-passo de layout.
-struct FlatEntry {
-    label: String,
-    parent: usize,
-    width: WidthValue,
-    height: WidthValue,
-    display: DisplayMode,
-    padding: Option<f32>,
-    margin: Option<f32>,
-    gap: Option<f32>,
-    flex_grow: bool,
-    intrinsic_width: f32,
-    intrinsic_height: f32,
-}
-
-/// Coleta flat entries usando `walk_den_nodes` (fonte única de verdade pra DFS).
-fn collect_flat_entries(nodes: &[DenNode]) -> Vec<FlatEntry> {
-    let mut entries = Vec::new();
-    let mut counter = 1usize; // 0 = body
-
-    crate::types::walk_den_nodes(nodes, 0, &mut counter, &mut |el, _idx, parent| {
-        entries.push(FlatEntry {
-            label: layout_label(el),
-            parent,
-            width: el.visual.width,
-            height: el.visual.height,
-            display: el.visual.display,
-            padding: el.visual.padding,
-            margin: el.visual.margin,
-            gap: el.visual.gap,
-            flex_grow: el.visual.flex_grow,
-            intrinsic_width: intrinsic_width_for(el),
-            intrinsic_height: intrinsic_height_for(el),
-        });
-    });
-
-    entries
-}
-
-/// Estima a largura própria de um elemento antes do renderer backend medir texto.
-fn intrinsic_width_for(el: &crate::types::DenElement) -> f32 {
-    if el.bind_expr.is_some() {
-        return DEFAULT_INPUT_WIDTH;
-    }
-
-    if el.segments.is_empty() {
-        return 0.0;
-    }
-
-    let font_size = el.visual.font_size.unwrap_or(DEFAULT_TEXT_LINE_HEIGHT);
-    el.segments
-        .iter()
-        .map(|segment| match segment {
-            TextSegment::Literal(text) => {
-                text.chars().count() as f32 * font_size * AVERAGE_GLYPH_WIDTH_RATIO
-            }
-            TextSegment::Expr(_) => DEFAULT_EXPR_TEXT_WIDTH,
-        })
-        .sum()
-}
-
-/// Estima a altura própria de um elemento antes do renderer backend medir texto.
-fn intrinsic_height_for(el: &crate::types::DenElement) -> f32 {
-    if el.bind_expr.is_some() {
-        return el.visual.font_size.unwrap_or(DEFAULT_INPUT_LINE_HEIGHT);
-    }
-
-    if el.segments.is_empty() {
-        0.0
-    } else {
-        el.visual.font_size.unwrap_or(DEFAULT_TEXT_LINE_HEIGHT)
-    }
-}
-
-/// Monta um label estável e legível para dumps de layout.
-fn layout_label(el: &crate::types::DenElement) -> String {
-    if el.classes.is_empty() {
-        el.tag.clone()
-    } else {
-        format!("{}.{}", el.tag, el.classes.join("."))
-    }
-}
-
-/// Gera o bloco de inicialização da LayoutTable:
-/// ```rust,ignore
-/// { let mut __e = vec![...]; /* fill children */ __e }
-/// ```
-fn generate_layout_init(nodes: &[DenNode]) -> proc_macro2::TokenStream {
-    let flat = collect_flat_entries(nodes);
-
-    // Entry do body (índice 0, raiz invisível)
-    let mut entries_code = vec![quote! {
-        den_layout::LayoutEntry {
-            parent: None,
-            children: vec![],
-            width_rule: den_layout::DimensionRule::Auto,
-            height_rule: den_layout::DimensionRule::Auto,
-            display: den_layout::DisplayMode::Block,
-            padding: 0.0,
-            margin: 0.0,
-            gap: 0.0,
-            flex_grow: 0.0,
-            intrinsic_width: 0.0,
-            intrinsic_height: 0.0,
-        }
-    }];
-
-    for e in &flat {
-        let parent = e.parent;
-        let width_ts = match e.width {
-            WidthValue::Auto => quote! { den_layout::DimensionRule::Auto },
-            WidthValue::Px(v) => quote! { den_layout::DimensionRule::Px(#v) },
-            WidthValue::Percent(v) => quote! { den_layout::DimensionRule::Percent(#v) },
-        };
-        let height_ts = match e.height {
-            WidthValue::Auto => quote! { den_layout::DimensionRule::Auto },
-            WidthValue::Px(v) => quote! { den_layout::DimensionRule::Px(#v) },
-            WidthValue::Percent(v) => quote! { den_layout::DimensionRule::Percent(#v) },
-        };
-        let display_ts = match e.display {
-            DisplayMode::Flex => quote! { den_layout::DisplayMode::Flex },
-            DisplayMode::Grid => quote! { den_layout::DisplayMode::Grid },
-            DisplayMode::Block => quote! { den_layout::DisplayMode::Block },
-        };
-        let padding = e.padding.unwrap_or(0.0);
-        let margin = e.margin.unwrap_or(0.0);
-        let gap = e.gap.unwrap_or(0.0);
-        let flex_grow = if e.flex_grow { 1.0 } else { 0.0 };
-        let intrinsic_width = e.intrinsic_width;
-        let intrinsic_height = e.intrinsic_height;
-        entries_code.push(quote! {
-            den_layout::LayoutEntry {
-                parent: Some(#parent),
-                children: vec![],
-                width_rule: #width_ts,
-                height_rule: #height_ts,
-                display: #display_ts,
-                padding: #padding as f32,
-                margin: #margin as f32,
-                gap: #gap as f32,
-                flex_grow: #flex_grow as f32,
-                intrinsic_width: #intrinsic_width as f32,
-                intrinsic_height: #intrinsic_height as f32,
-            }
-        });
-    }
-
-    // Preenche children a partir dos parent refs em runtime (uma vez).
-    // expect() pra detectar bug: todo entry não-body DEVE ter parent.
-    quote! {
-        {
-            let mut __e: Vec<den_layout::LayoutEntry> = vec![ #( #entries_code ),* ];
-            for __i in 1..__e.len() {
-                let __p = __e[__i].parent
-                    .expect("Den: non-body layout entry must have parent");
-                __e[__p].children.push(__i);
-            }
-            __e
-        }
-    }
-}
-
-/// Gera labels paralelos à LayoutTable para debug textual.
-fn generate_layout_labels(nodes: &[DenNode]) -> proc_macro2::TokenStream {
-    let mut labels = vec!["body".to_string()];
-    labels.extend(
-        collect_flat_entries(nodes)
-            .into_iter()
-            .map(|entry| entry.label),
-    );
-
-    quote! {
-        &[ #( #labels ),* ]
-    }
 }

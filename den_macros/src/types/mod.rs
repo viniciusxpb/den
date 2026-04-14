@@ -5,9 +5,7 @@
 mod raw;
 mod resolved;
 mod style;
-mod walk;
 
 pub use raw::*;
 pub use resolved::*;
 pub use style::*;
-pub use walk::*;

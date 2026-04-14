@@ -19,38 +19,39 @@ $white:      #ffffff;
 
 .outer {
     background: $bg-deep;
-    border-radius: 12;
-    padding: 12;
+    border-radius: 12px;
+    padding: 12px;
     border: 1px solid $border;
     width: 100%;
+    gap: 12px;
 }
 
 // -- Hero ------------------------------------------------------
 
 .hero {
     background: $bg-card;
-    border-radius: 10;
-    padding: 20;
+    border-radius: 10px;
+    padding: 20px;
     border: 1px solid $border;
     width: 100%;
 }
 
 .hero-title {
     color: $blue;
-    font-size: 26;
+    font-size: 26px;
 }
 
 .hero-sub {
     color: $text-dim;
-    font-size: 13;
+    font-size: 13px;
 }
 
 .hero-action {
     background: $blue;
-    border-radius: 6;
-    padding: 10;
+    border-radius: 6px;
+    padding: 10px;
     color: $dark-ink;
-    font-size: 13;
+    font-size: 13px;
     width: 200px;
 }
 
@@ -63,45 +64,45 @@ $white:      #ffffff;
 
 .stat-card {
     background: $bg-card;
-    border-radius: 8;
-    padding: 14;
+    border-radius: 8px;
+    padding: 14px;
     border: 1px solid $border;
     flex: 1;
 }
 
 .stat-label {
     color: $text-faint;
-    font-size: 10;
+    font-size: 10px;
 }
 
 .stat-val-blue {
     color: $blue;
-    font-size: 22;
+    font-size: 22px;
 }
 
 .stat-val-green {
     color: $green;
-    font-size: 22;
+    font-size: 22px;
 }
 
 .stat-val-red {
     color: $crimson;
-    font-size: 22;
+    font-size: 22px;
 }
 
 .stat-val-orange {
     color: $orange;
-    font-size: 22;
+    font-size: 22px;
 }
 
 // -- Buttons ---------------------------------------------------
 
 .btn-blue {
     background: $blue;
-    border-radius: 6;
-    padding: 10;
+    border-radius: 6px;
+    padding: 10px;
     color: $dark-ink;
-    font-size: 13;
+    font-size: 13px;
     flex: 1;
 }
 
@@ -113,10 +114,10 @@ $white:      #ffffff;
 .btn-green {
     background: $bg-deep;
     border: 1px solid $green;
-    border-radius: 6;
-    padding: 10;
+    border-radius: 6px;
+    padding: 10px;
     color: $green;
-    font-size: 13;
+    font-size: 13px;
     flex: 1;
 }
 
@@ -129,10 +130,10 @@ $white:      #ffffff;
 .btn-dim {
     background: $bg-deep;
     border: 1px solid $border-sub;
-    border-radius: 6;
-    padding: 10;
+    border-radius: 6px;
+    padding: 10px;
     color: $text-dim;
-    font-size: 13;
+    font-size: 13px;
     flex: 1;
 }
 
@@ -146,56 +147,57 @@ $white:      #ffffff;
 
 .input-section {
     background: $bg-card;
-    border-radius: 10;
-    padding: 14;
+    border-radius: 10px;
+    padding: 14px;
     border: 1px solid $border;
     width: 100%;
+    gap: 10px;
 }
 
 .section-label {
     color: $text-dim;
-    font-size: 11;
+    font-size: 11px;
 }
 
 .input-col {
-    padding: 4;
+    padding: 4px;
     flex: 1;
 }
 
 .input-label {
     color: $text-faint;
-    font-size: 10;
+    font-size: 10px;
 }
 
 .text-input {
     background: $bg-deep;
     border: 1px solid $border-sub;
-    border-radius: 6;
-    padding: 8;
+    border-radius: 6px;
+    padding: 8px;
     color: $text-main;
-    font-size: 13;
+    font-size: 13px;
     width: 100%;
 }
 
 .preview-box {
     background: $bg-deep;
-    border-radius: 6;
-    padding: 10;
+    border-radius: 6px;
+    padding: 10px;
     border: 1px solid $border;
     width: 100%;
 }
 
 .preview-text {
     color: $text-muted;
-    font-size: 13;
+    font-size: 13px;
 }
 
 // -- Feature Cards ---------------------------------------------
 
 .feat-card {
     background: $bg-card;
-    border-radius: 8;
-    padding: 14;
+    border-radius: 8px;
+    padding: 14px;
     border: 1px solid $border;
     flex: 1;
 }
@@ -206,31 +208,32 @@ $white:      #ffffff;
 
 .feat-title {
     color: $text-main;
-    font-size: 13;
+    font-size: 13px;
 }
 
 .feat-body {
     color: $text-dim;
-    font-size: 11;
+    font-size: 11px;
 }
 
 // -- Tags ------------------------------------------------------
 
 .tags-box {
     background: $bg-card;
-    border-radius: 10;
-    padding: 14;
+    border-radius: 10px;
+    padding: 14px;
     border: 1px solid $border;
     width: 100%;
+    gap: 8px;
 }
 
 .tag {
     background: $bg-deep;
     border: 1px solid $border-sub;
-    border-radius: 20;
-    padding: 6;
+    border-radius: 20px;
+    padding: 6px;
     color: $blue;
-    font-size: 12;
+    font-size: 12px;
 }
 
 .tag:hover {
@@ -242,37 +245,37 @@ $white:      #ffffff;
 
 .bar-100 {
     background: $blue;
-    border-radius: 4;
-    padding: 6;
+    border-radius: 4px;
+    padding: 6px;
     color: $dark-ink;
-    font-size: 11;
+    font-size: 11px;
     width: 100%;
 }
 
 .bar-75 {
     background: $green;
-    border-radius: 4;
-    padding: 6;
+    border-radius: 4px;
+    padding: 6px;
     color: $dark-ink;
-    font-size: 11;
+    font-size: 11px;
     width: 75%;
 }
 
 .bar-50 {
     background: $orange;
-    border-radius: 4;
-    padding: 6;
+    border-radius: 4px;
+    padding: 6px;
     color: $dark-ink;
-    font-size: 11;
+    font-size: 11px;
     width: 50%;
 }
 
 .bar-25 {
     background: $crimson;
-    border-radius: 4;
-    padding: 6;
+    border-radius: 4px;
+    padding: 6px;
     color: $white;
-    font-size: 11;
+    font-size: 11px;
     width: 25%;
 }
 
@@ -280,91 +283,91 @@ $white:      #ffffff;
 
 .css-lab {
     background: $bg-card;
-    border-radius: 10;
-    padding: 14;
+    border-radius: 10px;
+    padding: 14px;
     border: 1px solid $border;
     width: 100%;
-    gap: 10;
+    gap: 10px;
 }
 
 .rule-color-font {
     background: $bg-deep;
     color: $orange;
-    font-size: 18;
-    padding: 8;
-    border-radius: 6;
+    font-size: 18px;
+    padding: 8px;
+    border-radius: 6px;
     width: 100%;
 }
 
 .rule-padding-margin-wrap {
     background: $bg-deep;
     border: 1px solid $border-sub;
-    border-radius: 6;
-    padding: 4;
+    border-radius: 6px;
+    padding: 4px;
     width: 100%;
 }
 
 .rule-padding-margin {
     background: $green;
     color: $dark-ink;
-    font-size: 12;
-    padding: 12;
-    margin: 10;
-    border-radius: 6;
+    font-size: 12px;
+    padding: 12px;
+    margin: 10px;
+    border-radius: 6px;
     width: 220px;
 }
 
 .rule-gap-row {
-    gap: 12;
+    gap: 12px;
 }
 
 .rule-flex-child {
     background: $bg-deep;
     border: 1px solid $blue;
-    border-radius: 6;
-    padding: 10;
+    border-radius: 6px;
+    padding: 10px;
     color: $blue;
-    font-size: 12;
+    font-size: 12px;
     flex: 1;
 }
 
 .rule-flex-fixed {
     background: $blue;
-    border-radius: 6;
-    padding: 10;
+    border-radius: 6px;
+    padding: 10px;
     color: $dark-ink;
-    font-size: 12;
+    font-size: 12px;
     width: 160px;
 }
 
 .rule-size-row {
-    gap: 10;
+    gap: 10px;
 }
 
 .rule-width-fixed {
     background: $crimson;
-    border-radius: 6;
-    padding: 8;
+    border-radius: 6px;
+    padding: 8px;
     color: $white;
-    font-size: 12;
+    font-size: 12px;
     width: 180px;
 }
 
 .rule-width-percent {
     background: $orange;
-    border-radius: 6;
-    padding: 8;
+    border-radius: 6px;
+    padding: 8px;
     color: $dark-ink;
-    font-size: 12;
+    font-size: 12px;
     width: 40%;
 }
 
 .rule-height-fixed {
     background: $green;
-    border-radius: 6;
-    padding: 8;
+    border-radius: 6px;
+    padding: 8px;
     color: $dark-ink;
-    font-size: 12;
+    font-size: 12px;
     width: 180px;
     height: 52px;
 }
@@ -372,10 +375,10 @@ $white:      #ffffff;
 .rule-hover {
     background: $bg-deep;
     border: 1px solid $border-sub;
-    border-radius: 6;
-    padding: 10;
+    border-radius: 6px;
+    padding: 10px;
     color: $text-muted;
-    font-size: 12;
+    font-size: 12px;
     width: 220px;
 }
 
@@ -389,17 +392,17 @@ $white:      #ffffff;
     display: grid;
     background: $bg-deep;
     border: 1px solid $border;
-    border-radius: 6;
-    padding: 8;
+    border-radius: 6px;
+    padding: 8px;
     width: 100%;
 }
 
 .rule-grid-child {
     background: $border-sub;
     color: $text-main;
-    font-size: 12;
-    padding: 8;
-    border-radius: 6;
+    font-size: 12px;
+    padding: 8px;
+    border-radius: 6px;
     width: 320px;
 }
 
@@ -408,16 +411,17 @@ $white:      #ffffff;
 .display__flex {
     display: flex;
     width: 100%;
+    gap: 10px;
 }
 
 // -- Footer ----------------------------------------------------
 
 .footer {
-    padding: 8;
+    padding: 8px;
     width: 100%;
 }
 
 .footer-text {
     color: $border-sub;
-    font-size: 11;
+    font-size: 11px;
 }

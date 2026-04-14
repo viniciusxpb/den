@@ -1,90 +1,71 @@
-//! Geração de código pra `<input bind="...">` (two-way binding).
+//! Geração de `<input bind="self.field" ...>`: sync route state ↔ page field
+//! e emissão do `RenderKind::Input` token.
+//!
+//! Responsabilidades:
+//! - Antes do push do nó: hidrata `DenRouteState.inputs` no primeiro render,
+//!   ou puxa o valor atual do route state pro page field nos frames seguintes.
+//! - Registra o "mirror" (código `if node_id == N { self.field = value; }`)
+//!   pra ser executado quando chegar `PaintEvent::InputChanged` — garante
+//!   que o page struct continua sendo fonte de verdade ergonômica.
+//! - Emite o `RenderKind::Input { node_id, placeholder }`.
 
-use super::CodegenCtx;
-use super::egui_backend::{
-    build_frame_expr, build_text_edit_expr, flex_child_wrapper, text_edit_desired_width_expr,
-};
-use crate::types::{DenElement, WidthValue};
+use super::render_tree::BuildCtx;
+use crate::types::DenElement;
 use quote::quote;
 
-/// Quantidade de lados horizontais para padding uniforme.
-const HORIZONTAL_SIDES: f32 = 2.0;
-
-/// Gera código para `<input bind="self.field" />`.
+/// Código emitido ANTES do `__den_tree.push(...)` de um input. Faz a sincronização
+/// route state → page field. Registra o mirror no `ctx.input_mirrors`.
 ///
-/// Produz o widget de texto do backend atual com styling SCSS.
-/// Não suporta (click), (change), hover, ou den-bind em v1.
-pub fn generate_input_element(
+/// Sem `bind_expr` → retorna statement vazio.
+pub(super) fn emit_sync_pre(
     el: &DenElement,
-    ctx: &mut CodegenCtx,
+    node_id_expr: &proc_macro2::TokenStream,
+    ctx: &mut BuildCtx,
 ) -> Result<proc_macro2::TokenStream, String> {
-    // bind requer self no template
-    if !ctx.has_self {
-        return Err(
-            "Template uses <input bind=\"...\"> but `self` was not passed to den_template!. \
-             Use: den_template!(\"path\", self);"
-                .to_string(),
-        );
-    }
-
-    // (click) em <input> não é suportado em v1
-    if el.on_click.is_some() {
-        return Err("Den: <input> does not support (click) events in v1. \
-             Use the bind attribute for two-way data binding."
-            .to_string());
-    }
-
-    let bind_expr = el.bind_expr.as_ref().unwrap(); // safe: caller verificou is_some()
-    let visual = &el.visual;
-
-    // Consome layout index — input é um elemento na flat list como qualquer outro
-    let my_layout_index = ctx.layout_index;
-    ctx.layout_index += 1;
-
-    // Monta a expressão `&mut self.field`
-    let bind_tokens: proc_macro2::TokenStream = format!("&mut {bind_expr}")
+    let Some(bind) = &el.bind_expr else {
+        return Ok(quote! {});
+    };
+    let bind_tokens: proc_macro2::TokenStream = bind
         .parse()
-        .map_err(|e| format!("Invalid bind expression '{bind_expr}': {e}"))?;
+        .map_err(|e| format!("Invalid bind expression '{bind}': {e}"))?;
 
-    let mut textedit = build_text_edit_expr(&bind_tokens, el.placeholder.as_deref(), visual);
-
-    // Constraint de largura — via desired_width no TextEdit.
-    // Px e Percent usam o layout system (mesma fonte de verdade que elementos regulares).
-    // Auto: TextEdit preenche available_width por padrão no egui.
-    textedit = match visual.width {
-        WidthValue::Percent(_) | WidthValue::Px(_) => {
-            let idx = my_layout_index;
-            let horizontal_padding = visual.padding.unwrap_or(0.0) * HORIZONTAL_SIDES;
-            text_edit_desired_width_expr(textedit, idx, horizontal_padding)
+    // Mirror: quando `PaintEvent::InputChanged { node_id: __ev_node_id, value: __ev_value }`
+    // bate com o id deste input, escreve no page field também.
+    let mirror = quote! {
+        if __ev_node_id == den_layout::DenNodeId::new(#node_id_expr) {
+            #bind_tokens = __ev_value.clone();
         }
-        WidthValue::Auto => textedit,
     };
+    ctx.input_mirrors.push(mirror);
 
-    // Renderização final: frame wrapper ou add direto
-    let element_code = if visual.needs_frame() {
-        let frame = build_frame_expr(visual);
-        quote! {
-            #frame.show(ui, |ui| {
-                ui.add(#textedit);
-            });
+    // Pré-push: hidrata se vazio; senão puxa pro self.field.
+    Ok(quote! {
+        let __den_input_id = den_layout::DenNodeId::new(#node_id_expr);
+        if __den_route_state.inputs().get(__den_input_id).is_none() {
+            __den_route_state
+                .inputs_mut()
+                .set(__den_input_id, (#bind_tokens).clone());
+        } else {
+            #bind_tokens = __den_route_state
+                .inputs()
+                .get(__den_input_id)
+                .unwrap_or("")
+                .to_string();
         }
-    } else {
-        quote! { ui.add(#textedit); }
-    };
+    })
+}
 
-    // Filho `flex: 1`: limita largura ao tamanho calculado pelo layout runtime.
-    let is_flex_auto_child =
-        ctx.parent_is_flex && visual.width == WidthValue::Auto && visual.flex_grow;
-    if is_flex_auto_child {
-        let idx = my_layout_index;
-        let wrapped_flex_child = flex_child_wrapper(quote! { __den_child_width }, element_code);
-        return Ok(quote! {
-            let __den_child_width = __den_layout.sizes[#idx]
-                .unwrap_or_else(|| ui.available_width() / __den_scale)
-                * __den_scale;
-            #wrapped_flex_child
-        });
+/// Emite o token do `RenderKind::Input { node_id, placeholder }` pro elemento.
+/// Chamado pelo `kind_tokens` quando `el.bind_expr.is_some()`.
+pub(super) fn emit_kind_tokens(el: &DenElement) -> proc_macro2::TokenStream {
+    let placeholder_tokens = match &el.placeholder {
+        Some(p) => quote! { Some(#p.to_string()) },
+        None => quote! { None },
+    };
+    quote! {
+        den_layout::RenderKind::Input {
+            node_id: __den_node_id,
+            placeholder: #placeholder_tokens,
+        }
     }
-
-    Ok(element_code)
 }

@@ -1,21 +1,17 @@
-//! Geração de container `display: flex`.
+//! Helpers específicos de layout flex no codegen.
+//!
+//! A distribuição flex em si roda em `den_layout` (runtime). Este módulo
+//! centraliza só as decisões compile-time: detectar que um elemento é
+//! container flex ou filho flex, e marcar o `LayoutIntent.flex_grow`.
 
-use quote::quote;
+use crate::types::{DenElement, DisplayMode};
 
-/// Gera um container flex horizontal.
-///
-/// A distribuição de largura é responsabilidade do runtime `den_layout`.
-/// O codegen só aplica o `gap` visual do egui e renderiza os filhos.
-pub(super) fn build_flex_layout(
-    inner: proc_macro2::TokenStream,
-    gap: Option<f32>,
-) -> proc_macro2::TokenStream {
-    let gap = gap.unwrap_or(0.0);
+/// `true` se o elemento é um container `display: flex`.
+pub(super) fn is_flex_container(el: &DenElement) -> bool {
+    el.visual.display == DisplayMode::Flex
+}
 
-    quote! {
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = #gap * __den_scale;
-            #inner
-        });
-    }
+/// `true` se o elemento tem `flex: 1` / `flex-grow: 1` declarado no SCSS.
+pub(super) fn has_flex_grow(el: &DenElement) -> bool {
+    el.visual.flex_grow
 }

@@ -4,17 +4,17 @@ Itens intencionalmente deixados pra depois. Apaga quando resolver.
 
 ---
 
-## Renderer genérico baseado em árvore resolvida
+## Click handlers com argumentos dentro de `<for>`
 
-O próximo passo arquitetural é reduzir o codegen direto de widgets egui por elemento e caminhar para um renderer genérico: HTML + SCSS vira uma árvore Den resolvida, com retângulos calculados pelo motor de layout, e o frontend egui apenas renderiza essa árvore.
+O renderer genérico usa tabela de slots por template: cada `(click)="f()"` vira um `Interact::click_handler: Some(slot)`, e o match de dispatch roteia `PaintEvent::Click{handler:slot} → self.f()`. Funciona pra handlers SEM args.
 
-O `den_layout` já foi separado em módulos de motor (`dimension`, `spacing`, `display`, `flex`, `entry`, `table`) e não depende mais diretamente de `egui`. O glue gerado por `den_router!`/`#[den_page]` também usa `crate::DenUi` em vez de citar egui diretamente.
+Com args, hoje o codegen retorna erro explícito. O bloqueio: args dentro de `<for>` referenciam variáveis do escopo do loop (`user.id`, `idx`), que não existem no ponto de dispatch (fora da closure de build).
 
-O acoplamento que ainda resta está no `den_template!`: `codegen/egui_backend.rs` concentra os tokens egui, enquanto `codegen/element.rs` e `codegen/input.rs` ainda decidem qual widget/render path usar por elemento. O próximo corte é fazer o macro gerar uma árvore Den resolvida e mover essas decisões para um renderer egui separado.
-
-`DenRouteState` já existe como ponto de encaixe runtime por rota. Ele ainda só guarda estado de inputs/debug, mas deve evoluir para carregar ou observar dados da árvore ativa quando a renderização for centralizada.
+**Fix futuro**: dispatch via node_id em vez de slot. Cada nó clicável guarda sua ação como closure clonada em runtime (ou o dispatch re-executa o build com lookup por node_id). Alternativa: gerar uma tabela `HashMap<DenNodeId, Box<dyn FnOnce(&mut Self)>>` preenchida no build; o dispatch lê do map por node_id.
 
 ---
+
+## Elemento raiz `<panel>` nos templates Den
 
 ## Elemento raiz `<panel>` nos templates Den
 
@@ -46,29 +46,17 @@ Isso é um comportamento intencional por ora (o usuário pode intencionalmente q
 
 ---
 
-## Borrow conflict: `<for>` + `(click)` com `&mut self`
+## Extração pra `den_core` (elimina parsers duplicados)
 
-`<for each="user" in="self.users">` gera `for (_, user) in self.users.iter()` que faz borrow imutável de `self`. Se o click handler dentro do loop chama `self.on_edit(...)` (borrow mutável), o borrow checker reclama.
-
-O clone dos argumentos via `den-bind` resolve o conflito dos DADOS (o clone captura o valor antes do `&mut self`), mas NÃO resolve o conflito do ITERADOR — `self.users.iter()` mantém o borrow ativo durante todo o loop body.
-
-Problema pré-existente: handlers sem args dentro de `<for>` (`(click)="toggle()"`) têm o mesmo conflito.
-
-**Fix futuro**: coletar os items antes do loop quando o `<for>` contém `(click)`:
-
-```rust
-// Ao invés de:
-for (idx, user) in self.users.iter().enumerate() { self.on_edit(...); }
-
-// Gerar:
-let __den_items: Vec<_> = self.users.iter().enumerate().collect();
-for (idx, user) in __den_items { self.on_edit(...); }
-```
-
-O Vec temporário libera o borrow de `self.users` antes do loop body. Custo: uma alocação por frame. Alternativa: indexar por posição (`self.users[idx]`) ao invés de iterar por referência.
+Os parsers HTML/SCSS estão duplicados entre `den_macros`, `preview.rs` e `style_editor.rs`. Criar um crate `den_core` com parsers + types compartilhados eliminaria a triplicação de `collect_scss_vars` e helpers de HTML.
 
 ---
 
-## `build_inner` com 7 parâmetros — codegen/element.rs
+## Backend alternativo além do egui
 
-Tá no limite. Próxima propriedade CSS nova que exigir mais um parâmetro deve triggar a criação de `BuildInnerCtx`.
+O `paint_tree` mora em `den_app/src/den_paint.rs` como função concreta. Pra trocar backend (iced, wgpu direto, canvas web), seria preciso:
+1. Definir o alias `DenUi` no app target com o tipo adequado (já existe esse hook).
+2. Implementar um `paint_tree` equivalente que aceite a `RenderTree` + `LayoutTable` e desenhe no backend escolhido.
+3. O macro gera `crate::den_paint::paint_tree(...)` — trocar o módulo no crate root troca o backend.
+
+Nenhum código de `den_layout` / `den_macros` precisa mudar.

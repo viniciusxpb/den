@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app_config;
+pub mod den_paint;
 mod models;
 mod pages;
 mod routes;

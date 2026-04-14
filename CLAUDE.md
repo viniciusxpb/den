@@ -4,172 +4,272 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What is Den
 
-Den is a Rust framework that compiles HTML + SCSS templates into native egui desktop GUI code at compile time via procedural macros. Zero runtime template parsing — all processing happens during compilation.
+Den is a Rust framework that compiles HTML + SCSS templates into native egui desktop GUI code at compile time via procedural macros. Zero runtime template parsing. The runtime model is **render tree → layout → paint**: the macro generates code that builds a `RenderTree` every frame, the layout engine resolves rects, and a single paint function draws everything via `egui::Painter` — no egui widgets (no `ui.label`, no `Frame::show`, no `TextEdit`).
 
 ## Build & Development Commands
 
 ```bash
 cargo build                    # Build everything
 cargo run --bin den_app        # Run the demo application
-cargo test                     # Run all tests (41 total: 19 layout + 22 parse)
+cargo test                     # Run all tests (22 layout + 22 parse)
+cargo test -p den_layout       # Layout engine + RenderTree tests only
+cargo test -p den_macros       # Parser tests only
+cargo test test_name           # Run a single test by name
 cargo clippy                   # Lint
 make dev                       # Hot reload dev mode (requires cargo-watch)
 make preview                   # Generate HTML preview of dev-tagged components
 make help                      # List all makefile commands
 ```
 
-`make dev` watches `den_app/src` and `den_macros/src`, excludes `den_macros/src/lib.rs` from triggers (to prevent rebuild loops), touches `lib.rs` to force recompilation, then runs the app.
+Debug environment variables:
+- `DEN_DEBUG_LAYOUT=1 cargo run --bin den_app` — one-time dump of resolved LayoutTable per template (labels, CSS rules, sizes, rects)
+- `DEN_DEBUG_ROUTE_STATE=1 cargo run --bin den_app` — one-time dump of route state per render path
 
 ## Architecture
 
 **Workspace structure**: Three crates in a Cargo workspace (resolver v3, edition 2024, Rust 1.88+).
 
-- **`den_macros`** — Proc macro crate. 3-phase compile-time pipeline in modular files. Exports `den_template!`.
-- **`den_layout`** — Runtime library. Backend-agnostic layout primitives split by concern (`dimension`, `spacing`, `display`, `flex`, `entry`, `table`), `DenRouteState`, `DenElementStyle`, and typed router traits.
-- **`den_app`** — Example application using eframe/egui. Contains pages with `.html` + `.scss` template pairs, a static Nodes page, and dev tool binaries (`preview`, `style_editor`).
+- **`den_macros`** — Proc macro crate. Pipeline Parse → Resolve → Codegen (emits RenderTree build). Exports `den_template!`, `den_router!`, `#[den_page]`.
+- **`den_layout`** — Runtime library. Zero egui dependency. Owns `LayoutTable`, `RenderTree`/`RenderNode`/`PaintStyle`/`LayoutIntent`/`Interact`, `DenRouteState` (inputs + focus + cursor + hover), `DenRouter`.
+- **`den_app`** — Example app using eframe/egui. Owns `den_paint.rs` (the ONLY egui-specific render code). Defines `pub type DenUi = egui::Ui;` at crate root.
 
-### Compile-time pipeline (3 phases across `den_macros/src/`)
+### Runtime pipeline (per frame)
 
 ```
-  Phase 1: Parse           Phase 2: Resolve          Phase 3: Codegen
-  parse/html.rs            resolve.rs                codegen/element.rs
-  parse/scss.rs            RawNode + StyleMap         codegen/control_flow.rs
-  parse/text.rs            → DenNode tree             codegen/egui_backend.rs
-  parse/color.rs           (with DenVisual)           codegen/text.rs
-  → RawNode + StyleMap                                codegen/click.rs
-                                                      codegen/flex.rs
-                                                      codegen/input.rs
-                                                      codegen/mod.rs
-                                                      → TokenStream
+  BUILD                 RESOLVE                 PAINT
+  ─────                 ───────                 ─────
+  macro-generated       layout.entries =        paint_tree walks the
+  code pushes           tree.to_layout_         RenderTree. For each node:
+  RenderNodes into      entries();              rect_filled → content
+  __den_tree. For       measure_tree_text       (text/input) → rect_stroke.
+  loops/ifs run         via ui.fonts_mut;       Collects events.
+  Rust control flow     then resolve in
+  to include the        viewport.
+  right nodes.
+                                                DISPATCH
+                                                ────────
+                                                match click/goto slot →
+                                                self.handler() or router.goto.
+                                                InputChanged → mirror to
+                                                route_state + self.field.
+```
+
+### Compile-time pipeline (in `den_macros/src/`)
+
+```
+  Phase 1: Parse           Phase 2: Resolve         Phase 3: Codegen
+  parse/html.rs            resolve.rs               codegen/render_tree.rs
+  parse/scss.rs            RawNode + StyleMap       codegen/text.rs
+  parse/text.rs            → DenNode tree           codegen/mod.rs
+  parse/color.rs           (with DenVisual)         → TokenStream that
+  → RawNode + StyleMap                                builds RenderTree
+                                                      + dispatches events
 ```
 
 1. `den_template!("pages/home/home", self)` reads `.html` and `.scss` files relative to `den_app/src/`
 2. `parse/html.rs` → `Vec<RawNode>` tree (hand-rolled, UTF-8 safe via `Vec<char>`)
-3. `parse/scss.rs` → `StyleMap` (`HashMap<ClassName, StyleRule>`, supports `$variables`)
-4. `resolve.rs` → merges styles, produces `Vec<DenNode>` with `DenVisual`. Also parses `on_click` into func_name + args via `parse_click_call()`.
-5. `codegen/` → emits egui Rust code via `quote!`, includes layout table initialization and click arg cloning
+3. `parse/scss.rs` → `StyleMap` (supports `$variables`)
+4. `resolve.rs` → merges styles, produces `Vec<DenNode>` with `DenVisual`
+5. `codegen/render_tree.rs` → emits `__den_tree.push(RenderNode { ... })` calls
+6. `codegen/mod.rs` → wraps build + paint call + event dispatch match arms
 
 **Key source files**:
-- `lib.rs` — Entry point (~60 lines), wires the 3 phases
+- `lib.rs` — Entry point, wires the 3 phases
 - `input.rs` — `DenTemplateInput` syn parsing
-- `types/` — Shared types split into submodules:
-  - `raw.rs` — `RawNode`, `RawElement` (Phase 1 output)
-  - `resolved.rs` — `DenNode`, `DenElement`, `DenVisual` (Phase 2 output)
-  - `style.rs` — `StyleRule`, `TextSegment`
-  - `walk.rs` — `walk_den_nodes()` (canonical DFS traversal)
+- `types/` — Shared types (`RawNode`, `DenNode`, `DenElement`, `DenVisual`, `StyleRule`)
+- `codegen/render_tree.rs` — `emit_build_node()` — main emitter, walks `DenNode` directly; `BuildCtx` tracks `handlers` / `goto_slots` / `input_mirrors` tables
+- `codegen/mod.rs` — `generate()` — orchestrates build/paint/dispatch wrapper
 
 All errors become `compile_error!` — users see IDE errors immediately.
+
+### The generated code pattern
+
+For a template `den_template!("pages/home/home", self)`, the macro expands to roughly:
+
+```rust
+{
+    let mut __den_tree = den_layout::RenderTree::new();
+    {
+        let __den_parent: usize = usize::MAX;
+        // One block per element:
+        {
+            let __den_li = __den_tree.nodes.len() + 1;
+            let __den_node_id = den_layout::DenNodeId::new(<hash>);
+            let __den_node = RenderNode {
+                node_id: __den_node_id,
+                layout_index: __den_li,
+                kind: RenderKind::Text { content: format!(..., self.name), heading: false },
+                style: PaintStyle { color: Some((..)), background: Some((..)), .. },
+                hover_style: Some(PaintStyle { .. }),          // resolved hover override
+                interact: Interact { click_handler: Some(0u32), .. },
+                layout: LayoutIntent { width_rule: .., display: .., .. },
+                children: Vec::new(),
+            };
+            let __den_idx = __den_tree.push(__den_node);
+            if __den_parent == usize::MAX { __den_tree.roots.push(__den_idx); }
+            else { __den_tree.nodes[__den_parent].children.push(__den_idx); }
+            { let __den_parent: usize = __den_idx; /* children pushes here */ }
+        }
+        // <for each="tag" in="self.tags"> becomes real Rust:
+        for (__den_idx_0, tag) in (self.tags).iter().enumerate() { /* child pushes */ }
+    }
+
+    thread_local! { static STORE: RefCell<LayoutTable> = ...; }
+    let __den_events = STORE.with(|tl| {
+        let mut layout = tl.borrow_mut();
+        crate::den_paint::paint_tree(ui, __den_scale, &mut __den_tree, &mut layout, __den_route_state)
+    });
+
+    for __ev in __den_events {
+        match __ev {
+            PaintEvent::Click { handler } => match handler {
+                0u32 => { self.increment_count(); }
+                _ => {}
+            },
+            PaintEvent::Goto { slot } => match slot {
+                0u32 => { __den_router.goto(crate::__den_route_UsuarioPage()); }
+                _ => {}
+            },
+            PaintEvent::InputChanged { node_id, value } => {
+                __den_route_state.inputs_mut().set(node_id, value.clone());
+                if node_id == DenNodeId::new(<hash>) { self.name = value.clone(); }
+            }
+        }
+    }
+}
+```
 
 ### Template syntax
 
 **Macro invocation**:
 - `den_template!("pages/home/home")` — without self, no interpolation or events
-- `den_template!("pages/home/home", self)` — with self, enables `{{ self.field }}` interpolation and `(click)` events
+- `den_template!("pages/home/home", self)` — enables `{{ self.field }}` and `(click)` events
 
-**Interpolation**: `{{ self.field }}` — generates `self.field` directly (no `this.` translation). Fields must implement `Display`.
+**Interpolation**: `{{ self.field }}` — generates `self.field` directly. Fields must implement `Display`.
 
 **Event binding**:
-- `(click)="handler()"` — no args, generates `self.handler()`
-- `(click)="handler(expr1, expr2)"` — with args, **requires `den-bind`** on the element. Args are auto-cloned before the render scope.
-- `den-bind="var"` attribute — declares which loop variable this element is bound to. Required when `(click)` has arguments.
-- Special keywords in args: `idx` → `__den_idx_N` (loop index), `style` → `DenElementStyle` struct from SCSS
+- `(click)="handler()"` — registered in the template's click handler table, dispatched via `PaintEvent::Click { handler: slot }`
+- `(click)="handler(arg1, arg2)"` — **not yet supported in the renderer**; the codegen returns a compile error. See PENDING.md.
 
-**SCSS variables**: `$var: value;` at top of file, referenced as `color: $var;` in properties.
+**Input binding**: `<input bind="self.field" placeholder="..." class="style" />` — the framework owns the input (no egui `TextEdit`):
+- First render: hydrates `DenRouteState.inputs` from `self.field`
+- Subsequent frames: `self.field` reads from route state
+- Paint function handles focus, cursor movement, keyboard events (`Text`, `Backspace`, `Delete`, `ArrowLeft/Right`, `Home`, `End`, `Escape`/`Enter` to blur)
+- Caret is a painted `line_segment` with blink on `ctx.input().time % 1.0 < 0.5`
+- On change: emits `PaintEvent::InputChanged` → macro dispatch writes to both route state and `self.field`
 
-**Style inheritance**: only `color` and `font-size` inherit from parent to child (not hover, not layout).
+**Navigation**:
+- `goto="PageName"` — registered in goto slots table, dispatched via `PaintEvent::Goto { slot }` → `__den_router.goto(crate::__den_route_PageName(...))`
+- `with="expr1, expr2"` — passes cloned arguments to the target page constructor
+- `goto` and `(click)` cannot coexist on the same element
+
+**SCSS variables**: `$var: value;` at top of file, referenced as `color: $var;`.
+
+**Style inheritance**: only `color` and `font-size` inherit parent → child (not hover, not layout).
 
 **Control flow**:
-- `<for each="item" in="self.items">...children...</for>` — generates `for (idx, item) in self.items.iter().enumerate()`. Transparent for layout (children belong to grandparent in layout table).
-- `<if cond="self.flag">...then...</if>` with optional `<else>...else...</else>`.
+- `<for each="item" in="self.items">...</for>` — generates `for (idx, item) in self.items.iter().enumerate() { /* push children */ }`. The loop index salts `node_id` hashes so hover/focus state is stable per item.
+- `<if cond="self.flag">...</if>` with optional `<else>...</else>` — generates plain Rust `if { push } else { push }`.
+
+### Router and page macros
+
+- `den_router!` — declares routes and generates the `AppRoute` enum, `AppPages` host struct, route helpers (`__den_route_PageName`), and the render dispatch. Defined in `routes.rs` of the app crate.
+- `#[den_page]` — attribute macro for pages with typed route data (generates `DenPage<Route, DenUi>` impl).
+- Pages with data: `HelloPage { usuario: Usuario }` in `den_router!` declares that navigation to `HelloPage` requires passing a `Usuario`.
 
 ### Layout system (`den_layout` crate, runtime)
 
-- `LayoutTable` with flat list of `LayoutEntry` (index 0 = invisible body/root)
-- `DimensionRule`: `Auto` | `Px(f32)` | `Percent(f32)`
-- `resolve_in_viewport(width, height)`: recalculates full rects in CSS pixels every frame.
-- Block layout stacks children vertically using parent content width, padding, margin, gap, and explicit height rules. Margins are currently non-collapsing.
-- Flex layout places children horizontally; `flex: 1` / `flex-grow: 1` Auto children split the remaining width after fixed widths, intrinsic auto widths, margins, and gaps are reserved.
-- `distribute_flex()` is now a compatibility no-op because flex is resolved inside `layout_children()`.
-- Generated code uses `thread_local! { RefCell<LayoutTable> }` — initialized once, reused every frame
-- **Width at render**: `Px`, `Percent`, and estimated `Auto` widths use `__den_layout.sizes[i] * __den_scale`, already resolved from the parent content box.
-- `den_layout` no longer depends on `egui`; `DenPage<Route, Ui>` is generic over the UI backend type.
-- Generated route/page glue references `crate::DenUi`; the demo app aliases it to `egui::Ui`.
-- `DEN_DEBUG_LAYOUT=1` emits a one-time resolved LayoutTable dump per template, including labels, CSS rules, sizes, and rects.
+- `LayoutTable` — flat `Vec<LayoutEntry>` with parent/children indices. Entry 0 is the invisible body. Lives in a `thread_local!` to reuse allocations.
+- `RenderTree::to_layout_entries()` — builds the entries Vec from the current render tree each frame.
+- `DimensionRule`: `Auto` | `Px(f32)` | `Percent(f32)`.
+- `DisplayMode`: `Block` | `Flex` | `Grid` (Grid falls back to Block for now).
+- `resolve_in_viewport(width, height)` — single DFS pass.
+- Block layout: stacks children vertically using content width minus padding/margin, with gaps between.
+- Flex layout: horizontal distribution. `flex: 1` / `flex-grow: 1` Auto children split remaining width after fixed/intrinsic widths, margins, gaps.
+- All values in CSS pixels. The paint function multiplies by `__den_scale` at draw time.
+- **`layout_index` is runtime-assigned**: `__den_tree.nodes.len() + 1` at push time. Invariant: parent.layout_index < child.layout_index, body = 0.
+
+### Paint function (`den_app/src/den_paint.rs`)
+
+The only egui-specific render code. Signature:
+
+```rust
+pub fn paint_tree(
+    ui: &mut Ui,
+    scale: f32,
+    tree: &mut RenderTree,      // mut: intrinsic sizes are filled in here
+    layout: &mut LayoutTable,   // mut: entries + rects populated in this call
+    state: &mut DenRouteState,
+) -> Vec<PaintEvent>
+```
+
+Steps:
+1. **Measure**: `ui.fonts_mut().layout_no_wrap` for each `RenderKind::Text`, writes back to `LayoutIntent::intrinsic_{width,height}` in CSS pixels.
+2. **Populate**: `layout.entries = tree.to_layout_entries()`, resize `sizes`/`rects`.
+3. **Resolve**: `layout.resolve_in_viewport(available / scale)`.
+4. **Paint**: DFS walk. For each node:
+   - `ui.interact(rect, Id::new(node_id.raw()), click_or_hover_sense)` — egui detects click/hover
+   - Pick `active_style` (`hover_style` when `resp.hovered()`, else base)
+   - `painter.rect_filled` (background) → content (text galley / input) → `painter.rect_stroke` (border)
+   - Recurse children (painted on top)
+   - Emit `PaintEvent::Click` or `PaintEvent::Goto` on `resp.clicked()`
+5. **Input**: focus transitions on click / click-elsewhere, keyboard event processing, caret painted as `line_segment` with blink, emits `InputChanged` on mutation.
 
 ### Route state (`den_layout::DenRouteState`)
 
-- Each generated `AppPages` host stores one `DenRouteState` per declared route.
-- Route state is reset when navigation flushes into that route.
-- Page render methods receive `__den_route_state: &mut DenRouteState` after `__den_router`.
-- `DenRouteState` currently groups `DenInputState` and `DenDebugState`; it is the runtime hook for the planned generic renderer/tree pipeline.
-- `DEN_DEBUG_ROUTE_STATE=1` emits a one-time state dump per route render path.
+One per active route in the `AppPages` host. Cleared on navigation. Holds:
+- `inputs: DenInputState` — `HashMap<DenNodeId, String>` for input values
+- `focus: Option<DenNodeId>` — currently focused input
+- `cursor: HashMap<DenNodeId, usize>` — byte-offset caret per input
+- `hover: HashSet<DenNodeId>` — populated by paint each frame
+- `debug: DenDebugState` — debug dump tracking
+
+The paint function owns read/write access; dispatch also writes to `inputs` when mirroring.
 
 ### Scale system
 
-- `__den_scale: f32` parameter on `render()`, multiplies all pixel values
-- Scales: `font-size` (min 6.0), `padding`, `margin`, `border-width` (min 1.0), `border-radius`, `width: Npx`
-- Does NOT scale: `color`, `background`, `width: N%`, `display`, `cursor`
+- `__den_scale: f32` parameter on `render()`, multiplies all pixel values at paint time
+- Scales: `font-size` (min 6.0 screen px), `padding`, `margin`, `border-width` (min 1.0), `border-radius`, `width: Npx`, `height: Npx`, `gap`
+- Does NOT scale: `color`, `background`, `%` widths, `display`, `cursor`
 - Controls: Ctrl+=/Ctrl+-/Ctrl+0/Ctrl+scroll, +/-/% widget at bottom-right
-- Zoom is currently global for the demo app.
+- Zoom is global for the demo app
 
-### Flex distribution (`codegen/flex.rs` + `codegen/element.rs`)
+### SCSS → paint property mapping
 
-- `parent_is_flex` in `CodegenCtx` tracks flex parent context
-- `build_flex_layout` maps flex containers to `ui.horizontal()` and applies SCSS `gap`
-- Runtime width distribution lives in `den_layout::LayoutTable::layout_flex_children`
-- `flex: 1` Auto children are wrapped in `allocate_ui_with_layout(top_down)` for text wrapping
-- **Limitation**: `IfChain` inside flex contributes both branches at compile time
+| SCSS Property    | Paint operation                          | Scaled | Values                            |
+|------------------|------------------------------------------|--------|-----------------------------------|
+| `color`          | `painter.galley` color                   | —      | `#RRGGBB`, `#RGB`, `$variable`    |
+| `font-size`      | `FontId::proportional(size)`             | yes    | `24` or `24px`                    |
+| `background`     | `painter.rect_filled`                    | —      | `#RRGGBB`, `#RGB`, `$variable`    |
+| `padding`        | `LayoutIntent.padding`                   | yes    | `16` or `16px`                    |
+| `margin`         | `LayoutIntent.margin`                    | yes    | `16` or `16px`                    |
+| `display: flex`  | `LayoutIntent.display = Flex`            | —      | only `flex` value supported       |
+| `border`         | `painter.rect_stroke`                    | yes    | `1px solid #RRGGBB`               |
+| `border-radius`  | rect corner radius                       | yes    | `8` or `8px`                      |
+| `width`          | `LayoutIntent.width_rule`                | Px/Auto| `100%`, `50%`, `200px`, `auto`    |
+| `height`         | `LayoutIntent.height_rule`               | Px/Auto| `100%`, `200px`, `auto`           |
+| `gap`            | `LayoutIntent.gap`                       | yes    | `8` or `8px`                      |
+| `cursor: pointer`| `CursorIcon::PointingHand` on hover      | —      | only in `:hover` blocks           |
 
-### DFS traversal invariant
-
-`walk_den_nodes()` in `types/walk.rs` is the **single source of truth** for DFS order. All functions that assign layout indices or iterate elements MUST use it. Currently used by:
-- `collect_flat_entries` (codegen/mod.rs)
-- `generate_element` increments `ctx.layout_index` in the same DFS order
-
-### Click handler codegen (`codegen/click.rs`)
-
-When `(click)` has arguments:
-1. Validate `den-bind` exists → `compile_error!` if missing
-2. Generate `let __den_click_arg_N = (expr).clone();` before UI borrow (`style` args skip clone — already owned)
-3. If `style` keyword in args: generate `let __den_element_style = DenElementStyle { ... }` from `DenVisual`
-4. Click handler: `self.handler(__den_click_arg_0, __den_click_arg_1, ...)`
-5. `translate_click_arg()`: `idx` → `__den_idx_N`, `style` → `__den_element_style`, else passthrough
-
-**Known limitation**: `<for>` + `(click)` with `&mut self` has borrow conflict (iterating `self.items` while calling `self.handler()`). Pre-existing issue. See PENDING.md.
-
-### SCSS → egui property mapping
-
-| SCSS Property    | egui API                    | Width System          | Values                           |
-|------------------|-----------------------------|----------------------|----------------------------------|
-| `color`          | `RichText::color()`         | —                    | `#RRGGBB`, `#RGB`, `$variable`  |
-| `font-size`      | `RichText::size()`          | scaled               | `24` or `24px`                   |
-| `background`     | `Frame::fill()`             | —                    | `#RRGGBB`, `#RGB`, `$variable`  |
-| `padding`        | `Frame::inner_margin()`     | scaled               | `16` or `16px`                   |
-| `margin`         | layout + `Frame::outer_margin()` | scaled          | `16` or `16px`                   |
-| `display: flex`  | `ui.horizontal()` + flex dist | layout system      | only `flex` value supported      |
-| `border`         | `Frame::stroke()`           | width scaled (min 1) | `1px solid #RRGGBB`             |
-| `border-radius`  | `Frame::corner_radius()`    | scaled               | `8` or `8px`                     |
-| `width`          | layout system               | Px/%/Auto resolved runtime | `100%`, `50%`, `200px`, `auto` |
-| `height`         | layout system               | Px/%/Auto resolved runtime | `100%`, `200px`, `auto` |
-| `gap`            | layout + egui spacing       | scaled               | `8` or `8px`                     |
-| `cursor: pointer`| `ctx.set_cursor_icon()`     | —                    | only in `:hover` blocks          |
-
-Supported HTML tags: `div`, `span`, `p`, `heading`/`h1`-`h3`. All map to `ui.label()` or `ui.heading()`.
+Supported HTML tags: `div`, `span`, `p`, `heading`/`h1`-`h3`, `input`, `for`, `if`/`else`. Visual tags become `RenderKind::Text` or `RenderKind::Container`.
 
 **Page pattern**: Each page is a struct with `render(&mut self, ui: &mut egui::Ui, __den_scale: f32, __den_router: &mut DenRouter<AppRoute>, __den_route_state: &mut DenRouteState)` that calls `den_template!`. The `__den_scale`, `__den_router`, and `__den_route_state` names are framework-reserved by convention.
 
-### Nodes page (`den_app/src/pages/nodes/`)
-
-The previous direct `egui::Painter` node editor was removed. The current Nodes view is a Den template pair (`nodes.html` + `nodes.scss`) that renders static Hermes/Atlas/Argus/Athena cards through the normal HTML + SCSS pipeline. New visual work in `den_app` should continue through Den templates, not handwritten painter calls.
-
 ### Dev tools (binaries in `den_app/src/bin/`)
 
-- `preview.rs` — Generates `preview/index.html` with all `dev`-tagged elements as static HTML. Has its own HTML/SCSS parsers (**duplicated** from `den_macros` — see PENDING.md for `den_core` extraction plan).
-- `style_editor.rs` — Separate egui window with visual controls per SCSS class. Writes back with surgical byte-offset replacement and 300ms debounce. Resolves `$variables` to literals on write-back (see PENDING.md).
+- `preview.rs` — Generates `preview/index.html` with all `dev`-tagged elements as static HTML. Has its own HTML/SCSS parsers (duplicated from `den_macros` — see PENDING.md).
+- `style_editor.rs` — Separate egui window with visual controls per SCSS class. Writes back with surgical byte-offset replacement and 300ms debounce. Resolves `$variables` to literals on write-back.
 
-### Known duplications (PENDING.md)
+### Known limitations
+
+- **`(click)` with arguments**: compile error in the renderer. Simple `(click)="handler()"` works. See PENDING.md for the planned dispatch-by-node-id fix.
+- **Text wrapping**: the paint function uses `layout_no_wrap`. Long text may overflow its container. Layout engine still reserves width correctly.
+- **No text selection / no IME range** in inputs — keyboard editing is basic (insert, backspace, arrows, home/end).
+- **Grid layout** declared but not implemented; falls back to Block.
+- **Margin collapse** not implemented; each margin is fully reserved.
+
+### Known duplications
 
 - `collect_scss_vars` exists in 3 places: `parse/scss.rs`, `preview.rs`, `style_editor.rs`
-- `StyleRule::merge_from` and `DenVisual::merge_from` have identical logic — update both when adding CSS properties
 - HTML parser helpers duplicated between `den_macros` and `preview.rs`
-- Fix: extract `den_core` crate with shared parsers and types
+- Fix: extract `den_core` crate with shared parsers and types (see PENDING.md)

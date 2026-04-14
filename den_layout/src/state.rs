@@ -138,6 +138,9 @@ impl Default for DenDebugState {
 pub struct DenRouteState {
     inputs: DenInputState,
     debug: DenDebugState,
+    focus: Option<DenNodeId>,
+    cursor: HashMap<DenNodeId, usize>,
+    hover: HashSet<DenNodeId>,
 }
 
 impl DenRouteState {
@@ -166,10 +169,48 @@ impl DenRouteState {
         &mut self.debug
     }
 
+    /// Nó focado atualmente (tipicamente um input).
+    pub fn focus(&self) -> Option<DenNodeId> {
+        self.focus
+    }
+
+    /// Define o nó focado. Passar `None` limpa o foco.
+    pub fn set_focus(&mut self, node: Option<DenNodeId>) {
+        self.focus = node;
+    }
+
+    /// Posição do caret em bytes para o input informado.
+    pub fn cursor_of(&self, node: DenNodeId) -> Option<usize> {
+        self.cursor.get(&node).copied()
+    }
+
+    /// Define a posição do caret em bytes para o input informado.
+    pub fn set_cursor(&mut self, node: DenNodeId, byte_offset: usize) {
+        self.cursor.insert(node, byte_offset);
+    }
+
+    /// Esquece a posição do caret deste input (ex.: quando perde o foco).
+    pub fn clear_cursor(&mut self, node: DenNodeId) {
+        self.cursor.remove(&node);
+    }
+
+    /// Conjunto de nós considerados em hover neste frame.
+    pub fn hover(&self) -> &HashSet<DenNodeId> {
+        &self.hover
+    }
+
+    /// Acesso mutável ao conjunto de hover — o painter popula a cada frame.
+    pub fn hover_mut(&mut self) -> &mut HashSet<DenNodeId> {
+        &mut self.hover
+    }
+
     /// Limpa dados voláteis mantidos por esta rota.
     pub fn clear(&mut self) {
         self.inputs.clear();
         self.debug.reset_dumps();
+        self.focus = None;
+        self.cursor.clear();
+        self.hover.clear();
     }
 
     /// Emite um dump único do estado desta rota quando debug estiver habilitado.

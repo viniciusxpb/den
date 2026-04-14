@@ -51,20 +51,6 @@ impl DenVisual {
         }
     }
 
-    /// Precisa de um egui::Frame wrapper?
-    pub fn needs_frame(&self) -> bool {
-        self.background.is_some()
-            || self.padding.is_some()
-            || self.margin.is_some()
-            || self.border.is_some()
-            || self.border_radius.is_some()
-    }
-
-    /// Tem hover behavior?
-    pub fn needs_hover(&self) -> bool {
-        self.hover_override.is_some()
-    }
-
     /// Merge outro visual neste (last-wins pra propriedades definidas).
     /// Ponto único de merge — adicionar nova propriedade CSS aqui só.
     ///
@@ -152,6 +138,7 @@ pub struct DenElement {
     /// Argumentos parseados do click handler (e.g. ["user.id", "user.name"]).
     pub on_click_args: Vec<String>,
     /// Variável vinculada por `den-bind="var"`.
+    #[allow(dead_code)]
     pub den_bind: Option<String>,
     pub segments: Vec<TextSegment>,
     pub children: Vec<DenNode>,

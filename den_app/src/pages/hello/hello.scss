@@ -6,16 +6,16 @@ $border: #cfe7db;
 
 .page {
     background: $bg;
-    padding: 16;
+    padding: 16px;
     width: 100%;
 }
 
 .message {
     background: $card;
     border: 1px solid $border;
-    border-radius: 8;
-    padding: 18;
+    border-radius: 8px;
+    padding: 18px;
     color: $accent;
-    font-size: 26;
+    font-size: 26px;
     width: 100%;
 }
