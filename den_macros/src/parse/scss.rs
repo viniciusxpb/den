@@ -31,16 +31,29 @@ pub fn parse_scss(input: &str) -> StyleMap {
             continue;
         }
 
-        if bytes[pos] != b'.' {
+        // Aceita seletor `.className` (classe) ou `body` (tag raiz).
+        // Armazena ambos no mesmo mapa; a chave é o nome sem ponto.
+        // Como `body` é reservado pra tag do root, não colide com classe `.body`
+        // em templates Den (convenção).
+        let selector = if bytes[pos] == b'.' {
+            pos += 1;
+            read_identifier(bytes, &mut pos)
+        } else if bytes[pos..].starts_with(b"body")
+            && bytes
+                .get(pos + 4)
+                .is_some_and(|c| !is_ident_char(*c))
+        {
+            pos += 4;
+            "body".to_string()
+        } else {
             pos += 1;
             continue;
-        }
-        pos += 1; // skip '.'
+        };
 
-        let class_name = read_identifier(bytes, &mut pos);
-        if class_name.is_empty() {
+        if selector.is_empty() {
             continue;
         }
+        let class_name = selector;
 
         let pseudo = if pos < bytes.len() && bytes[pos] == b':' {
             pos += 1;
@@ -220,14 +233,17 @@ fn skip_whitespace(bytes: &[u8], pos: &mut usize) {
 
 fn read_identifier(bytes: &[u8], pos: &mut usize) -> String {
     let start = *pos;
-    while *pos < bytes.len()
-        && (bytes[*pos].is_ascii_alphanumeric() || bytes[*pos] == b'_' || bytes[*pos] == b'-')
-    {
+    while *pos < bytes.len() && is_ident_char(bytes[*pos]) {
         *pos += 1;
     }
     std::str::from_utf8(&bytes[start..*pos])
         .unwrap_or("")
         .to_string()
+}
+
+/// Caractere válido em identificador CSS/SCSS (letra/dígito/`_`/`-`).
+fn is_ident_char(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b == b'_' || b == b'-'
 }
 
 fn read_css_identifier(bytes: &[u8], pos: &mut usize) -> String {

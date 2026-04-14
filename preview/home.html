@@ -1,435 +1,381 @@
-// -- Palette ---------------------------------------------------
-$bg-deep:    #12121f;
-$bg-card:    #1a1a30;
-$border:     #2a2a45;
-$border-sub: #3a3a55;
-$blue:       #7eb8f7;
-$green:      #5cdb95;
-$orange:     #f0a050;
-$crimson:    #e94560;
-$text-main:  #c0c0d8;
-$text-muted: #8a8aa8;
-$text-dim:   #6a6a8a;
-$text-faint: #4a4a6a;
-$dark-ink:   #0d1b2a;
-$white:      #ffffff;
-// --------------------------------------------------------------
-
-// -- Body (viewport raiz, aplica no CentralPanel do egui e no <body> do preview) -
-
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="refresh" content="3">
+  <title>Den Preview — home</title>
+  <style>
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
 body {
-    background: $bg-deep;
-    color: $text-main;
-    font-size: 13px;
+    min-height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+.den-viewport {
+    width: 1200px;
+    min-height: 100vh;
+    margin: 0 auto;
+}
+.den-placeholder {
+    /* Marcação visual pra `{{ self.campo }}` quando o preview não tem data real. */
+    opacity: 0.7;
+    font-style: italic;
+}
+input {
+    font-family: inherit;
+    color: inherit;
+    background: transparent;
+    border: none;
+    outline: none;
 }
 
-// -- Outer Container -------------------------------------------
-
+/* ── Page stylesheet (CSS do SCSS da página, incluindo seletor `body`) ── */
+body {
+    background: #12121f;
+    color: #c0c0d8;
+    font-size: 13px;
+}
 .outer {
-    background: $bg-deep;
+    background: #12121f;
     border-radius: 12px;
     padding: 12px;
-    border: 1px solid $border;
+    border: 1px solid #2a2a45;
     width: 100%;
     gap: 12px;
 }
-
-// -- Hero ------------------------------------------------------
-
 .hero {
-    background: $bg-card;
+    background: #1a1a30;
     border-radius: 10px;
     padding: 20px;
-    border: 1px solid $border;
+    border: 1px solid #2a2a45;
     width: 100%;
 }
-
 .hero-title {
-    color: $blue;
+    color: #7eb8f7;
     font-size: 26px;
 }
-
 .hero-sub {
-    color: $text-dim;
+    color: #6a6a8a;
     font-size: 13px;
 }
-
 .hero-action {
-    background: $blue;
+    background: #7eb8f7;
     border-radius: 6px;
     padding: 10px;
-    color: $dark-ink;
+    color: #0d1b2a;
     font-size: 13px;
     width: 200px;
 }
-
 .hero-action:hover {
     background: #9ecafb;
     cursor: pointer;
 }
-
-// -- Stats Row -------------------------------------------------
-
 .stat-card {
-    background: $bg-card;
+    background: #1a1a30;
     border-radius: 8px;
     padding: 14px;
-    border: 1px solid $border;
+    border: 1px solid #2a2a45;
     flex: 1;
 }
-
 .stat-label {
-    color: $text-faint;
+    color: #4a4a6a;
     font-size: 10px;
 }
-
 .stat-val-blue {
-    color: $blue;
+    color: #7eb8f7;
     font-size: 22px;
 }
-
 .stat-val-green {
-    color: $green;
+    color: #5cdb95;
     font-size: 22px;
 }
-
 .stat-val-red {
-    color: $crimson;
+    color: #e94560;
     font-size: 22px;
 }
-
 .stat-val-orange {
-    color: $orange;
+    color: #f0a050;
     font-size: 22px;
 }
-
-// -- Buttons ---------------------------------------------------
-
 .btn-blue {
-    background: $blue;
+    background: #7eb8f7;
     border-radius: 6px;
     padding: 10px;
-    color: $dark-ink;
+    color: #0d1b2a;
     font-size: 13px;
     flex: 1;
 }
-
 .btn-blue:hover {
     background: #9ecafb;
     cursor: pointer;
 }
-
 .btn-green {
-    background: $bg-deep;
-    border: 1px solid $green;
+    background: #12121f;
+    border: 1px solid #5cdb95;
     border-radius: 6px;
     padding: 10px;
-    color: $green;
+    color: #5cdb95;
     font-size: 13px;
     flex: 1;
 }
-
 .btn-green:hover {
-    background: $green;
-    color: $dark-ink;
+    background: #5cdb95;
+    color: #0d1b2a;
     cursor: pointer;
 }
-
 .btn-dim {
-    background: $bg-deep;
-    border: 1px solid $border-sub;
+    background: #12121f;
+    border: 1px solid #2a2a45-sub;
     border-radius: 6px;
     padding: 10px;
-    color: $text-dim;
+    color: #6a6a8a;
     font-size: 13px;
     flex: 1;
 }
-
 .btn-dim:hover {
-    border: 1px solid $text-muted;
-    color: $text-muted;
+    border: 1px solid #8a8aa8;
+    color: #8a8aa8;
     cursor: pointer;
 }
-
-// -- Input + Preview -------------------------------------------
-
 .input-section {
-    background: $bg-card;
+    background: #1a1a30;
     border-radius: 10px;
     padding: 14px;
-    border: 1px solid $border;
+    border: 1px solid #2a2a45;
     width: 100%;
     gap: 10px;
 }
-
 .section-label {
-    color: $text-dim;
+    color: #6a6a8a;
     font-size: 11px;
 }
-
 .input-col {
     padding: 4px;
     flex: 1;
 }
-
 .input-label {
-    color: $text-faint;
+    color: #4a4a6a;
     font-size: 10px;
 }
-
 .text-input {
-    background: $bg-deep;
-    border: 1px solid $border-sub;
+    background: #12121f;
+    border: 1px solid #2a2a45-sub;
     border-radius: 6px;
     padding: 8px;
-    color: $text-main;
+    color: #c0c0d8;
     font-size: 13px;
     width: 100%;
 }
-
 .preview-box {
-    background: $bg-deep;
+    background: #12121f;
     border-radius: 6px;
     padding: 10px;
-    border: 1px solid $border;
+    border: 1px solid #2a2a45;
     width: 100%;
 }
-
 .preview-text {
-    color: $text-muted;
+    color: #8a8aa8;
     font-size: 13px;
 }
-
-// -- Feature Cards ---------------------------------------------
-
 .feat-card {
-    background: $bg-card;
+    background: #1a1a30;
     border-radius: 8px;
     padding: 14px;
-    border: 1px solid $border;
+    border: 1px solid #2a2a45;
     flex: 1;
 }
-
 .feat-card:hover {
-    border: 1px solid $blue;
+    border: 1px solid #7eb8f7;
 }
-
 .feat-title {
-    color: $text-main;
+    color: #c0c0d8;
     font-size: 13px;
 }
-
 .feat-body {
-    color: $text-dim;
+    color: #6a6a8a;
     font-size: 11px;
 }
-
-// -- Tags ------------------------------------------------------
-
 .tags-box {
-    background: $bg-card;
+    background: #1a1a30;
     border-radius: 10px;
     padding: 14px;
-    border: 1px solid $border;
+    border: 1px solid #2a2a45;
     width: 100%;
     gap: 8px;
 }
-
 .tag {
-    background: $bg-deep;
-    border: 1px solid $border-sub;
+    background: #12121f;
+    border: 1px solid #2a2a45-sub;
     border-radius: 20px;
     padding: 6px;
-    color: $blue;
+    color: #7eb8f7;
     font-size: 12px;
 }
-
 .tag:hover {
-    border: 1px solid $blue;
+    border: 1px solid #7eb8f7;
     cursor: pointer;
 }
-
-// -- Width Bars ------------------------------------------------
-
 .bar-100 {
-    background: $blue;
+    background: #7eb8f7;
     border-radius: 4px;
     padding: 6px;
-    color: $dark-ink;
+    color: #0d1b2a;
     font-size: 11px;
     width: 100%;
 }
-
 .bar-75 {
-    background: $green;
+    background: #5cdb95;
     border-radius: 4px;
     padding: 6px;
-    color: $dark-ink;
+    color: #0d1b2a;
     font-size: 11px;
     width: 75%;
 }
-
 .bar-50 {
-    background: $orange;
+    background: #f0a050;
     border-radius: 4px;
     padding: 6px;
-    color: $dark-ink;
+    color: #0d1b2a;
     font-size: 11px;
     width: 50%;
 }
-
 .bar-25 {
-    background: $crimson;
+    background: #e94560;
     border-radius: 4px;
     padding: 6px;
-    color: $white;
+    color: #ffffff;
     font-size: 11px;
     width: 25%;
 }
-
-// -- CSS Rules Lab ---------------------------------------------
-
 .css-lab {
-    background: $bg-card;
+    background: #1a1a30;
     border-radius: 10px;
     padding: 14px;
-    border: 1px solid $border;
+    border: 1px solid #2a2a45;
     width: 100%;
     gap: 10px;
 }
-
 .rule-color-font {
-    background: $bg-deep;
-    color: $orange;
+    background: #12121f;
+    color: #f0a050;
     font-size: 18px;
     padding: 8px;
     border-radius: 6px;
     width: 100%;
 }
-
 .rule-padding-margin-wrap {
-    background: $bg-deep;
-    border: 1px solid $border-sub;
+    background: #12121f;
+    border: 1px solid #2a2a45-sub;
     border-radius: 6px;
     padding: 4px;
     width: 100%;
 }
-
 .rule-padding-margin {
-    background: $green;
-    color: $dark-ink;
+    background: #5cdb95;
+    color: #0d1b2a;
     font-size: 12px;
     padding: 12px;
     margin: 10px;
     border-radius: 6px;
     width: 220px;
 }
-
 .rule-gap-row {
     gap: 12px;
 }
-
 .rule-flex-child {
-    background: $bg-deep;
-    border: 1px solid $blue;
+    background: #12121f;
+    border: 1px solid #7eb8f7;
     border-radius: 6px;
     padding: 10px;
-    color: $blue;
+    color: #7eb8f7;
     font-size: 12px;
     flex: 1;
 }
-
 .rule-flex-fixed {
-    background: $blue;
+    background: #7eb8f7;
     border-radius: 6px;
     padding: 10px;
-    color: $dark-ink;
+    color: #0d1b2a;
     font-size: 12px;
     width: 160px;
 }
-
 .rule-size-row {
     gap: 10px;
 }
-
 .rule-width-fixed {
-    background: $crimson;
+    background: #e94560;
     border-radius: 6px;
     padding: 8px;
-    color: $white;
+    color: #ffffff;
     font-size: 12px;
     width: 180px;
 }
-
 .rule-width-percent {
-    background: $orange;
+    background: #f0a050;
     border-radius: 6px;
     padding: 8px;
-    color: $dark-ink;
+    color: #0d1b2a;
     font-size: 12px;
     width: 40%;
 }
-
 .rule-height-fixed {
-    background: $green;
+    background: #5cdb95;
     border-radius: 6px;
     padding: 8px;
-    color: $dark-ink;
+    color: #0d1b2a;
     font-size: 12px;
     width: 180px;
     height: 52px;
 }
-
 .rule-hover {
-    background: $bg-deep;
-    border: 1px solid $border-sub;
+    background: #12121f;
+    border: 1px solid #2a2a45-sub;
     border-radius: 6px;
     padding: 10px;
-    color: $text-muted;
+    color: #8a8aa8;
     font-size: 12px;
     width: 220px;
 }
-
 .rule-hover:hover {
-    background: $blue;
-    color: $dark-ink;
+    background: #7eb8f7;
+    color: #0d1b2a;
     cursor: pointer;
 }
-
 .rule-grid-demo {
     display: grid;
-    background: $bg-deep;
-    border: 1px solid $border;
+    background: #12121f;
+    border: 1px solid #2a2a45;
     border-radius: 6px;
     padding: 8px;
     width: 100%;
 }
-
 .rule-grid-child {
-    background: $border-sub;
-    color: $text-main;
+    background: #2a2a45-sub;
+    color: #c0c0d8;
     font-size: 12px;
     padding: 8px;
     border-radius: 6px;
     width: 320px;
 }
-
-// -- Flex ------------------------------------------------------
-
 .display__flex {
     display: flex;
     width: 100%;
     gap: 10px;
 }
-
-// -- Footer ----------------------------------------------------
-
 .footer {
     padding: 8px;
     width: 100%;
 }
-
 .footer-text {
-    color: $border-sub;
+    color: #2a2a45-sub;
     font-size: 11px;
 }
+
+  </style>
+</head>
+<body>
+  <div class="den-viewport">
+<div class="">Teste</div>
+  </div>
+</body>
+</html>

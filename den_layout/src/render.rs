@@ -144,6 +144,9 @@ pub struct RenderTree {
     pub nodes: Vec<RenderNode>,
     /// Índices em `nodes` dos roots (filhos diretos do body invisível).
     pub roots: Vec<usize>,
+    /// Estilo do seletor `body` do SCSS (background, border, font padrão).
+    /// `None` quando o SCSS não declara `body { ... }`.
+    pub body_style: Option<PaintStyle>,
 }
 
 impl RenderTree {

@@ -19,7 +19,7 @@ const DEFAULT_EXPR_TEXT_WIDTH: f32 = 48.0;
 pub(super) const DEFAULT_INPUT_WIDTH: f32 = 180.0;
 
 /// Emite um literal `den_layout::PaintStyle { .. }` para o visual dado.
-pub(super) fn paint_style_tokens(visual: &DenVisual) -> proc_macro2::TokenStream {
+pub(crate) fn paint_style_tokens(visual: &DenVisual) -> proc_macro2::TokenStream {
     let color = quote_opt_rgb(visual.color);
     let background = quote_opt_rgb(visual.background);
     let (border_color, border_width) = match visual.border {

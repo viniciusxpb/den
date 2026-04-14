@@ -1,21 +1,24 @@
 //! Den Preview Generator
 //!
-//! Escaneia todos os templates HTML+SCSS em src/pages/, encontra elementos com
-//! o atributo `dev`, e gera preview/index.html com CSS real e valores fictícios.
+//! Renderiza cada página (`.html` + `.scss` pair em `src/pages/`) como um HTML
+//! estático IDÊNTICO ao que o egui desenharia — mesma largura de viewport,
+//! mesmo box-sizing, mesmo layout engine (CSS flex match do runtime Den).
 //!
-//! Uso: cargo run --bin preview
-//! Ou via: make dev (integrado ao watch)
+//! Saída: um arquivo por página em `preview/<pagename>.html`.
+//!
+//! Uso: `cargo run --bin preview`.
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// Largura da janela egui em pixels (deve coincidir com `app_config::WINDOW_WIDTH` = 1200).
-///
-/// Usada pra que `width: 100%` nos componentes do preview resolva relativo ao
-/// mesmo espaço disponível que o app nativo enxerga. Atualizar aqui se o
-/// tamanho padrão da janela mudar.
-#[allow(dead_code)]
+/// Largura da janela egui em pixels (deve coincidir com `app_config::WINDOW_WIDTH = 1200`).
+/// O container do preview usa exatamente esta largura pra que `width: 100%` resolva
+/// contra o mesmo espaço disponível que o app nativo enxerga.
 const EGUI_WINDOW_WIDTH: u32 = 1200;
+
+/// Quantas iterações simular em `<for>` quando não temos dados reais.
+const FOR_LOOP_ITERATIONS: usize = 3;
 
 fn main() {
     let manifest = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
@@ -26,81 +29,66 @@ fn main() {
 
     let pairs = find_template_pairs(&pages_dir);
     if pairs.is_empty() {
-        eprintln!(
-            "preview: nenhum template encontrado em {}",
-            pages_dir.display()
-        );
+        eprintln!("preview: nenhum template em {}", pages_dir.display());
         return;
     }
 
-    let mut all_css = String::new();
-    let mut all_components: Vec<(String, String)> = Vec::new(); // (label, html)
+    let mut index_links: Vec<(String, String)> = Vec::new();
 
     for (html_path, scss_path) in &pairs {
+        let Some(page_name) = html_path
+            .parent()
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().to_string())
+        else {
+            continue;
+        };
+
         let html = match fs::read_to_string(html_path) {
-            Ok(content) => content,
+            Ok(s) => s,
             Err(e) => {
-                eprintln!("preview: falha ao ler {}: {e}", html_path.display());
+                eprintln!("preview: falha ler {}: {e}", html_path.display());
                 continue;
             }
         };
         let scss = match fs::read_to_string(scss_path) {
-            Ok(content) => content,
+            Ok(s) => s,
             Err(e) => {
-                eprintln!("preview: falha ao ler {}: {e}", scss_path.display());
+                eprintln!("preview: falha ler {}: {e}", scss_path.display());
                 continue;
             }
         };
 
-        all_css.push_str(&scss_to_css(&scss));
-        all_css.push('\n');
+        let css = scss_to_css(&scss);
+        let body_html = convert_page_body(&html);
+        let page_html = render_page(&page_name, &css, &body_html);
 
-        let label = html_path
-            .parent()
-            .and_then(|p| p.file_name())
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| "unknown".to_string());
+        let out_file = preview_dir.join(format!("{page_name}.html"));
+        fs::write(&out_file, &page_html).expect("write preview page");
+        println!("preview: {} → {}", page_name, out_file.display());
 
-        for component in extract_dev_components(&html) {
-            all_components.push((label.clone(), component));
-        }
+        index_links.push((page_name.clone(), format!("{page_name}.html")));
     }
 
-    if all_components.is_empty() {
-        eprintln!("preview: nenhum elemento com atributo `dev` encontrado.");
-        eprintln!("         Adicione `dev` a um elemento no HTML, ex: <div dev class=\"foo\">");
-        return;
-    }
+    // Index com links pra cada página.
+    let index_html = render_index(&index_links);
+    let index_path = preview_dir.join("index.html");
+    fs::write(&index_path, index_html).expect("write index.html");
 
-    let output = generate_preview_html(&all_css, &all_components);
-    let out_path = preview_dir.join("index.html");
-    let already_exists = out_path.exists();
-    fs::write(&out_path, &output).expect("Failed to write preview/index.html");
-    println!(
-        "preview: {} componente(s) → {}",
-        all_components.len(),
-        out_path.display()
-    );
-
-    if !already_exists {
-        std::process::Command::new("xdg-open")
-            .arg(&out_path)
-            .spawn()
-            .ok();
-    }
+    // Sempre abre o index — não tem watch mode aqui, então não gera spam.
+    // Browsers costumam focar na tab existente se a URL já está aberta.
+    std::process::Command::new("xdg-open").arg(&index_path).spawn().ok();
 }
 
 // ============================================================================
 // Template discovery
 // ============================================================================
 
-/// Busca recursivamente pares HTML+SCSS em `dir`.
 fn find_template_pairs(dir: &Path) -> Vec<(PathBuf, PathBuf)> {
     let mut pairs = Vec::new();
     let Ok(entries) = fs::read_dir(dir) else {
         return pairs;
     };
-
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_dir() {
@@ -119,56 +107,69 @@ fn find_template_pairs(dir: &Path) -> Vec<(PathBuf, PathBuf)> {
 // SCSS → CSS
 // ============================================================================
 
-/// Converte SCSS do Den pra CSS válido.
-/// - Resolve variáveis `$nome: valor` e substitui referências
-/// - Adiciona `px` a valores numéricos sem unidade
-/// - Remove as linhas de declaração de variáveis do output
+/// Converte SCSS do Den pra CSS puro.
+/// Resolve variáveis `$nome`, adiciona `px` onde o valor é numérico sem unidade.
+/// Não injeta hacks — o CSS resultante é direto e nossa layout engine casa com
+/// `box-sizing: border-box` + flex padrão.
 fn scss_to_css(scss: &str) -> String {
     let vars = collect_scss_vars(scss);
     let mut out = String::new();
     for line in scss.lines() {
         let trimmed = line.trim();
-        // Pula declarações de variáveis — não são CSS válido
+        // Pula declarações de variável (não são CSS válido).
         if trimmed.starts_with('$') {
             continue;
         }
-        let resolved = resolve_scss_vars(line, &vars);
+        // Comentários SCSS `// ...` não são CSS válido — browsers tratam como
+        // erro de sintaxe e podem ignorar regras subsequentes. Ou pula a linha
+        // inteira (se começa com //) ou trunca a parte do `//` em diante.
+        let line_no_comment = strip_line_comment(line);
+        if line_no_comment.trim().is_empty() {
+            continue;
+        }
+        let resolved = resolve_scss_vars(&line_no_comment, &vars);
         let converted = add_px_to_unitless(&resolved);
         out.push_str(&converted);
         out.push('\n');
-
-        // Compatibilidade egui: `ui.horizontal()` não faz stretch nos filhos e
-        // usa item_spacing.x (~8px) entre eles. O CSS padrão de `display: flex`
-        // faz align-items:stretch e gap:0, o que não bate com o comportamento egui.
-        if converted.trim().trim_end_matches(';').trim() == "display: flex" {
-            let indent: String = line.chars().take_while(|c| c.is_whitespace()).collect();
-            out.push_str(&format!(
-                "{indent}align-items: flex-start; /* egui: filhos têm altura do conteúdo */\n"
-            ));
-            out.push_str(&format!(
-                "{indent}gap: 8px; /* egui item_spacing.x padrão */\n"
-            ));
-        }
     }
     out
 }
 
-/// Coleta declarações `$var: valor;` do SCSS.
-///
-// DUPLICAÇÃO: lógica idêntica a parse/scss.rs. Extrair pra den_core quando criado. Ver PENDING.md.
-fn collect_scss_vars(scss: &str) -> std::collections::HashMap<String, String> {
-    let mut vars = std::collections::HashMap::new();
+/// Remove comentário `// ...` do fim da linha. Respeita `//` dentro de strings
+/// (entre aspas) pra não quebrar URLs tipo `url("http://...")`.
+fn strip_line_comment(line: &str) -> String {
+    let bytes = line.as_bytes();
+    let mut in_str: Option<u8> = None;
+    let mut i = 0;
+    while i + 1 < bytes.len() {
+        let b = bytes[i];
+        match in_str {
+            Some(q) if b == q => in_str = None,
+            Some(_) => {}
+            None => {
+                if b == b'"' || b == b'\'' {
+                    in_str = Some(b);
+                } else if b == b'/' && bytes[i + 1] == b'/' {
+                    return line[..i].to_string();
+                }
+            }
+        }
+        i += 1;
+    }
+    line.to_string()
+}
+
+// DUPLICAÇÃO: mesma lógica em den_macros/parse/scss.rs e bin/style_editor.rs.
+// Extrair pra den_core quando criar. Ver PENDING.md.
+fn collect_scss_vars(scss: &str) -> HashMap<String, String> {
+    let mut vars = HashMap::new();
     for line in scss.lines() {
         let trimmed = line.trim();
         if let Some(rest) = trimmed.strip_prefix('$')
             && let Some(colon) = rest.find(':')
         {
             let name = rest[..colon].trim().to_string();
-            let value = rest[colon + 1..]
-                .trim()
-                .trim_end_matches(';')
-                .trim()
-                .to_string();
+            let value = rest[colon + 1..].trim().trim_end_matches(';').trim().to_string();
             if !name.is_empty() && !value.is_empty() {
                 vars.insert(name, value);
             }
@@ -177,8 +178,7 @@ fn collect_scss_vars(scss: &str) -> std::collections::HashMap<String, String> {
     vars
 }
 
-/// Substitui referências `$nome` pelos valores resolvidos.
-fn resolve_scss_vars(line: &str, vars: &std::collections::HashMap<String, String>) -> String {
+fn resolve_scss_vars(line: &str, vars: &HashMap<String, String>) -> String {
     if !line.contains('$') {
         return line.to_string();
     }
@@ -189,7 +189,6 @@ fn resolve_scss_vars(line: &str, vars: &std::collections::HashMap<String, String
     result
 }
 
-/// Propriedades CSS que precisam de unidade px quando o valor for número puro.
 const PX_PROPS: &[&str] = &[
     "font-size",
     "padding",
@@ -205,7 +204,6 @@ const PX_PROPS: &[&str] = &[
     "gap",
 ];
 
-/// Adiciona sufixo `px` a propriedades CSS com valores numéricos sem unidade.
 fn add_px_to_unitless(line: &str) -> String {
     let trimmed = line.trim();
     for prop in PX_PROPS {
@@ -213,7 +211,6 @@ fn add_px_to_unitless(line: &str) -> String {
             && let Some(colon) = trimmed.find(':')
         {
             let value = trimmed[colon + 1..].trim().trim_end_matches(';').trim();
-            // Só adiciona px se o valor for um número puro (sem %, px, etc.)
             if value.parse::<f32>().is_ok() {
                 let indent: String = line.chars().take_while(|c| c.is_whitespace()).collect();
                 return format!("{indent}{prop}: {value}px;");
@@ -224,153 +221,57 @@ fn add_px_to_unitless(line: &str) -> String {
 }
 
 // ============================================================================
-// HTML extraction
+// Den HTML → HTML puro (página inteira, não só elementos `dev`)
 // ============================================================================
 
-/// Encontra todos os elementos com atributo `dev` e retorna cada um como HTML string.
-fn extract_dev_components(html: &str) -> Vec<String> {
+/// Converte o body inteiro de uma página Den em HTML padrão.
+/// Processa `<for>`, `<if>/<else>`, `{{ expr }}`, `<input bind=...>`, `goto=`.
+fn convert_page_body(html: &str) -> String {
     let chars: Vec<char> = html.chars().collect();
-    let mut pos = 0;
-    let mut components = Vec::new();
-
-    while pos < chars.len() {
-        if chars[pos] == '<'
-            && pos + 1 < chars.len()
-            && chars[pos + 1] != '/'
-            && let Some((html_str, end)) = try_extract_dev_element(&chars, pos)
-        {
-            components.push(html_str);
-            pos = end;
-            continue;
-        }
-        pos += 1;
-    }
-    components
-}
-
-/// Tenta parsear um elemento a partir de `pos`. Retorna (html, nova_pos) se tiver atributo `dev`.
-fn try_extract_dev_element(chars: &[char], start: usize) -> Option<(String, usize)> {
-    let mut pos = start + 1; // skip '<'
-
-    // Lê tag name
-    skip_ws(chars, &mut pos);
-    let tag = read_ident(chars, &mut pos);
-    if tag.is_empty() || tag == "for" || tag == "if" || tag == "else" {
-        return None;
-    }
-
-    // Lê atributos
-    let mut has_dev = false;
-    let mut classes = String::new();
-
-    skip_ws(chars, &mut pos);
-    while pos < chars.len() && chars[pos] != '>' && chars[pos] != '/' {
-        if pos < chars.len() && chars[pos] == '(' {
-            // Event binding: (click)="funcao()" — consome inteiro e ignora
-            pos += 1; // skip '('
-            read_ident(chars, &mut pos); // "click"
-            if pos < chars.len() && chars[pos] == ')' {
-                pos += 1;
-            }
-            skip_ws(chars, &mut pos);
-            if pos < chars.len() && chars[pos] == '=' {
-                pos += 1;
-                skip_ws(chars, &mut pos);
-                read_quoted(chars, &mut pos);
-            }
-        } else {
-            let attr = read_ident(chars, &mut pos);
-            skip_ws(chars, &mut pos);
-            if attr == "dev" {
-                has_dev = true;
-            } else if attr == "class" && pos < chars.len() && chars[pos] == '=' {
-                pos += 1;
-                classes = read_quoted(chars, &mut pos);
-            } else if pos < chars.len() && chars[pos] == '=' {
-                pos += 1;
-                read_quoted(chars, &mut pos);
-            }
-        }
-        skip_ws(chars, &mut pos);
-    }
-
-    if !has_dev {
-        return None;
-    }
-
-    // Self-closing?
-    if pos < chars.len() && chars[pos] == '/' {
-        pos += 2; // skip '/>'
-        return Some((format!("<{tag} class=\"{classes}\"></{tag}>"), pos));
-    }
-    if pos < chars.len() && chars[pos] == '>' {
-        pos += 1;
-    }
-
-    // Lê conteúdo até closing tag
-    let (inner, end) = read_inner_html(chars, pos, &tag);
-    let html = format!("<{tag} class=\"{classes}\">{inner}</{tag}>");
-    Some((html, end))
-}
-
-/// Lê o conteúdo interno de um elemento até encontrar </tag>, convertendo Den → HTML.
-fn read_inner_html(chars: &[char], start: usize, parent_tag: &str) -> (String, usize) {
-    let mut pos = start;
     let mut out = String::new();
-
+    let mut pos = 0;
     while pos < chars.len() {
         if chars[pos] == '<' {
-            // Closing tag?
             if pos + 1 < chars.len() && chars[pos + 1] == '/' {
-                // Skip past closing tag
-                while pos < chars.len() && chars[pos] != '>' {
-                    pos += 1;
-                }
-                pos += 1; // skip '>'
-                break;
+                pos = skip_until_gt(&chars, pos);
+                continue;
             }
-
-            // Control flow tags — render children, skip the wrapper
-            let tag = peek_tag(chars, pos);
+            let tag = peek_tag(&chars, pos);
             match tag.as_str() {
                 "for" => {
-                    let (inner, end) = extract_for_children(chars, pos);
+                    let (inner, end) = convert_for(&chars, pos);
                     out.push_str(&inner);
                     pos = end;
                 }
                 "if" => {
-                    let (inner, end) = extract_if_children(chars, pos);
+                    let (inner, end) = convert_if(&chars, pos);
                     out.push_str(&inner);
                     pos = end;
                 }
                 "else" => {
-                    // Pula o <else> por completo
-                    pos = skip_tag(chars, pos, "else");
+                    pos = skip_tag(&chars, pos);
                 }
                 _ => {
-                    // Elemento normal — converte recursivamente
-                    let (el_html, end) = convert_element(chars, pos);
-                    out.push_str(&el_html);
+                    let (el, end) = convert_element(&chars, pos);
+                    out.push_str(&el);
                     pos = end;
                 }
             }
         } else if chars[pos] == '{' && pos + 1 < chars.len() && chars[pos + 1] == '{' {
-            // {{ expr }} �� placeholder
-            let (placeholder, end) = extract_interpolation(chars, pos);
-            out.push_str(&placeholder);
+            let (ph, end) = convert_interpolation(&chars, pos);
+            out.push_str(&ph);
             pos = end;
         } else {
             out.push(chars[pos]);
             pos += 1;
         }
     }
-    let _ = parent_tag; // usado só pra contexto
-    (out, pos)
+    out
 }
 
-/// Converte um elemento Den recursivamente pra HTML padrão.
+/// Converte um elemento Den em HTML, preservando tag → tag (ex.: `heading` → `h2`).
 fn convert_element(chars: &[char], start: usize) -> (String, usize) {
-    let mut pos = start + 1; // skip '<'
+    let mut pos = start + 1;
     skip_ws(chars, &mut pos);
     let tag = read_ident(chars, &mut pos);
     if tag.is_empty() {
@@ -378,10 +279,14 @@ fn convert_element(chars: &[char], start: usize) -> (String, usize) {
     }
 
     let mut classes = String::new();
+    let mut bind_expr: Option<String> = None;
+    let mut placeholder: Option<String> = None;
+    let mut goto_page: Option<String> = None;
+
     skip_ws(chars, &mut pos);
     while pos < chars.len() && chars[pos] != '>' && chars[pos] != '/' {
-        if pos < chars.len() && chars[pos] == '(' {
-            // Event binding: (click)="funcao()" — consome inteiro e ignora
+        if chars[pos] == '(' {
+            // (click)="..." — consome e ignora (preview estático).
             pos += 1;
             read_ident(chars, &mut pos);
             if pos < chars.len() && chars[pos] == ')' {
@@ -396,50 +301,123 @@ fn convert_element(chars: &[char], start: usize) -> (String, usize) {
         } else {
             let attr = read_ident(chars, &mut pos);
             skip_ws(chars, &mut pos);
-            if attr == "class" && pos < chars.len() && chars[pos] == '=' {
+            if pos < chars.len() && chars[pos] == '=' {
                 pos += 1;
-                classes = read_quoted(chars, &mut pos);
+                skip_ws(chars, &mut pos);
+                let val = read_quoted(chars, &mut pos);
+                match attr.as_str() {
+                    "class" => classes = val,
+                    "bind" => bind_expr = Some(val),
+                    "placeholder" => placeholder = Some(val),
+                    "goto" => goto_page = Some(val),
+                    _ => {}
+                }
             } else if attr == "dev" {
-                // ignora
-            } else if pos < chars.len() && chars[pos] == '=' {
-                pos += 1;
-                read_quoted(chars, &mut pos);
+                // marker interno — ignora
             }
         }
         skip_ws(chars, &mut pos);
     }
 
-    if pos < chars.len() && chars[pos] == '/' {
+    // Self-closing?
+    let self_closing = pos < chars.len() && chars[pos] == '/';
+    if self_closing {
         pos += 2;
-        return (format!("<{tag} class=\"{classes}\"></{tag}>"), pos);
-    }
-    if pos < chars.len() && chars[pos] == '>' {
+    } else if pos < chars.len() && chars[pos] == '>' {
         pos += 1;
     }
 
     let html_tag = den_tag_to_html(&tag);
-    let (inner, end) = read_inner_html(chars, pos, &tag);
+
+    // Input: vira <input> real com placeholder (bind vira [self.field] read-only).
+    if tag == "input" {
+        let ph = placeholder.unwrap_or_default();
+        let bind_label = bind_expr
+            .as_deref()
+            .map(|b| b.trim_start_matches("self.").to_string())
+            .unwrap_or_default();
+        let value_attr = if bind_label.is_empty() {
+            String::new()
+        } else {
+            format!(r#" value="[{bind_label}]""#)
+        };
+        return (
+            format!(
+                r#"<input type="text" class="{classes}" placeholder="{ph}"{value_attr} readonly>"#
+            ),
+            pos,
+        );
+    }
+
+    if self_closing {
+        return (
+            format!("<{html_tag} class=\"{classes}\"></{html_tag}>"),
+            pos,
+        );
+    }
+
+    let (inner, end) = read_inner(chars, pos);
+    let goto_note = goto_page
+        .map(|g| format!(r#" data-goto="{g}""#))
+        .unwrap_or_default();
     (
-        format!("<{html_tag} class=\"{classes}\">{inner}</{html_tag}>"),
+        format!(
+            "<{html_tag} class=\"{classes}\"{goto_note}>{inner}</{html_tag}>"
+        ),
         end,
     )
 }
 
-/// Mapeia tags Den (`heading`) pra tags HTML (`h2`).
-fn den_tag_to_html(tag: &str) -> &str {
-    match tag {
-        "heading" => "h2",
-        t => t,
+/// Lê conteúdo interno até `</>`. Processa control flow e interpolação aninhados.
+fn read_inner(chars: &[char], start: usize) -> (String, usize) {
+    let mut pos = start;
+    let mut out = String::new();
+    while pos < chars.len() {
+        if chars[pos] == '<' {
+            if pos + 1 < chars.len() && chars[pos + 1] == '/' {
+                pos = skip_until_gt(chars, pos);
+                return (out, pos);
+            }
+            let tag = peek_tag(chars, pos);
+            match tag.as_str() {
+                "for" => {
+                    let (inner, end) = convert_for(chars, pos);
+                    out.push_str(&inner);
+                    pos = end;
+                }
+                "if" => {
+                    let (inner, end) = convert_if(chars, pos);
+                    out.push_str(&inner);
+                    pos = end;
+                }
+                "else" => {
+                    pos = skip_tag(chars, pos);
+                }
+                _ => {
+                    let (el, end) = convert_element(chars, pos);
+                    out.push_str(&el);
+                    pos = end;
+                }
+            }
+        } else if chars[pos] == '{' && pos + 1 < chars.len() && chars[pos + 1] == '{' {
+            let (ph, end) = convert_interpolation(chars, pos);
+            out.push_str(&ph);
+            pos = end;
+        } else {
+            out.push(chars[pos]);
+            pos += 1;
+        }
     }
+    (out, pos)
 }
 
-/// Extrai filhos de `<for>`, substituindo variável de loop por placeholder.
-fn extract_for_children(chars: &[char], start: usize) -> (String, usize) {
+/// `<for each="var" in="expr">...</for>` — renderiza N iterações simuladas
+/// com placeholders distintos pra visualizar o layout final.
+fn convert_for(chars: &[char], start: usize) -> (String, usize) {
     let mut pos = start + 1;
     skip_ws(chars, &mut pos);
     read_ident(chars, &mut pos); // "for"
 
-    // Lê atributo each pra usar como placeholder
     let mut each_var = "item".to_string();
     skip_ws(chars, &mut pos);
     while pos < chars.len() && chars[pos] != '>' {
@@ -447,6 +425,7 @@ fn extract_for_children(chars: &[char], start: usize) -> (String, usize) {
         skip_ws(chars, &mut pos);
         if pos < chars.len() && chars[pos] == '=' {
             pos += 1;
+            skip_ws(chars, &mut pos);
             let val = read_quoted(chars, &mut pos);
             if attr == "each" {
                 each_var = val;
@@ -458,16 +437,21 @@ fn extract_for_children(chars: &[char], start: usize) -> (String, usize) {
         pos += 1;
     } // skip '>'
 
-    // Lê filhos uma vez, substituindo a variável por placeholder
-    let (inner, end) = read_inner_html(chars, pos, "for");
-    // Substitui {{ each_var }} por um placeholder legível
-    let placeholder = format!("[{each_var}]");
-    let inner = inner.replace(&each_var.to_string(), &placeholder);
-    (inner, end)
+    let body_start = pos;
+    let (body_template, end) = read_inner(chars, body_start);
+
+    // Renderiza N vezes, trocando `each_var` por "[var #n]" pra distinguir.
+    let mut out = String::new();
+    for i in 0..FOR_LOOP_ITERATIONS {
+        let label = format!("[{each_var} #{}]", i + 1);
+        let rendered = replace_identifier(&body_template, &each_var, &label);
+        out.push_str(&rendered);
+    }
+    (out, end)
 }
 
-/// Extrai filhos do branch `then` de `<if>`, ignorando `<else>`.
-fn extract_if_children(chars: &[char], start: usize) -> (String, usize) {
+/// `<if cond="...">...</if>` — sempre renderiza o branch `then`; `<else>` é pulado.
+fn convert_if(chars: &[char], start: usize) -> (String, usize) {
     let mut pos = start + 1;
     skip_ws(chars, &mut pos);
     read_ident(chars, &mut pos); // "if"
@@ -477,139 +461,134 @@ fn extract_if_children(chars: &[char], start: usize) -> (String, usize) {
     if pos < chars.len() {
         pos += 1;
     }
-
-    // Só renderiza o bloco then
-    let (inner, end) = read_inner_html(chars, pos, "if");
-    (inner, end)
+    read_inner(chars, pos)
 }
 
-/// Pula um elemento inteiro (opening + children + closing tag).
-fn skip_tag(chars: &[char], start: usize, _tag: &str) -> usize {
-    let mut pos = start;
-    // Skip opening tag
-    while pos < chars.len() && chars[pos] != '>' {
-        pos += 1;
-    }
-    if pos < chars.len() {
-        pos += 1;
-    }
-    // Skip children until closing tag
-    while pos < chars.len() {
-        if chars[pos] == '<' && pos + 1 < chars.len() && chars[pos + 1] == '/' {
-            while pos < chars.len() && chars[pos] != '>' {
-                pos += 1;
-            }
-            if pos < chars.len() {
-                pos += 1;
-            }
-            return pos;
-        }
-        pos += 1;
-    }
-    pos
-}
-
-/// Converte `{{ expr }}` em placeholder HTML visual.
-fn extract_interpolation(chars: &[char], start: usize) -> (String, usize) {
-    let mut pos = start + 2; // skip '{{'
+/// `{{ expr }}` → `<span class="den-placeholder">[expr_sem_self]</span>`.
+fn convert_interpolation(chars: &[char], start: usize) -> (String, usize) {
+    let mut pos = start + 2;
     let expr_start = pos;
     while pos + 1 < chars.len() && !(chars[pos] == '}' && chars[pos + 1] == '}') {
         pos += 1;
     }
     let expr: String = chars[expr_start..pos].iter().collect();
-    let expr = expr
-        .trim()
-        .trim_start_matches("self.")
-        .trim_start_matches("this.");
-    let placeholder = format!("<span class=\"den-placeholder\">[{expr}]</span>");
+    let label = expr.trim().trim_start_matches("self.").trim_start_matches("this.");
     if pos + 1 < chars.len() {
         pos += 2;
-    } // skip '}}'
-    (placeholder, pos)
+    }
+    (format!(r#"<span class="den-placeholder">[{label}]</span>"#), pos)
+}
+
+/// Substitui `{{ var ... }}` → `{{ label ... }}` dentro do body do `<for>`.
+/// Preserva outros identificadores; só troca ocorrências do nome exato.
+fn replace_identifier(src: &str, var: &str, label: &str) -> String {
+    // Substituição de {{ var }} primeiro.
+    let mut out = src.to_string();
+    let needle_exact = format!("{{{{ {var} }}}}");
+    out = out.replace(&needle_exact, &format!("<span class=\"den-placeholder\">{label}</span>"));
+    // Também {{var}} sem espaços.
+    let needle_tight = format!("{{{{{var}}}}}");
+    out = out.replace(&needle_tight, &format!("<span class=\"den-placeholder\">{label}</span>"));
+    out
+}
+
+fn den_tag_to_html(tag: &str) -> &str {
+    match tag {
+        "heading" => "h2",
+        "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => tag,
+        t => t,
+    }
 }
 
 // ============================================================================
-// HTML generation
+// Output HTML
 // ============================================================================
 
-/// Gera o HTML completo do preview com CSS injetado e componentes renderizados.
-fn generate_preview_html(css: &str, components: &[(String, String)]) -> String {
-    let components_html: String = components
-        .iter()
-        .map(|(label, html)| {
-            format!(
-                r#"<div class="den-preview-item">
-  <div class="den-preview-label">{label}</div>
-  <div class="den-preview-component">{html}</div>
-</div>"#
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
-
+/// Renderiza a página completa com CSS injetado. Sem labels, sem chrome — o
+/// container externo tem o tamanho exato da janela egui (`EGUI_WINDOW_WIDTH`).
+fn render_page(page_name: &str, css: &str, body_html: &str) -> String {
+    // Reset mínimo + box-sizing (igual ao layout engine Den, border-box).
+    // NÃO define background/color/font do body — isso vem 100% do SCSS da página
+    // via seletor `body { ... }`. Se o SCSS não declarar, o browser usa o default.
     format!(
         r#"<!DOCTYPE html>
-<html lang="en">
+<html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
   <meta http-equiv="refresh" content="3">
-  <title>Den Preview</title>
+  <title>Den Preview — {page_name}</title>
   <style>
-/* ── Den component styles ────────────────────────────── */
-{css}
-
-/* ── Preview chrome ──────────────────────────────────── */
-* {{ box-sizing: border-box; }}
+*, *::before, *::after {{ box-sizing: border-box; }}
+html, body {{ margin: 0; padding: 0; }}
 body {{
-  background: #1a1a2e;
-  color: #ccc;
-  font-family: sans-serif;
-  margin: 0;
-  padding: 24px;
+    min-height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }}
-.den-preview-item {{
-  margin-bottom: 32px;
-}}
-.den-preview-label {{
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  color: #555;
-  margin-bottom: 8px;
-}}
-.den-preview-component {{
-  /* Simula a janela egui: mesma largura, background e padding do CentralPanel. */
-  /* width: 100% nos filhos resolve relativo a este container — igual ao app nativo. */
-  width: {EGUI_WINDOW_WIDTH}px;
-  min-height: 40px;
-  background: #f4f4f4;  /* egui Visuals::light() approximate */
-  padding: 8px;          /* CentralPanel default inner margin */
-  border: 2px solid #555;
-  border-radius: 4px;
-  overflow: hidden;
+.den-viewport {{
+    width: {EGUI_WINDOW_WIDTH}px;
+    min-height: 100vh;
+    margin: 0 auto;
 }}
 .den-placeholder {{
-  background: #2a2a3e;
-  color: #888;
-  border-radius: 3px;
-  padding: 0 4px;
-  font-style: italic;
-  font-size: 0.9em;
+    /* Marcação visual pra `{{{{ self.campo }}}}` quando o preview não tem data real. */
+    opacity: 0.7;
+    font-style: italic;
 }}
+input {{
+    font-family: inherit;
+    color: inherit;
+    background: transparent;
+    border: none;
+    outline: none;
+}}
+
+/* ── Page stylesheet (CSS do SCSS da página, incluindo seletor `body`) ── */
+{css}
   </style>
 </head>
 <body>
-{components_html}
+  <div class="den-viewport">
+{body_html}
+  </div>
+</body>
+</html>"#
+    )
+}
+
+fn render_index(links: &[(String, String)]) -> String {
+    // Index é uma lista simples de páginas disponíveis. Sem cores hardcoded.
+    let items: String = links
+        .iter()
+        .map(|(name, href)| format!(r#"<li><a href="{href}">{name}</a></li>"#))
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!(
+        r#"<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Den Preview — Index</title>
+  <style>
+body {{ font-family: -apple-system, sans-serif; padding: 40px; }}
+h1 {{ font-weight: 300; }}
+ul {{ list-style: none; padding: 0; }}
+li {{ margin: 8px 0; font-size: 18px; }}
+  </style>
+</head>
+<body>
+  <h1>Den — Preview</h1>
+  <ul>
+{items}
+  </ul>
 </body>
 </html>"#
     )
 }
 
 // ============================================================================
-// Parser helpers (independente do den_macros)
+// Parser helpers
 // ============================================================================
 
-/// Lê o nome da tag após `<` sem avançar `pos`.
 fn peek_tag(chars: &[char], pos: usize) -> String {
     let mut p = pos;
     if p < chars.len() && chars[p] == '<' {
@@ -627,14 +606,12 @@ fn peek_tag(chars: &[char], pos: usize) -> String {
     chars[start..p].iter().collect()
 }
 
-/// Pula whitespace ASCII.
 fn skip_ws(chars: &[char], pos: &mut usize) {
     while *pos < chars.len() && chars[*pos].is_ascii_whitespace() {
         *pos += 1;
     }
 }
 
-/// Lê um identificador (alfanumérico + `_` + `-`).
 fn read_ident(chars: &[char], pos: &mut usize) -> String {
     let start = *pos;
     while *pos < chars.len()
@@ -645,7 +622,6 @@ fn read_ident(chars: &[char], pos: &mut usize) -> String {
     chars[start..*pos].iter().collect()
 }
 
-/// Lê valor entre aspas, ou um identificador se não houver aspas.
 fn read_quoted(chars: &[char], pos: &mut usize) -> String {
     if *pos >= chars.len() {
         return String::new();
@@ -664,4 +640,27 @@ fn read_quoted(chars: &[char], pos: &mut usize) -> String {
         *pos += 1;
     }
     val
+}
+
+fn skip_until_gt(chars: &[char], start: usize) -> usize {
+    let mut pos = start;
+    while pos < chars.len() && chars[pos] != '>' {
+        pos += 1;
+    }
+    if pos < chars.len() {
+        pos += 1;
+    }
+    pos
+}
+
+fn skip_tag(chars: &[char], start: usize) -> usize {
+    let mut pos = start;
+    pos = skip_until_gt(chars, pos);
+    while pos < chars.len() {
+        if chars[pos] == '<' && pos + 1 < chars.len() && chars[pos + 1] == '/' {
+            return skip_until_gt(chars, pos);
+        }
+        pos += 1;
+    }
+    pos
 }

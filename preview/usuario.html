@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="refresh" content="3">
+  <title>Den Preview — usuario</title>
+  <style>
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+    min-height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+.den-viewport {
+    width: 1200px;
+    min-height: 100vh;
+    margin: 0 auto;
+}
+.den-placeholder {
+    /* Marcação visual pra `{{ self.campo }}` quando o preview não tem data real. */
+    opacity: 0.7;
+    font-style: italic;
+}
+input {
+    font-family: inherit;
+    color: inherit;
+    background: transparent;
+    border: none;
+    outline: none;
+}
+
+/* ── Page stylesheet (CSS do SCSS da página, incluindo seletor `body`) ── */
+.page {
+    background: #f5f7fb;
+    padding: 16px;
+    width: 100%;
+}
+.title {
+    background: #ffffff;
+    border: 1px solid #d8deea;
+    border-radius: 8px;
+    padding: 14px;
+    color: #2f8cff;
+    font-size: 24px;
+    width: 100%;
+}
+.text-input {
+    background: #ffffff;
+    border: 1px solid #d8deea;
+    border-radius: 8px;
+    padding: 14px;
+    color: #18202f;
+    font-size: 16px;
+    width: 100%;
+}
+.button {
+    background: #2f8cff;
+    border-radius: 8px;
+    padding: 14px;
+    color: #ffffff;
+    font-size: 16px;
+    width: 220px;
+}
+.button:hover {
+    background: #54a8ff;
+    cursor: pointer;
+}
+
+  </style>
+</head>
+<body>
+  <div class="den-viewport">
+<div class="page">
+    <div class="title">Digite seu nome</div>
+    <input type="text" class="text-input" placeholder="Seu nome..." value="[usuario.nome]" readonly>
+    <div class="button" data-goto="HelloPage">Enviar usuario</div>
+</div>
+
+  </div>
+</body>
+</html>

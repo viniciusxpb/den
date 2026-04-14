@@ -16,13 +16,19 @@ mod render_tree;
 mod style;
 mod text;
 
-use crate::types::DenNode;
+use crate::types::{DenNode, DenVisual};
 use quote::quote;
 use render_tree::{BuildCtx, emit_build_node};
+use style::paint_style_tokens;
 
 /// Gera TokenStream a partir da árvore resolvida.
+///
+/// `body_visual` vem do seletor `body { ... }` do SCSS (tag selector). Quando
+/// `Some`, é aplicado como `body_style` da `RenderTree` e pintado no rect raiz
+/// antes dos filhos — casa com como browsers tratam `<body>`.
 pub fn generate(
     nodes: &[DenNode],
+    body_visual: Option<&DenVisual>,
     has_self: bool,
     template_path: &str,
 ) -> Result<proc_macro2::TokenStream, String> {
@@ -58,10 +64,21 @@ pub fn generate(
 
     let input_mirrors = ctx.input_mirrors.clone();
 
+    // Body style vem do seletor `body { ... }` no SCSS; gera `Some(PaintStyle{..})`
+    // ou `None` que o RenderTree interpreta como "sem body customizado".
+    let body_style_tokens = match body_visual {
+        Some(v) => {
+            let ps = paint_style_tokens(v);
+            quote! { Some(#ps) }
+        }
+        None => quote! { None },
+    };
+
     Ok(quote! {
         {
             // Constrói a RenderTree a cada frame.
             let mut __den_tree = den_layout::RenderTree::new();
+            __den_tree.body_style = #body_style_tokens;
             {
                 let __den_parent: usize = usize::MAX;
                 let _ = __den_parent; // evita warning em templates sem filhos

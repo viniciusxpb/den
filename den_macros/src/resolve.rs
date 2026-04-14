@@ -5,14 +5,32 @@ use crate::types::{
     RawNode, StyleMap, StyleRule,
 };
 
+/// Output da fase 2: árvore resolvida + visual opcional do `body` (seletor de tag no SCSS).
+pub struct ResolveOutput {
+    pub nodes: Vec<DenNode>,
+    pub body_visual: Option<DenVisual>,
+}
+
 /// Resolve uma árvore raw (sem styles) em árvore com visual resolvido.
-/// Cada fase recebe input imutável e devolve output owned.
-pub fn resolve(raw_nodes: &[RawNode], styles: &StyleMap) -> Vec<DenNode> {
-    let inherited = StyleRule::default();
-    raw_nodes
+/// Extrai separadamente o seletor `body { ... }` caso exista.
+/// Propriedades herdáveis (color/font-size) do body são usadas como inheritance
+/// inicial pra todos os elementos top-level.
+pub fn resolve(raw_nodes: &[RawNode], styles: &StyleMap) -> ResolveOutput {
+    let body_rule = styles.get("body").cloned();
+    let body_visual = body_rule.as_ref().map(DenVisual::from_style_rule);
+
+    // Inheritance inicial vem do body (color/font-size). Filhos herdam isso.
+    let inherited = body_rule
+        .as_ref()
+        .map(StyleRule::inheritable)
+        .unwrap_or_default();
+
+    let nodes = raw_nodes
         .iter()
         .map(|n| resolve_node(n, styles, &inherited))
-        .collect()
+        .collect();
+
+    ResolveOutput { nodes, body_visual }
 }
 
 fn resolve_node(node: &RawNode, styles: &StyleMap, inherited: &StyleRule) -> DenNode {

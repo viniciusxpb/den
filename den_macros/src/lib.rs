@@ -55,11 +55,16 @@ pub fn den_template(input: TokenStream) -> TokenStream {
     let raw_nodes = parse::parse_html(&html);
     let style_map = parse::parse_scss(&scss);
 
-    // Fase 2: Resolve (styles → DenVisual em cada nó)
-    let den_nodes = resolve::resolve(&raw_nodes, &style_map);
+    // Fase 2: Resolve (styles → DenVisual em cada nó, extrai body separado)
+    let resolved = resolve::resolve(&raw_nodes, &style_map);
 
     // Fase 3: Codegen (DenNode tree → TokenStream)
-    match codegen::generate(&den_nodes, has_self, &template_path) {
+    match codegen::generate(
+        &resolved.nodes,
+        resolved.body_visual.as_ref(),
+        has_self,
+        &template_path,
+    ) {
         Ok(tokens) => tokens.into(),
         Err(msg) => syn::Error::new(parsed.path.span(), msg)
             .to_compile_error()

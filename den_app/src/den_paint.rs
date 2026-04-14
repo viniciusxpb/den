@@ -76,6 +76,14 @@ pub fn paint_tree(
     let body_rect = scaled_rect(layout.rects.first().copied().unwrap_or_default(), origin, scale);
     ui.allocate_rect(body_rect, Sense::hover());
 
+    // Pinta o body (seletor `body` no SCSS) antes dos filhos. Equivalente ao
+    // <body> do browser — define background, border, etc. do viewport inteiro.
+    if let Some(body_style) = &tree.body_style {
+        let body_painter = ui.painter_at(body_rect);
+        paint_background(&body_painter, body_rect, body_style, scale);
+        paint_border(&body_painter, body_rect, body_style, scale);
+    }
+
     state.hover_mut().clear();
 
     // 5. Walk + paint.
