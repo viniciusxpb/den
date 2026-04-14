@@ -186,8 +186,6 @@ impl DenVisual {
             letter_spacing: self.letter_spacing,
             text_transform: self.text_transform,
             text_align: self.text_align,
-            underline: self.underline,
-            strikethrough: self.strikethrough,
             ..Default::default()
         }
     }

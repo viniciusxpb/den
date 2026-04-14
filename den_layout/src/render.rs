@@ -10,6 +10,8 @@ use crate::{DenNodeId, DimensionRule, DisplayMode, LayoutEntry};
 pub type Rgb = (u8, u8, u8);
 
 /// Transformação textual declarada via `text-transform`.
+///
+/// SYNC: espelho de `den_macros::types::TextTransform`; manter variantes sincronizadas.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub enum TextTransform {
     /// Sem transformação.
@@ -24,6 +26,8 @@ pub enum TextTransform {
 }
 
 /// Alinhamento horizontal de texto dentro da caixa do nó.
+///
+/// SYNC: espelho de `den_macros::types::TextAlign`; manter variantes sincronizadas.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub enum TextAlign {
     /// Alinha à esquerda.
@@ -50,7 +54,11 @@ pub struct PaintStyle {
     pub border_radius: f32,
     /// Tamanho da fonte em CSS pixels (quando o nó renderizar texto).
     pub font_size: f32,
-    /// Pilha CSS de fontes, como declarada por `font-family`.
+    /// Pilha CSS de fontes emitida pelo codegen como literal estático.
+    ///
+    /// O `DenVisual` usa `String` durante parse/resolve, mas `PaintStyle` é o
+    /// produto final gerado pelo macro, então o codegen consegue emitir
+    /// `Some("Inter, sans-serif")` como `&'static str` sem alocação em runtime.
     pub font_family: Option<&'static str>,
     /// Peso CSS da fonte (`400`, `700`, etc.). Armazenado para seleção futura de faces.
     pub font_weight: u16,

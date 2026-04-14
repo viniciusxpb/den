@@ -4,6 +4,7 @@ mod app_config;
 pub mod den_paint;
 mod models;
 mod pages;
+mod paint_config;
 mod routes;
 
 use den_layout::DenRouter;

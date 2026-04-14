@@ -46,7 +46,7 @@ Isso é um comportamento intencional por ora (o usuário pode intencionalmente q
 
 ## Extração pra `den_core` (elimina parsers duplicados)
 
-Os parsers HTML/SCSS estão duplicados entre `den_macros`, `preview.rs` e `style_editor.rs`. Criar um crate `den_core` com parsers + types compartilhados eliminaria a triplicação de `collect_scss_vars` e helpers de HTML.
+Os parsers HTML/SCSS estão duplicados entre `den_macros`, `preview.rs` e `style_editor.rs`. Criar um crate `den_core` com parsers + types compartilhados eliminaria a triplicação de `collect_scss_vars`, `vars_by_longest_name` e helpers de HTML.
 
 **Decisão pendente**: definir se `den_core` deve ser uma crate pública do workspace (API reutilizável por apps) ou apenas uma crate interna para dividir responsabilidades entre macro, preview e style editor.
 

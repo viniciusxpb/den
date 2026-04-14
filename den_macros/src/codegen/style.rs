@@ -3,6 +3,10 @@
 //! Isola o mapeamento visual/layout do emitter principal. Toda propriedade
 //! SCSS que é expressa como campo de `PaintStyle` ou `LayoutIntent` mora aqui.
 
+use super::config::{
+    AVERAGE_GLYPH_WIDTH_RATIO, DEFAULT_EXPR_TEXT_WIDTH, DEFAULT_INPUT_LINE_HEIGHT,
+    DEFAULT_INPUT_WIDTH, DEFAULT_TEXT_LINE_HEIGHT,
+};
 use super::flex::{has_flex_grow, is_flex_container};
 use crate::types::{
     DenElement, DenVisual, DisplayMode, LineHeightValue, TextAlign, TextSegment, TextTransform,
@@ -11,17 +15,6 @@ use crate::types::{
 use proc_macro2::Span;
 use quote::quote;
 use syn::LitStr;
-
-/// Altura de linha usada quando texto não define `font-size`.
-pub(super) const DEFAULT_TEXT_LINE_HEIGHT: f32 = 14.0;
-/// Altura de linha usada para inputs sem `font-size`.
-pub(super) const DEFAULT_INPUT_LINE_HEIGHT: f32 = 16.0;
-/// Largura média de glifo usada na estimativa textual (fallback antes do measure runtime).
-const AVERAGE_GLYPH_WIDTH_RATIO: f32 = 0.55;
-/// Largura estimada para expressões dinâmicas desconhecidas.
-const DEFAULT_EXPR_TEXT_WIDTH: f32 = 48.0;
-/// Largura estimada para inputs sem largura explícita.
-pub(super) const DEFAULT_INPUT_WIDTH: f32 = 180.0;
 
 /// Emite um literal `den_layout::PaintStyle { .. }` para o visual dado.
 pub(crate) fn paint_style_tokens(visual: &DenVisual) -> proc_macro2::TokenStream {
@@ -163,6 +156,7 @@ pub(super) fn quote_opt_rgb(opt: Option<(u8, u8, u8)>) -> proc_macro2::TokenStre
     }
 }
 
+/// Emite `Option<&'static str>` para strings literais geradas pelo macro.
 fn quote_opt_static_str(opt: Option<&str>) -> proc_macro2::TokenStream {
     match opt {
         Some(value) => {
@@ -173,6 +167,7 @@ fn quote_opt_static_str(opt: Option<&str>) -> proc_macro2::TokenStream {
     }
 }
 
+/// Converte o enum textual do parser no enum público de `den_layout`.
 fn text_transform_tokens(value: TextTransform) -> proc_macro2::TokenStream {
     match value {
         TextTransform::None => quote! { den_layout::TextTransform::None },
@@ -182,6 +177,7 @@ fn text_transform_tokens(value: TextTransform) -> proc_macro2::TokenStream {
     }
 }
 
+/// Converte alinhamento textual do parser no enum público de `den_layout`.
 fn text_align_tokens(value: TextAlign) -> proc_macro2::TokenStream {
     match value {
         TextAlign::Left => quote! { den_layout::TextAlign::Left },
@@ -222,6 +218,7 @@ pub(super) fn intrinsic_height_for(el: &DenElement) -> f32 {
     }
 }
 
+/// Estima largura textual compile-time até o painter medir a galley real.
 fn estimate_text_width(text: &str, font_size: f32, letter_spacing: f32) -> f32 {
     let char_count = text.chars().count();
     if char_count == 0 {
@@ -232,6 +229,7 @@ fn estimate_text_width(text: &str, font_size: f32, letter_spacing: f32) -> f32 {
     glyph_width + spacing_width
 }
 
+/// Estima altura de linha compile-time a partir do visual resolvido.
 fn text_line_height_for_visual(visual: &DenVisual, fallback_font_size: f32) -> f32 {
     let font_size = visual.font_size.unwrap_or(fallback_font_size);
     match visual.line_height {

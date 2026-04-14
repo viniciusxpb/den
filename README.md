@@ -349,6 +349,7 @@ den/
 │       ├── parse/           # Phase 1: HTML + SCSS parsers
 │       │   ├── html.rs, scss.rs, text.rs, color.rs
 │       └── codegen/         # Phase 3: egui code generation
+│           ├── config.rs    # Codegen estimation constants
 │           ├── element.rs, click.rs, flex.rs, input.rs
 │           ├── control_flow.rs, render_tree.rs, text.rs
 ├── den_layout/              # Runtime layout system
@@ -362,9 +363,10 @@ den/
     └── src/
         ├── main.rs          # Entry point + zoom controls
         ├── app_config.rs    # Window size, scale constants
+        ├── paint_config.rs  # Painter constants
         ├── bin/
-        │   ├── preview.rs   # HTML preview generator
-        │   └── style_editor.rs  # Live SCSS editor
+        │   ├── preview.rs / preview_config/
+        │   └── style_editor.rs / style_editor_config/
         └── pages/
             └── home/
                 ├── home.rs, home.html, home.scss

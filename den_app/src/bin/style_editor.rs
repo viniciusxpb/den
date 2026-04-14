@@ -7,29 +7,12 @@
 
 use eframe::egui;
 use std::time::Instant;
+use style_editor_config::{MANIFEST_DIR, SCAN_INTERVAL, WRITE_DELAY};
 
-/// Path do pacote den_app em compile time — baked no binário.
-const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
+mod style_editor_config;
 
 mod model {
     use std::path::PathBuf;
-    use std::time::Duration;
-
-    pub const WRITE_DELAY: Duration = Duration::from_millis(300);
-    pub const SCAN_INTERVAL: Duration = Duration::from_secs(1);
-
-    /// Limites dos sliders no style editor por tipo de propriedade.
-    pub const FONT_SIZE_MIN: f32 = 6.0;
-    pub const FONT_SIZE_MAX: f32 = 72.0;
-    pub const PADDING_MAX: f32 = 64.0;
-    pub const BORDER_RADIUS_MAX: f32 = 32.0;
-    pub const WIDTH_PX_MAX: f32 = 800.0;
-    pub const BORDER_WIDTH_MAX: f32 = 10.0;
-
-    /// Defaults usados quando o parser não consegue ler o valor SCSS.
-    pub const DEFAULT_FONT_SIZE: f32 = 16.0;
-    pub const DEFAULT_WIDTH_PX: f32 = 100.0;
-    pub const DEFAULT_WIDTH_PERCENT: f32 = 100.0;
 
     /// Arquivo SCSS carregado com classes editáveis e estado de dirty.
     pub struct ScssFile {
@@ -116,12 +99,10 @@ mod model {
 
 mod ui {
     use super::model::*;
+    use super::style_editor_config::{
+        BORDER_WIDTH_MAX, PROPERTY_LABEL_HEIGHT, PROPERTY_LABEL_WIDTH,
+    };
     use eframe::egui;
-
-    /// Largura da coluna de label de propriedade no style editor.
-    const PROPERTY_LABEL_WIDTH: f32 = 96.0;
-    /// Altura da label de propriedade.
-    const PROPERTY_LABEL_HEIGHT: f32 = 16.0;
 
     /// Renderiza controle visual pra uma propriedade SCSS. Retorna `true` se o valor mudou.
     pub(super) fn render_property(ui: &mut egui::Ui, prop: &mut EditableProperty) -> bool {
@@ -228,6 +209,10 @@ mod ui {
 
 mod io {
     use super::model::*;
+    use super::style_editor_config::{
+        BORDER_RADIUS_MAX, DEFAULT_FONT_SIZE, DEFAULT_WIDTH_PERCENT, DEFAULT_WIDTH_PX,
+        FONT_SIZE_MAX, FONT_SIZE_MIN, PADDING_MAX, WIDTH_PX_MAX,
+    };
     use std::collections::HashMap;
     use std::path::PathBuf;
 
@@ -529,6 +514,7 @@ mod io {
         result
     }
 
+    /// Ordena variáveis SCSS por nome descrescente para `$text-dim` vencer `$text`.
     fn vars_by_longest_name(vars: &HashMap<String, String>) -> Vec<(&String, &String)> {
         let mut ordered: Vec<_> = vars.iter().collect();
         ordered.sort_by(|(a, _), (b, _)| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));

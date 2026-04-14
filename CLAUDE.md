@@ -166,7 +166,7 @@ For a template `den_template!("pages/home/home", self)`, the macro expands to ro
 
 **SCSS variables**: `$var: value;` at top of file, referenced as `color: $var;`.
 
-**Style inheritance**: text-affecting CSS inherits parent → child (`color`, font family/size/weight/style, line-height, letter-spacing, text-transform, text-align, text-decoration). Hover and layout rules do not inherit.
+**Style inheritance**: inheritable text CSS propagates parent → child (`color`, font family/size/weight/style, line-height, letter-spacing, text-transform, text-align). `text-decoration` is transported to `PaintStyle`, but not inherited as a resolved child property. Hover and layout rules do not inherit.
 
 **Control flow**:
 - `<for each="item" in="self.items">...</for>` — generates `for (idx, item) in self.items.iter().enumerate() { /* push children */ }`. The loop index salts `node_id` hashes so hover/focus state is stable per item.
@@ -269,6 +269,13 @@ Supported HTML tags: `div`, `span`, `p`, `heading`/`h1`-`h3`, `input`, `for`, `i
 
 - `preview.rs` — Generates a single `preview/preview.html` containing all pages as static HTML. Page CSS is scoped per preview section to avoid class collisions. Relative `url(...)` font assets are copied to `preview/fonts/`. Has its own HTML/SCSS helpers (duplicated from `den_macros` — see PENDING.md).
 - `style_editor.rs` — Separate egui window with visual controls per SCSS class. Writes back with surgical byte-offset replacement and 300ms debounce. Resolves `$variables` to literals on write-back.
+
+### Config modules
+
+- `den_app/src/paint_config.rs` — painter constants (minimum font/border sizes and input text padding).
+- `den_app/src/bin/preview_config/mod.rs` — preview output names, viewport width, refresh interval, simulated loop count, and unitless-px properties.
+- `den_app/src/bin/style_editor_config/mod.rs` — style editor debounce/scan intervals, slider bounds, defaults, and UI dimensions.
+- `den_macros/src/codegen/config.rs` — compile-time intrinsic text/input estimates used before runtime galley measurement.
 
 ### Known limitations
 

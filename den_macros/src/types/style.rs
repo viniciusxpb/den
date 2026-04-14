@@ -41,6 +41,7 @@ pub enum LineHeightValue {
     Factor(f32),
 }
 
+/// SYNC: espelho de `den_layout::TextTransform`; manter variantes sincronizadas.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub enum TextTransform {
     #[default]
@@ -50,6 +51,7 @@ pub enum TextTransform {
     Capitalize,
 }
 
+/// SYNC: espelho de `den_layout::TextAlign`; manter variantes sincronizadas.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub enum TextAlign {
     #[default]
@@ -190,8 +192,6 @@ impl StyleRule {
             letter_spacing: self.letter_spacing,
             text_transform: self.text_transform,
             text_align: self.text_align,
-            underline: self.underline,
-            strikethrough: self.strikethrough,
             ..Default::default()
         }
     }

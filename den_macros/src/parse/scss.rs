@@ -111,25 +111,26 @@ pub fn parse_scss(input: &str) -> StyleMap {
                 .unwrap_or("")
                 .trim()
                 .to_string();
-            let value = resolve_vars(&raw, &vars);
+            let resolved = resolve_vars(&raw, &vars);
+            let value = strip_important(&resolved);
 
             if pos < bytes.len() && bytes[pos] == b';' {
                 pos += 1;
             }
 
             match prop_name.as_str() {
-                "color" => rule.color = parse_hex_color(&value),
-                "font-size" => rule.font_size = parse_size_value(&value),
-                "font-family" => rule.font_family = parse_font_family(&value),
-                "font-weight" => rule.font_weight = parse_font_weight(&value),
-                "font-style" => rule.font_italic = parse_font_style(&value),
-                "font" => apply_font_shorthand(&value, &mut rule),
-                "line-height" => rule.line_height = parse_line_height(&value),
-                "letter-spacing" => rule.letter_spacing = parse_letter_spacing(&value),
-                "text-transform" => rule.text_transform = parse_text_transform(&value),
-                "text-align" => rule.text_align = parse_text_align(&value),
+                "color" => rule.color = parse_hex_color(value),
+                "font-size" => rule.font_size = parse_size_value(value),
+                "font-family" => rule.font_family = parse_font_family(value),
+                "font-weight" => rule.font_weight = parse_font_weight(value),
+                "font-style" => rule.font_italic = parse_font_style(value),
+                "font" => apply_font_shorthand(value, &mut rule),
+                "line-height" => rule.line_height = parse_line_height(value),
+                "letter-spacing" => rule.letter_spacing = parse_letter_spacing(value),
+                "text-transform" => rule.text_transform = parse_text_transform(value),
+                "text-align" => rule.text_align = parse_text_align(value),
                 "text-decoration" | "text-decoration-line" => {
-                    let (underline, strikethrough) = parse_text_decoration(&value);
+                    let (underline, strikethrough) = parse_text_decoration(value);
                     if underline.is_some() {
                         rule.underline = underline;
                     }
@@ -137,20 +138,20 @@ pub fn parse_scss(input: &str) -> StyleMap {
                         rule.strikethrough = strikethrough;
                     }
                 }
-                "background" => rule.background = parse_hex_color(&value),
-                "padding" => rule.padding = parse_size_value(&value),
-                "margin" => rule.margin = parse_size_value(&value),
+                "background" => rule.background = parse_hex_color(value),
+                "padding" => rule.padding = parse_size_value(value),
+                "margin" => rule.margin = parse_size_value(value),
                 "display" if value == "flex" => rule.display = DisplayMode::Flex,
                 "display" if value == "grid" => rule.display = DisplayMode::Grid,
-                "border" => rule.border = parse_border_value(&value),
-                "border-radius" => rule.border_radius = parse_size_value(&value),
-                "width" => rule.width = parse_width_value(&value),
-                "height" => rule.height = parse_width_value(&value),
-                "min-width" => rule.min_width = Some(parse_width_value(&value)),
-                "max-width" => rule.max_width = Some(parse_width_value(&value)),
-                "min-height" => rule.min_height = Some(parse_width_value(&value)),
-                "max-height" => rule.max_height = Some(parse_width_value(&value)),
-                "gap" => rule.gap = parse_size_value(&value),
+                "border" => rule.border = parse_border_value(value),
+                "border-radius" => rule.border_radius = parse_size_value(value),
+                "width" => rule.width = parse_width_value(value),
+                "height" => rule.height = parse_width_value(value),
+                "min-width" => rule.min_width = Some(parse_width_value(value)),
+                "max-width" => rule.max_width = Some(parse_width_value(value)),
+                "min-height" => rule.min_height = Some(parse_width_value(value)),
+                "max-height" => rule.max_height = Some(parse_width_value(value)),
+                "gap" => rule.gap = parse_size_value(value),
                 "cursor" if value == "pointer" => rule.cursor_pointer = true,
                 "flex" if value == "1" => rule.flex_grow = true,
                 "flex-grow" if value == "1" => rule.flex_grow = true,
@@ -228,12 +229,14 @@ fn resolve_vars(value: &str, vars: &HashMap<String, String>) -> String {
     result
 }
 
+/// Ordena variáveis SCSS por nome descrescente para `$text-dim` vencer `$text`.
 fn vars_by_longest_name(vars: &HashMap<String, String>) -> Vec<(&String, &String)> {
     let mut ordered: Vec<_> = vars.iter().collect();
     ordered.sort_by(|(a, _), (b, _)| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
     ordered
 }
 
+/// Parseia tamanho Den/CSS em pixels, aceitando valor sem unidade ou `px`.
 fn parse_size_value(value: &str) -> Option<f32> {
     strip_important(value)
         .trim_end_matches("px")
@@ -241,19 +244,20 @@ fn parse_size_value(value: &str) -> Option<f32> {
         .ok()
 }
 
+/// Remove sufixo `!important` sem alocar quando presente.
 fn strip_important(value: &str) -> &str {
     let trimmed = value.trim();
-    if trimmed
-        .to_ascii_lowercase()
-        .strip_suffix("!important")
-        .is_some()
+    const IMPORTANT: &str = "!important";
+    if trimmed.len() >= IMPORTANT.len()
+        && trimmed[trimmed.len() - IMPORTANT.len()..].eq_ignore_ascii_case(IMPORTANT)
     {
-        trimmed[..trimmed.len() - "!important".len()].trim_end()
+        trimmed[..trimmed.len() - IMPORTANT.len()].trim_end()
     } else {
         trimmed
     }
 }
 
+/// Mantém a pilha de fontes exatamente como declarada em `font-family`.
 fn parse_font_family(value: &str) -> Option<String> {
     let value = strip_important(value).trim();
     if value.is_empty() {
@@ -263,6 +267,7 @@ fn parse_font_family(value: &str) -> Option<String> {
     }
 }
 
+/// Parseia pesos CSS convencionais para valor numérico.
 fn parse_font_weight(value: &str) -> Option<u16> {
     let value = strip_important(value).trim().to_ascii_lowercase();
     match value.as_str() {
@@ -276,6 +281,7 @@ fn parse_font_weight(value: &str) -> Option<u16> {
     }
 }
 
+/// Parseia `font-style`, mapeando itálico/oblíquo para o flag usado no painter.
 fn parse_font_style(value: &str) -> Option<bool> {
     let value = strip_important(value).trim().to_ascii_lowercase();
     match value.as_str() {
@@ -285,6 +291,7 @@ fn parse_font_style(value: &str) -> Option<bool> {
     }
 }
 
+/// Parseia `line-height` como pixels absolutos ou fator multiplicador.
 fn parse_line_height(value: &str) -> Option<LineHeightValue> {
     let value = strip_important(value).trim();
     if value.eq_ignore_ascii_case("normal") {
@@ -303,6 +310,7 @@ fn parse_line_height(value: &str) -> Option<LineHeightValue> {
     value.parse::<f32>().ok().map(LineHeightValue::Factor)
 }
 
+/// Parseia `letter-spacing`, tratando `normal` como zero.
 fn parse_letter_spacing(value: &str) -> Option<f32> {
     if strip_important(value).eq_ignore_ascii_case("normal") {
         Some(0.0)
@@ -311,6 +319,7 @@ fn parse_letter_spacing(value: &str) -> Option<f32> {
     }
 }
 
+/// Parseia a propriedade CSS `text-transform`.
 fn parse_text_transform(value: &str) -> Option<TextTransform> {
     let value = strip_important(value).trim().to_ascii_lowercase();
     match value.as_str() {
@@ -322,6 +331,7 @@ fn parse_text_transform(value: &str) -> Option<TextTransform> {
     }
 }
 
+/// Parseia alinhamento textual horizontal.
 fn parse_text_align(value: &str) -> Option<TextAlign> {
     let value = strip_important(value).trim().to_ascii_lowercase();
     match value.as_str() {
@@ -332,6 +342,7 @@ fn parse_text_align(value: &str) -> Option<TextAlign> {
     }
 }
 
+/// Parseia as linhas de decoração que o painter consegue representar.
 fn parse_text_decoration(value: &str) -> (Option<bool>, Option<bool>) {
     let value = strip_important(value).trim().to_ascii_lowercase();
     if value == "none" {
@@ -348,12 +359,14 @@ fn parse_text_decoration(value: &str) -> (Option<bool>, Option<bool>) {
     (underline, strikethrough)
 }
 
+/// Token lexical simples usado para o shorthand `font`.
 #[derive(Debug)]
 struct CssToken<'a> {
     text: &'a str,
     start: usize,
 }
 
+/// Aplica o shorthand `font` no subconjunto suportado pelo Den.
 fn apply_font_shorthand(value: &str, rule: &mut StyleRule) {
     let value = strip_important(value);
     let tokens = css_tokens(value);
@@ -391,23 +404,19 @@ fn apply_font_shorthand(value: &str, rule: &mut StyleRule) {
     }
 }
 
+/// Encontra o token de tamanho em `font`; por segurança exige unidade `px`.
 fn find_font_shorthand_size<'a>(
     tokens: &'a [CssToken<'a>],
 ) -> Option<(usize, &'a str, Option<&'a str>)> {
-    tokens
-        .iter()
-        .enumerate()
-        .find_map(|(idx, token)| parse_font_size_token(token.text, true).map(|s| (idx, s.0, s.1)))
-        .or_else(|| {
-            tokens.iter().enumerate().find_map(|(idx, token)| {
-                parse_font_size_token(token.text, false).map(|s| (idx, s.0, s.1))
-            })
-        })
+    tokens.iter().enumerate().find_map(|(idx, token)| {
+        parse_font_size_token(token.text).map(|(size, line_height)| (idx, size, line_height))
+    })
 }
 
-fn parse_font_size_token(token: &str, require_unit: bool) -> Option<(&str, Option<&str>)> {
+/// Divide `font-size` e `line-height` de tokens como `16px/1.4`.
+fn parse_font_size_token(token: &str) -> Option<(&str, Option<&str>)> {
     let (size, line_height) = token.split_once('/').unwrap_or((token, ""));
-    if require_unit && !size.trim().ends_with("px") {
+    if !size.trim().ends_with("px") {
         return None;
     }
     parse_size_value(size)?;
@@ -421,6 +430,7 @@ fn parse_font_size_token(token: &str, require_unit: bool) -> Option<(&str, Optio
     ))
 }
 
+/// Divide uma declaração CSS em tokens preservando strings e parênteses.
 fn css_tokens(value: &str) -> Vec<CssToken<'_>> {
     let mut tokens = Vec::new();
     let mut start: Option<usize> = None;
@@ -465,6 +475,7 @@ fn css_tokens(value: &str) -> Vec<CssToken<'_>> {
     tokens
 }
 
+/// Parseia dimensões CSS usadas em width/height e min/max.
 fn parse_width_value(value: &str) -> WidthValue {
     let value = strip_important(value);
     if value == "auto" {
@@ -482,6 +493,7 @@ fn parse_width_value(value: &str) -> WidthValue {
     WidthValue::Auto
 }
 
+/// Parseia o shorthand `border`, renderizando estilos não sólidos como sólido.
 fn parse_border_value(value: &str) -> Option<BorderStyle> {
     let parts: Vec<&str> = value.split_whitespace().collect();
     if parts.len() < 3 {
@@ -635,6 +647,22 @@ mod tests {
     }
 
     #[test]
+    fn important_suffix_is_stripped_before_property_dispatch() {
+        let styles = parse_scss(
+            r#"
+            .alert {
+                color: #e94560 !important;
+                background: #12121f !important;
+            }
+            "#,
+        );
+
+        let alert = styles.get("alert").expect("alert style");
+        assert_eq!(alert.color, Some((233, 69, 96)));
+        assert_eq!(alert.background, Some((18, 18, 31)));
+    }
+
+    #[test]
     fn parses_text_and_font_rules_that_affect_measurement() {
         let styles = parse_scss(
             r#"
@@ -685,5 +713,20 @@ mod tests {
             label.font_family.as_deref(),
             Some(r#""Fira Sans", sans-serif"#)
         );
+    }
+
+    #[test]
+    fn font_shorthand_without_size_unit_does_not_confuse_weight_for_size() {
+        let styles = parse_scss(
+            r#"
+            .label {
+                font: 600 16 Inter, sans-serif;
+            }
+            "#,
+        );
+
+        let label = styles.get("label").expect("label style");
+        assert_eq!(label.font_size, None);
+        assert_eq!(label.font_family, None);
     }
 }

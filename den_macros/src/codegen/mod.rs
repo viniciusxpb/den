@@ -7,6 +7,7 @@
 //! 4. DISPATCH — roteia `PaintEvent`s pros handlers registrados no build.
 
 mod click;
+mod config;
 mod control_flow;
 mod element;
 mod flex;

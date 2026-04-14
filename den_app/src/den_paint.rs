@@ -8,6 +8,9 @@
 //! Retorna `PaintEvent`s que o código gerado pelo `den_template!` despacha
 //! pros handlers (`(click)`, `goto`, `InputChanged` pra two-way binding).
 
+use crate::paint_config::{
+    INPUT_TEXT_PADDING_X, INPUT_TEXT_PADDING_Y, MIN_BORDER_WIDTH_PX, MIN_FONT_SIZE_PX,
+};
 use den_layout::{
     DenNodeId, DenRouteState, LayoutRect, LayoutTable, PaintStyle, RenderKind, RenderTree, Rgb,
     TextAlign, TextTransform,
@@ -18,21 +21,14 @@ use eframe::egui::{
 };
 use std::sync::Arc;
 
-/// Tamanho mínimo de fonte antes de desenhar (evita fontes impossíveis de ler).
-const MIN_FONT_SIZE_PX: f32 = 6.0;
-
-/// Largura mínima de borda em px de tela (evita borda sumir em scale baixo).
-const MIN_BORDER_WIDTH_PX: f32 = 1.0;
-
-/// Padding interno mínimo (CSS px) pra não encostar texto na borda do input.
-const INPUT_TEXT_PADDING_X: f32 = 6.0;
-const INPUT_TEXT_PADDING_Y: f32 = 4.0;
-
 /// Galley medida mais seu retângulo intrínseco. É a "caixa invisível" que o
 /// layout usa em vez de depender do texto cru.
 struct TextBox {
+    /// Galley do egui já shapeada e pronta para pintura.
     galley: Arc<Galley>,
+    /// Largura intrínseca do texto medido, em pontos/px do egui para a escala atual.
     width: f32,
+    /// Altura intrínseca do texto medido, em pontos/px do egui para a escala atual.
     height: f32,
 }
 
@@ -517,6 +513,7 @@ fn layout_text_box(
     })
 }
 
+/// Constrói o formato textual do egui a partir do `PaintStyle` resolvido.
 fn text_format_for_style(
     style: &PaintStyle,
     heading: bool,
@@ -554,6 +551,7 @@ fn text_format_for_style(
     }
 }
 
+/// Resolve `line-height` absoluto ou multiplicador para pontos na escala atual.
 fn line_height_for_style(style: &PaintStyle, base_font_size: f32, scale: f32) -> Option<f32> {
     if style.line_height > 0.0 {
         Some(style.line_height * scale)
@@ -564,6 +562,7 @@ fn line_height_for_style(style: &PaintStyle, base_font_size: f32, scale: f32) ->
     }
 }
 
+/// Escolhe a primeira família CSS disponível no egui, com fallback para genéricas.
 fn font_family_for_style(style: &PaintStyle, available_families: &[FontFamily]) -> FontFamily {
     let Some(stack) = style.font_family else {
         return FontFamily::Proportional;
@@ -587,6 +586,7 @@ fn font_family_for_style(style: &PaintStyle, available_families: &[FontFamily]) 
     FontFamily::Proportional
 }
 
+/// Busca família registrada pelo app usando comparação case-insensitive.
 fn find_registered_font_family(
     requested: &str,
     available_families: &[FontFamily],
@@ -601,6 +601,7 @@ fn find_registered_font_family(
     })
 }
 
+/// Divide uma pilha CSS de fontes, respeitando nomes entre aspas.
 fn css_font_family_stack(stack: &str) -> Vec<String> {
     let mut families = Vec::new();
     let mut current = String::new();
@@ -629,6 +630,7 @@ fn css_font_family_stack(stack: &str) -> Vec<String> {
     families
 }
 
+/// Adiciona uma família não vazia à pilha já normalizada.
 fn push_css_font_family(families: &mut Vec<String>, family: &str) {
     let family = family.trim();
     if !family.is_empty() {
@@ -636,6 +638,7 @@ fn push_css_font_family(families: &mut Vec<String>, family: &str) {
     }
 }
 
+/// Aplica `text-transform` antes de medir e pintar o texto.
 fn apply_text_transform(text: &str, transform: TextTransform) -> String {
     match transform {
         TextTransform::None => text.to_string(),
@@ -645,6 +648,7 @@ fn apply_text_transform(text: &str, transform: TextTransform) -> String {
     }
 }
 
+/// Capitaliza a primeira letra de cada palavra, preservando o resto do texto.
 fn capitalize_text(text: &str) -> String {
     let mut result = String::new();
     let mut start_of_word = true;
@@ -664,6 +668,7 @@ fn capitalize_text(text: &str) -> String {
     result
 }
 
+/// Calcula a posição X do texto dentro do retângulo do nó.
 fn aligned_text_x(rect: Rect, text_width: f32, align: TextAlign) -> f32 {
     match align {
         TextAlign::Left => rect.min.x,

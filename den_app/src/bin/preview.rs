@@ -8,27 +8,16 @@
 //!
 //! Uso: `cargo run --bin preview`.
 
+mod preview_config;
+
+use preview_config::{
+    AUTO_REFRESH_SECONDS, EGUI_WINDOW_WIDTH, FOR_LOOP_ITERATIONS, LEGACY_INDEX_FILE_NAME,
+    PREVIEW_FILE_NAME, PX_PROPS,
+};
 use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-
-/// Largura da janela egui em pixels (deve coincidir com `app_config::WINDOW_WIDTH = 1200`).
-/// O container do preview usa exatamente esta largura pra que `width: 100%` resolva
-/// contra o mesmo espaço disponível que o app nativo enxerga.
-const EGUI_WINDOW_WIDTH: u32 = 1200;
-
-/// Nome do único arquivo HTML gerado pelo preview.
-const PREVIEW_FILE_NAME: &str = "preview.html";
-
-/// Nome legado gerado pela versão antiga do preview.
-const LEGACY_INDEX_FILE_NAME: &str = "index.html";
-
-/// Intervalo de auto-refresh do preview no browser.
-const AUTO_REFRESH_SECONDS: u32 = 3;
-
-/// Quantas iterações simular em `<for>` quando não temos dados reais.
-const FOR_LOOP_ITERATIONS: usize = 3;
 
 /// Página Den convertida para HTML estático, pronta para entrar no preview.
 struct PagePreview {
@@ -225,6 +214,8 @@ fn rewrite_font_urls(css: &str, scss_dir: &Path, fonts_dir: &Path, page_slug: &s
     let mut font_face_depth: Option<i32> = None;
 
     for line in css.lines() {
+        // Assumimos que blocos @font-face não contêm chaves literais dentro de
+        // strings. Isso mantém o scanner simples e suficiente para `src: url(...)`.
         if font_face_depth.is_none()
             && line
                 .trim_start()
@@ -254,6 +245,7 @@ fn rewrite_font_urls(css: &str, scss_dir: &Path, fonts_dir: &Path, page_slug: &s
     out
 }
 
+/// Reescreve todos os `url(...)` de uma linha pertencente a um `@font-face`.
 fn rewrite_font_urls_in_line(
     line: &str,
     scss_dir: &Path,
@@ -282,10 +274,12 @@ fn rewrite_font_urls_in_line(
     out
 }
 
+/// Encontra a próxima chamada `url(`, ignorando caixa alta/baixa.
 fn find_url_call(text: &str) -> Option<usize> {
     text.to_ascii_lowercase().find("url(")
 }
 
+/// Encontra o `)` final de `url(...)`, respeitando aspas simples e duplas.
 fn find_url_close(text: &str, start: usize) -> Option<usize> {
     let mut quote: Option<char> = None;
     for (offset, ch) in text[start..].char_indices() {
@@ -300,6 +294,7 @@ fn find_url_close(text: &str, start: usize) -> Option<usize> {
     None
 }
 
+/// Copia o asset de fonte relativo e devolve o argumento de `url(...)` reescrito.
 fn rewrite_font_url_arg(
     raw_arg: &str,
     scss_dir: &Path,
@@ -348,6 +343,7 @@ fn rewrite_font_url_arg(
     }
 }
 
+/// Remove aspas externas de uma URL CSS, devolvendo a quote original.
 fn unquote_css_url(url: &str) -> (Option<char>, &str) {
     let mut chars = url.chars();
     let Some(first) = chars.next() else {
@@ -362,6 +358,7 @@ fn unquote_css_url(url: &str) -> (Option<char>, &str) {
     }
 }
 
+/// Retorna se uma URL CSS deve ser preservada sem cópia local.
 fn should_keep_css_url(url: &str) -> bool {
     let lower = url.to_ascii_lowercase();
     url.is_empty()
@@ -372,6 +369,7 @@ fn should_keep_css_url(url: &str) -> bool {
         || lower.starts_with("data:")
 }
 
+/// Extrai só o caminho de uma URL CSS, removendo query/hash para lookup local.
 fn css_url_path_part(url: &str) -> &str {
     let query = url.find('?');
     let hash = url.find('#');
@@ -384,6 +382,7 @@ fn css_url_path_part(url: &str) -> &str {
     &url[..cutoff]
 }
 
+/// Normaliza o nome de arquivo copiado para `preview/fonts`.
 fn sanitize_font_asset_name(name: &str) -> String {
     name.chars()
         .map(|ch| {
@@ -454,27 +453,12 @@ fn resolve_scss_vars(line: &str, vars: &HashMap<String, String>) -> String {
     result
 }
 
+/// Ordena variáveis SCSS por nome descrescente para `$text-dim` vencer `$text`.
 fn vars_by_longest_name(vars: &HashMap<String, String>) -> Vec<(&String, &String)> {
     let mut ordered: Vec<_> = vars.iter().collect();
     ordered.sort_by(|(a, _), (b, _)| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
     ordered
 }
-
-const PX_PROPS: &[&str] = &[
-    "font-size",
-    "padding",
-    "border-radius",
-    "margin",
-    "width",
-    "height",
-    "top",
-    "left",
-    "right",
-    "bottom",
-    "border-width",
-    "gap",
-    "letter-spacing",
-];
 
 fn add_px_to_unitless(line: &str) -> String {
     let trimmed = line.trim();

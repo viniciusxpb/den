@@ -204,6 +204,37 @@ mod tests {
         );
     }
 
+    #[test]
+    fn text_decoration_does_not_inherit_as_resolved_property() {
+        let raw_nodes = parse_html(
+            r#"
+            <div class="decorated">
+                <div class="plain-child">Child</div>
+            </div>
+            "#,
+        );
+        let styles = parse_scss(
+            r#"
+            .decorated {
+                text-decoration: underline line-through;
+            }
+
+            .plain-child {
+                font-size: 12px;
+            }
+            "#,
+        );
+        let output = resolve(&raw_nodes, &styles);
+
+        let parent = find_element_by_class(&output.nodes, "decorated").expect("decorated");
+        let child = find_element_by_class(&output.nodes, "plain-child").expect("plain-child");
+
+        assert_eq!(parent.visual.underline, Some(true));
+        assert_eq!(parent.visual.strikethrough, Some(true));
+        assert_eq!(child.visual.underline, None);
+        assert_eq!(child.visual.strikethrough, None);
+    }
+
     #[derive(Default)]
     struct FontTagExpectation {
         family: &'static str,
