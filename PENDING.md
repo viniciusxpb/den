@@ -2,21 +2,75 @@
 
 Itens intencionalmente deixados pra depois. Apaga quando resolver.
 
+> **Norte do projeto** — Den é Angular inspirado em Rust (AOT compile de `.html` + `.scss` pra nativo), não browser engine. O diferencial é **eliminar erro silencioso no front** via macro + rustc: template que referencia campo/classe/método que não existe **não compila**. A régua pra priorizar pendências: "isso fortalece a checagem compile-time?" > "isso cobre mais CSS?" > "isso é polimento visual?".
+
+---
+
+## Validação compile-time de classes CSS
+
+Hoje, `class="naem-errado"` em HTML simplesmente não aplica estilo nenhum em runtime — falha silenciosa, o bug #1 de todo dev front. O parser já tem acesso ao HTML e ao SCSS na mesma fase de macro ([resolve.rs:48-50](den_macros/src/resolve.rs)), só que o match por classe hoje ignora sem erro quando a classe não existe no StyleMap.
+
+**Fix futuro**: no resolve, varrer `el.classes` e emitir `compile_error!` pra toda classe usada em HTML que não aparece no SCSS daquela página (considerando herança e classes definidas em SCSS compartilhados se existirem). Precisa permitir whitelist de classes dinâmicas / externas via atributo (`class:dynamic="..."` ou similar) pra não bloquear casos legítimos.
+
+**Impacto**: é o diferencial mais vendável pra dev front. Rename de `.btn-primary` pra `.btn-main` passa a ser refactor seguro — se HTML não foi atualizado, build quebra.
+
+---
+
+## Dead CSS detection (subproduto da validação de classes)
+
+Com o mesmo cruzamento HTML × SCSS da pendência acima, sai de graça a detecção inversa: classe declarada em `.scss` que ninguém usa em `.html`.
+
+**Fix futuro**: warning (não erro) de "classe `.foo` declarada em `pages/home/home.scss` mas nunca referenciada". Opcional: modo `--strict` que promove pra erro. Dá resultado parecido com PurgeCSS/Tailwind JIT mas direto do macro, sem tooling externo.
+
+**Decisão pendente**: escopo — só warn de classe não usada na própria página, ou cruza com todos os `.html` do projeto?
+
+---
+
+## Spans de erro apontando pro `.html` original
+
+Hoje quando um `bind="self.naem"` falha, o rustc aponta pro token dentro da expansão do `den_template!`, não pra linha:coluna do `.html`. O erro aparece, mas o dev não vê sublinhado dentro do arquivo que ele editou.
+
+**Fix futuro**: parser HTML carrega `(line, col)` de cada atributo/texto. Codegen usa `proc_macro2::Span` customizado (ou `syn::spanned::Spanned` com mapeamento) pra que `compile_error!` aponte pro `.html`. Isso fecha o loop: IDE sublinha dentro do HTML o campo inexistente, a classe inexistente, o método inexistente.
+
+**Impacto**: esse é o momento "cai o queixo" do dev front. Sem isso, a validação funciona mas não parece mágica. Com isso, fica comparável ao Angular Language Service — com a diferença de ser feature do próprio macro, não um LSP de 50k linhas.
+
+---
+
+## Language Server / autocomplete em `.html`
+
+Extensão natural do item acima: quando o HTML tá válido e a struct da page tá acessível, o IDE pode sugerir:
+- campos da struct ao digitar `{{ self.` ou `bind="self.`
+- classes declaradas no `.scss` correspondente ao digitar `class="`
+- nomes de handlers disponíveis ao digitar `(click)="`
+- rotas declaradas no router ao digitar `goto="`
+
+**Decisão pendente**: implementar como LSP custom em Rust, ou começar com extensão VS Code que lê metadados emitidos pelo macro (tipo um `.den-meta.json` gerado no build com lista de classes/campos/rotas por página)? O segundo é 10× mais simples e entrega 80% do valor.
+
+---
+
+## Componentes reutilizáveis sub-página (com props)
+
+Hoje a unidade reutilizável é a **page**: `with="self.usuario"` + `goto="..."` funciona como `@Input` na fronteira de navegação. Mas dentro de uma mesma page, não dá pra ter `<StatCard label="CLICKS" value="{{ self.count }}" color="blue" />` — precisa copy-paste. [home.html:12-28](den_app/src/pages/home/home.html) tem três `stat-card` quase idênticos, é o cheiro clássico.
+
+**Fix futuro**: mecanismo tipo `den_template!` mas sem precisar de rota — um `den_component!("components/stat_card/stat_card")` que aceita struct de props, ou macro `#[den_component]` aplicada a uma struct que ganha `.render_inline(ui, scale, props)`. Resolve por tag customizada (`<StatCard />`) ou por atributo (`<div component="StatCard" label="..." />`).
+
+**Decisão pendente**: sintaxe — tag PascalCase estilo React (`<StatCard>`), atributo explícito, ou macro invocável. Todas as três são factíveis dado o pipeline atual.
+
 ---
 
 ## Click handlers com argumentos dentro de `<for>`
 
 O renderer genérico usa tabela de slots por template: cada `(click)="f()"` vira um `Interact::click_handler: Some(slot)`, e o match de dispatch roteia `PaintEvent::Click{handler:slot} → self.f()`. Funciona pra handlers SEM args.
 
-Com args, hoje o codegen retorna erro explícito. O bloqueio: args dentro de `<for>` referenciam variáveis do escopo do loop (`user.id`, `idx`), que não existem no ponto de dispatch (fora da closure de build).
+Com args, hoje o codegen retorna erro explícito. O bloqueio: args dentro de `<for>` referenciam variáveis do escopo do loop (`user.id`, `idx`), que não existem no ponto de dispatch (fora da closure de build). O atributo `den-bind` já tá reservado no parser ([resolved.rs:214](den_macros/src/types/resolved.rs#L214), [html.rs:310](den_macros/src/parse/html.rs#L310)) justamente pra isso — auto-clone de vars do loop pro dispatch.
 
-**Fix futuro**: dispatch via node_id em vez de slot. Cada nó clicável guarda sua ação como closure clonada em runtime (ou o dispatch re-executa o build com lookup por node_id). Alternativa: gerar uma tabela `HashMap<DenNodeId, Box<dyn FnOnce(&mut Self)>>` preenchida no build; o dispatch lê do map por node_id.
+**Fix futuro**: dispatch via node_id em vez de slot. Cada nó clicável guarda sua ação como closure clonada em runtime. Alternativa: gerar uma tabela `HashMap<DenNodeId, Box<dyn FnOnce(&mut Self)>>` preenchida no build; o dispatch lê do map por node_id, e `den-bind` declara explicitamente quais vars do escopo precisam ser capturadas/clonadas.
 
 ---
 
 ## Elemento raiz `<panel>` nos templates Den
 
-Ideia: templates deveriam ter um elemento raiz explícito (`<panel>` ou similar) que mapeia pro `CentralPanel` no egui e pro container do preview no browser.
+Templates deveriam ter um elemento raiz explícito (`<panel>` ou similar) que mapeia pro `CentralPanel` no egui e pro container do preview no browser.
 
 Hoje `home.html` começa direto com os filhos. O correto seria:
 ```html
@@ -26,9 +80,7 @@ Hoje `home.html` começa direto com os filhos. O correto seria:
 </panel>
 ```
 
-No egui, `<panel>` mapearia para `ScrollArea::vertical()` ou simplesmente o contexto do `CentralPanel`. No preview, seria um `<div>` que preenche a largura do browser.
-
-Benefício: `width: 100%` em qualquer filho sempre resolve relativo ao painel pai, sincronizando preview e egui naturalmente — sem hardcodar largura.
+No egui, `<panel>` mapearia para `ScrollArea::vertical()` ou o contexto do `CentralPanel`. No preview, seria um `<div>` que preenche a largura do browser. Benefício: `width: 100%` em qualquer filho resolve relativo ao painel pai, sincronizando preview e egui sem hardcodar largura.
 
 `EGUI_WINDOW_WIDTH` em `preview.rs` continua sendo o encaixe atual, mas a decisão de API (`<panel>`, atributo no template, ou configuração de app) ainda precisa ser tomada.
 
@@ -36,11 +88,11 @@ Benefício: `width: 100%` em qualquer filho sempre resolve relativo ao painel pa
 
 ## Style editor resolve variáveis SCSS em literal ao escrever de volta
 
-Quando o usuário edita um valor no style editor (ex: slider de cor numa propriedade `color: $primary`), o editor resolve `$primary` → `#0f3460` pra exibir o color picker, mas ao escrever de volta emite o valor literal (`#0f3460`) em vez de preservar a referência (`$primary`).
+Quando o usuário edita um valor no style editor (ex: slider numa propriedade `color: $primary`), o editor resolve `$primary` → `#0f3460` pra exibir o color picker, mas ao escrever de volta emite o literal em vez de preservar a referência.
 
-Isso é um comportamento intencional por ora (o usuário pode intencionalmente querer "desconectar" do token), mas também apaga variáveis sem aviso quando o usuário apenas arrasta e solta no mesmo valor.
+Comportamento intencional por ora (usuário pode querer "desconectar" do token), mas também apaga variáveis sem aviso quando só arrasta e solta no mesmo valor.
 
-**Fix futuro**: comparar `to_scss_string()` com o valor original do arquivo antes de emitir. Se o resultado resolvido for igual ao original resolvido, manter a string original (com variável). Só substituir quando o valor mudou de fato.
+**Fix futuro**: comparar `to_scss_string()` com o valor original antes de emitir. Se o resolvido for igual ao original resolvido, manter a string original (com variável). Só substituir quando o valor mudou de fato.
 
 ---
 
@@ -48,33 +100,33 @@ Isso é um comportamento intencional por ora (o usuário pode intencionalmente q
 
 Os parsers HTML/SCSS estão duplicados entre `den_macros`, `preview.rs` e `style_editor.rs`. Criar um crate `den_core` com parsers + types compartilhados eliminaria a triplicação de `collect_scss_vars`, `vars_by_longest_name` e helpers de HTML.
 
-**Decisão pendente**: definir se `den_core` deve ser uma crate pública do workspace (API reutilizável por apps) ou apenas uma crate interna para dividir responsabilidades entre macro, preview e style editor.
+**Decisão pendente**: `den_core` como crate pública do workspace (API reutilizável por apps, e base pro futuro LSP) ou interna (só divide responsabilidade entre macro, preview e style editor)? A pendência do LSP acima favorece a opção pública.
 
 ---
 
 ## Registro nativo de fontes `@font-face`
 
-O parser já transporta propriedades textuais vindas do CSS (`font-family`, `font`, `font-weight`, `font-style`, `line-height`, `letter-spacing`, `text-transform`, `text-align`, `text-decoration`) até o `PaintStyle`, e o painter mede/pinta usando uma TextBox antes do layout final.
+O parser já transporta propriedades textuais (`font-family`, `font`, `font-weight`, etc.) até o `PaintStyle`, e o painter mede/pinta via TextBox. O preview HTML já copia URLs relativas de `@font-face` para `preview/fonts/`. No backend egui nativo, falta registrar automaticamente os bytes dessas fontes em `egui::FontDefinitions`.
 
-O preview HTML já copia URLs relativas de fontes declaradas em `@font-face` para `preview/fonts/` e deixa o browser resolver a família como CSS normal. No backend egui nativo, porém, ainda falta registrar automaticamente os bytes dessas fontes em `egui::FontDefinitions`.
-
-**Decisão pendente**: escolher onde vive o registro de fontes:
+**Decisão pendente**: onde vive o registro de fontes:
 1. o macro coleta `@font-face` no SCSS e gera uma função/constante de assets por página;
-2. um `den_core` compartilhado coleta fontes e o app chama um bootstrap único antes de renderizar;
+2. `den_core` coleta fontes e o app chama um bootstrap único antes de renderizar;
 3. o app declara manualmente um mapa de fontes, e o CSS só referencia nomes já registrados.
 
-Também falta decidir como mapear peso/estilo para faces reais (`font-weight: 700`, itálico, variável). O egui 0.33 não seleciona peso automaticamente só pelo `TextFormat`, então o Den precisa escolher uma política própria.
+Também falta decidir como mapear peso/estilo para faces reais. Egui 0.33 não seleciona peso automaticamente só pelo `TextFormat`, então Den precisa escolher política própria (mapa `(família, peso, itálico) → FontId`).
 
 ---
 
 ## Política para `display: grid`
 
-Hoje o parser aceita `display: grid`, mas `den_layout::LayoutTable` trata `Grid` como fluxo block (`table.rs:69`). Isso é útil para experimentação, porém pode induzir usuário a achar que grid real já existe.
+Hoje o parser aceita `display: grid`, mas `den_layout::LayoutTable` trata como fluxo block ([table.rs:69](den_layout/src/table.rs#L69)). Ignorar silenciosamente conflita com o norte do projeto (falha silenciosa é o inimigo).
 
-**Decisão pendente**: escolher entre:
-1. gerar erro/aviso forte para `display: grid` até existir grid real;
-2. manter fallback para block e documentar como experimental;
-3. implementar um grid mínimo no layout engine (mínimo viável: `grid-template-columns` com `fr` + `px` + `%`, necessário para a sidebar da tela ndnm).
+**Decisão pendente**: escolher em ordem de preferência:
+1. **Fail loud**: `compile_error!` pra `display: grid` até grid real existir. Coerente com a identidade "zero silent failure".
+2. Implementar grid mínimo no layout engine (`grid-template-columns` com `fr` + `px` + `%`). Desbloqueia layouts tipo sidebar + stats tabelados, que dev front escreve sem pensar.
+3. Manter fallback para block e documentar como experimental (menos preferido — contraria o norte).
+
+A opção 1 é o que "Angular in Rust" faria. A opção 2 é investimento maior mas resolve um padrão muito comum.
 
 ---
 
@@ -82,7 +134,7 @@ Hoje o parser aceita `display: grid`, mas `den_layout::LayoutTable` trata `Grid`
 
 O input atual é pintado manualmente e cobre foco, caret, texto, backspace/delete, setas, home/end e blur. Ainda faltam seleção, clipboard, tab focus, mouse positioning e composição IME.
 
-**Decisão pendente**: continuar evoluindo o input manual para preservar o painter puro do Den, ou introduzir uma ponte controlada para widgets egui nativos em inputs complexos.
+**Decisão pendente**: continuar evoluindo o input manual (preserva painter puro, consistência visual, controle total), ou introduzir ponte controlada pra widget egui nativo em inputs complexos (ganha rápido mas quebra a pureza do modelo "só painter")?
 
 ---
 
@@ -104,41 +156,40 @@ Arquivos ainda grandes:
 
 ## Backend alternativo além do egui
 
-O `paint_tree` mora em `den_app/src/den_paint.rs` como função concreta. Pra trocar backend (iced, wgpu direto, canvas web), seria preciso:
+O `paint_tree` mora em `den_app/src/den_paint.rs` como função concreta. Pra trocar backend (iced, wgpu direto, canvas web, Skia), seria preciso:
 1. Definir o alias `DenUi` no app target com o tipo adequado (já existe esse hook).
 2. Implementar um `paint_tree` equivalente que aceite a `RenderTree` + `LayoutTable` e desenhe no backend escolhido.
 3. O macro gera `crate::den_paint::paint_tree(...)` — trocar o módulo no crate root troca o backend.
 
-Nenhum código de `den_layout` / `den_macros` precisa mudar.
+Nenhum código de `den_layout` / `den_macros` precisa mudar. Isso é o que permite iOS/Android futuro sem reescrever o framework.
 
 ---
 
-## Gap visual entre o runtime nativo e a tela React (página `ndnm`)
+## Expansão do subset CSS suportado (ex-"gap visual ndnm")
 
-O HTML/CSS da tela ndnm já está dentro do projeto (`den_app/src/pages/ndnm/`) e a rota inicial já aponta pra ela. O preview no browser consegue reproduzir a tela porque delega tudo ao CSS real; o runtime Den nativo, porém, ignora a maioria das propriedades que essa tela depende. Lista do que falta pra paridade visual:
+A tela `ndnm` funciona como *teste de limite* do que o runtime não cobre hoje. Reframing: não é paridade com React, é expansão priorizada do subset CSS que dev front escreve por default em app moderno. Agrupado por impacto (o que desbloqueia mais UIs reais vem primeiro):
 
-**Posicionamento e transformações**
-- `position: absolute`, `left`, `top`, `z-index` e posicionamento livre de nós no canvas. Hoje o CSS tá no arquivo, o browser usa, mas o runtime Den ignora — todo nó cai no fluxo block/flex.
-- `transform: rotate(...)` pra desenhar wires como linhas inclinadas.
-- `pointer-events`, `cursor` granular por região, drag, pan e zoom interativos no canvas.
+**Alta prioridade (dev front usa todo dia)**
+- `opacity`, `rgba(...)`, alpha real nas cores.
+- `box-shadow` (inclusive múltiplas, `inset`) — onipresente em card/button/modal.
+- `background-image` com gradientes (`linear-gradient`, `radial-gradient`). Repeating fica depois.
+- Border individual: `border-left`, `border-top-width`, `border-right-color`, etc.
+- `white-space` (`nowrap`, `pre`, `pre-wrap`), `text-overflow`.
+- Flex completo: `flex-direction`, `align-items`, `justify-content`, `flex-shrink`, `min-width: 0`.
 
-**Gráficos vetoriais**
-- SVG / canvas / path real pra wires Bezier. No HTML/CSS atual deixei wires como divs estáticas aproximadas.
-- Ícones SVG do `lucide-react`. Por enquanto convertidos para marcadores textuais curtos tipo `DB`, `LY`, `SH`.
+**Média prioridade (casos específicos mas recorrentes)**
+- `position: absolute` / `relative` / `z-index` com containing block rules.
+- `overflow: hidden` / `visible` / `scroll` com clipping real.
+- `transform: rotate/scale/translate` 2D.
+- `grid-template-columns` (conecta com pendência "Política pra `display: grid`").
+- SVG pra ícones (lucide-react style) — dev front espera `<Icon name="database" />` funcionando.
 
-**Pintura avançada**
-- `background-image`, `radial-gradient` e `repeating-linear-gradient` (usados em grid de pontos e scanline).
-- `box-shadow`, glow e sombras coloridas em nós/ports.
-- `opacity`, `rgba(...)`, `transparent` e alpha real nas cores.
-- `overflow: hidden`/`visible`, clipping e scroll interno por nó.
+**Baixa prioridade (nice to have)**
+- `@keyframes` / `transition` / animações.
+- 3D transforms, filter, backdrop-filter.
+- `repeating-linear-gradient`, gradientes cônicos.
+- Fontes externas / Google Fonts (conecta com pendência `@font-face`).
 
-**Layout**
-- `flex-direction`, `align-items`, `justify-content`, `flex-shrink` e `min-width: 0` pra flex compatível com o que o browser faz.
-- `grid-template-columns` (mínimo `fr` + `px` + `%`) pros stats da sidebar — conecta com a seção de `display: grid` acima.
+**Decisão pendente**: cada item acima — falha alta (erro de compile) até implementar, ou aceita e ignora? Coerente com o norte do projeto: falha alta. Documentar o subset suportado por release.
 
-**Tipografia e animação**
-- Seletores/propriedades CSS mais completas: `border-left`, `border-top-width`, `background-color` (separado de `background`), `white-space`, `text-overflow`.
-- Fontes externas / Google Fonts e seleção real por peso/estilo. Hoje uso uma stack mono compatível com o que já existe — conecta com a seção `@font-face` acima.
-- Animações / `@keyframes` (pulse nos ports, motion nos wires).
-
-**Resumo**: a estrutura e o CSS da tela já vivem no projeto. O gap é quase todo no motor visual/layout do runtime nativo — principalmente posicionamento absoluto, transforms, sombras/alpha e wires vetoriais.
+**Resumo**: a estrutura e o CSS da tela ndnm já vivem no projeto. O trabalho aqui é engine, não produto.
