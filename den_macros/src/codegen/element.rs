@@ -107,10 +107,7 @@ fn emit_kind(el: &DenElement, ctx: &BuildCtx) -> Result<proc_macro2::TokenStream
 }
 
 /// Emite o `Interact { click_handler, goto_slot, pointer_on_hover }`.
-fn emit_interact(
-    el: &DenElement,
-    ctx: &mut BuildCtx,
-) -> Result<proc_macro2::TokenStream, String> {
+fn emit_interact(el: &DenElement, ctx: &mut BuildCtx) -> Result<proc_macro2::TokenStream, String> {
     let click = build_click_slot(el, ctx)?;
     let goto = build_goto_slot(el, ctx)?;
     let click_tokens = match click {
@@ -132,12 +129,7 @@ fn emit_interact(
 }
 
 /// Hash estável dentro de uma compilação (template + caminho + tag + classes).
-fn element_id_hash(
-    template_path: &str,
-    tree_path: &[usize],
-    tag: &str,
-    classes: &[String],
-) -> u64 {
+fn element_id_hash(template_path: &str, tree_path: &[usize], tag: &str, classes: &[String]) -> u64 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     template_path.hash(&mut hasher);
     tree_path.hash(&mut hasher);

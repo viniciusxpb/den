@@ -9,12 +9,10 @@
 //! pros handlers (`(click)`, `goto`, `InputChanged` pra two-way binding).
 
 use den_layout::{
-    DenNodeId, DenRouteState, LayoutRect, LayoutTable, PaintStyle, RenderKind, RenderTree,
-    RenderNode, Rgb,
+    DenNodeId, DenRouteState, LayoutRect, LayoutTable, PaintStyle, RenderKind, RenderNode,
+    RenderTree, Rgb,
 };
-use eframe::egui::{
-    self, Color32, FontId, Id, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, Vec2,
-};
+use eframe::egui::{self, Color32, FontId, Id, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, Vec2};
 
 /// Tamanho mínimo de fonte antes de desenhar (evita fontes impossíveis de ler).
 const MIN_FONT_SIZE_PX: f32 = 6.0;
@@ -73,7 +71,11 @@ pub fn paint_tree(
     let origin = ui.min_rect().min;
     let mut events = Vec::new();
 
-    let body_rect = scaled_rect(layout.rects.first().copied().unwrap_or_default(), origin, scale);
+    let body_rect = scaled_rect(
+        layout.rects.first().copied().unwrap_or_default(),
+        origin,
+        scale,
+    );
     ui.allocate_rect(body_rect, Sense::hover());
 
     // Pinta o body (seletor `body` no SCSS) antes dos filhos. Equivalente ao
@@ -88,7 +90,16 @@ pub fn paint_tree(
 
     // 5. Walk + paint.
     for &root_idx in &tree.roots {
-        paint_node(ui, scale, origin, tree, layout, state, root_idx, &mut events);
+        paint_node(
+            ui,
+            scale,
+            origin,
+            tree,
+            layout,
+            state,
+            root_idx,
+            &mut events,
+        );
     }
 
     events
@@ -117,9 +128,8 @@ fn measure_tree_text(ui: &Ui, tree: &mut RenderTree) {
                     14.0
                 };
                 let font = FontId::proportional(base);
-                let galley = ui.fonts_mut(|f| {
-                    f.layout_no_wrap(content.clone(), font, Color32::WHITE)
-                });
+                let galley =
+                    ui.fonts_mut(|f| f.layout_no_wrap(content.clone(), font, Color32::WHITE));
                 node.layout.intrinsic_width = galley.rect.width();
                 node.layout.intrinsic_height = galley.rect.height();
             }
@@ -300,8 +310,7 @@ fn paint_text(
     // `layout_no_wrap` mantém o texto numa linha só; quebras de linha viram
     // no próximo passo quando tivermos wrap de texto na tree.
     let font = FontId::proportional(size);
-    let galley = ui
-        .fonts_mut(|f| f.layout_no_wrap(content.to_string(), font, color));
+    let galley = ui.fonts_mut(|f| f.layout_no_wrap(content.to_string(), font, color));
     painter.galley(rect.min, galley, color);
 }
 
@@ -469,7 +478,8 @@ fn paint_input(
     let text_pos = rect.min + Vec2::new(INPUT_TEXT_PADDING_X * scale, INPUT_TEXT_PADDING_Y * scale);
 
     if !display_text.is_empty() {
-        let galley = ui.fonts_mut(|f| f.layout_no_wrap(display_text.clone(), font.clone(), text_color));
+        let galley =
+            ui.fonts_mut(|f| f.layout_no_wrap(display_text.clone(), font.clone(), text_color));
         painter.galley(text_pos, galley, text_color);
     }
 

@@ -9,10 +9,7 @@ use crate::types::DenElement;
 
 /// Registra o handler de click deste elemento em `ctx.handlers`, se existir,
 /// e retorna o slot atribuído.
-pub(super) fn build_click_slot(
-    el: &DenElement,
-    ctx: &mut BuildCtx,
-) -> Result<Option<u32>, String> {
+pub(super) fn build_click_slot(el: &DenElement, ctx: &mut BuildCtx) -> Result<Option<u32>, String> {
     let Some(func_name) = &el.on_click else {
         return Ok(None);
     };

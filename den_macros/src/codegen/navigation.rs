@@ -6,10 +6,7 @@ use quote::quote;
 
 /// Registra a navegação `goto` deste elemento em `ctx.goto_slots`, se existir,
 /// e retorna o slot atribuído. Também valida a combinação com `(click)`.
-pub(super) fn build_goto_slot(
-    el: &DenElement,
-    ctx: &mut BuildCtx,
-) -> Result<Option<u32>, String> {
+pub(super) fn build_goto_slot(el: &DenElement, ctx: &mut BuildCtx) -> Result<Option<u32>, String> {
     let Some(page) = &el.goto_page else {
         if el.goto_with.is_some() {
             return Err("Den: `with` requires `goto` on the same element.".to_string());
@@ -17,9 +14,7 @@ pub(super) fn build_goto_slot(
         return Ok(None);
     };
     if el.on_click.is_some() {
-        return Err(
-            "Den: `goto` and `(click)` cannot be used on the same element.".to_string(),
-        );
+        return Err("Den: `goto` and `(click)` cannot be used on the same element.".to_string());
     }
 
     let helper: proc_macro2::TokenStream = format!("crate::__den_route_{page}")

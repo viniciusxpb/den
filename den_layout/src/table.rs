@@ -208,8 +208,8 @@ impl LayoutTable {
                 height: resolved_height,
             };
             self.layout_children(child_idx);
-            max_height = max_height
-                .max(self.rects[child_idx].height + margin::uniform_extent(margin));
+            max_height =
+                max_height.max(self.rects[child_idx].height + margin::uniform_extent(margin));
             cursor_x += margin::uniform_extent(margin) + resolved_width;
             if pos + 1 < children.len() {
                 cursor_x += gap;
@@ -221,7 +221,6 @@ impl LayoutTable {
             self.rects[parent_idx].height = max_height + edge * 2.0;
         }
     }
-
 
     /// Emite no stderr um snapshot da tabela resolvida.
     pub fn debug_dump(&self, template_path: &str, labels: &[&str]) {

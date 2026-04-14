@@ -91,7 +91,10 @@ fn main() {
 
     // Sempre abre o index — não tem watch mode aqui, então não gera spam.
     // Browsers costumam focar na tab existente se a URL já está aberta.
-    std::process::Command::new("xdg-open").arg(&index_path).spawn().ok();
+    std::process::Command::new("xdg-open")
+        .arg(&index_path)
+        .spawn()
+        .ok();
 }
 
 // ============================================================================
@@ -183,7 +186,11 @@ fn collect_scss_vars(scss: &str) -> HashMap<String, String> {
             && let Some(colon) = rest.find(':')
         {
             let name = rest[..colon].trim().to_string();
-            let value = rest[colon + 1..].trim().trim_end_matches(';').trim().to_string();
+            let value = rest[colon + 1..]
+                .trim()
+                .trim_end_matches(';')
+                .trim()
+                .to_string();
             if !name.is_empty() && !value.is_empty() {
                 vars.insert(name, value);
             }
@@ -401,9 +408,7 @@ fn convert_element(chars: &[char], start: usize) -> (String, usize) {
         .map(|g| format!(r#" data-goto="{g}""#))
         .unwrap_or_default();
     (
-        format!(
-            "<{html_tag} class=\"{classes}\"{goto_note}>{inner}</{html_tag}>"
-        ),
+        format!("<{html_tag} class=\"{classes}\"{goto_note}>{inner}</{html_tag}>"),
         end,
     )
 }
@@ -519,11 +524,17 @@ fn convert_interpolation(chars: &[char], start: usize) -> (String, usize) {
         pos += 1;
     }
     let expr: String = chars[expr_start..pos].iter().collect();
-    let label = expr.trim().trim_start_matches("self.").trim_start_matches("this.");
+    let label = expr
+        .trim()
+        .trim_start_matches("self.")
+        .trim_start_matches("this.");
     if pos + 1 < chars.len() {
         pos += 2;
     }
-    (format!(r#"<span class="den-placeholder">[{label}]</span>"#), pos)
+    (
+        format!(r#"<span class="den-placeholder">[{label}]</span>"#),
+        pos,
+    )
 }
 
 fn den_tag_to_html(tag: &str) -> &str {

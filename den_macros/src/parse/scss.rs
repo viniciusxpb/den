@@ -39,9 +39,7 @@ pub fn parse_scss(input: &str) -> StyleMap {
             pos += 1;
             read_identifier(bytes, &mut pos)
         } else if bytes[pos..].starts_with(b"body")
-            && bytes
-                .get(pos + 4)
-                .is_some_and(|c| !is_ident_char(*c))
+            && bytes.get(pos + 4).is_some_and(|c| !is_ident_char(*c))
         {
             pos += 4;
             "body".to_string()
