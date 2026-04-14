@@ -1,8 +1,10 @@
 mod hello;
 mod home;
+mod ndnm;
 mod nodes;
 mod usuario;
 pub use hello::HelloPage;
 pub use home::HomePage;
+pub use ndnm::NdnmPage;
 pub use nodes::NodesPage;
 pub use usuario::UsuarioPage;

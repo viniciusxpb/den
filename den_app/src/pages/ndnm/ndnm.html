@@ -1,0 +1,227 @@
+<div class="ndnm-shell">
+    <div class="ndnm-scanline"></div>
+
+    <div class="ndnm-sidebar">
+        <div class="ndnm-brand-row">
+            <div class="ndnm-logo">Z</div>
+            <div class="ndnm-brand-copy">
+                <div class="ndnm-brand-title">NDNM</div>
+                <div class="ndnm-brand-subtitle">NO DEPS NO MASTERS</div>
+            </div>
+        </div>
+
+        <div class="ndnm-categories">
+            <div class="ndnm-category ndnm-category-active">
+                <div class="ndnm-category-icon">DB</div>
+                <div class="ndnm-category-label">LOADERS</div>
+                <div class="ndnm-category-count">1</div>
+            </div>
+            <div class="ndnm-node-list">
+                <div class="ndnm-node-list-item ndnm-model-text">DB Load Checkpoint</div>
+            </div>
+
+            <div class="ndnm-category">
+                <div class="ndnm-category-icon">LY</div>
+                <div class="ndnm-category-label">CONDITIONING</div>
+                <div class="ndnm-category-count">1</div>
+            </div>
+
+            <div class="ndnm-category">
+                <div class="ndnm-category-icon">HD</div>
+                <div class="ndnm-category-label">LATENT</div>
+                <div class="ndnm-category-count">2</div>
+            </div>
+
+            <div class="ndnm-category ndnm-category-active">
+                <div class="ndnm-category-icon">SH</div>
+                <div class="ndnm-category-label">SAMPLING</div>
+                <div class="ndnm-category-count">1</div>
+            </div>
+            <div class="ndnm-node-list">
+                <div class="ndnm-node-list-item ndnm-latent-text">SH KSampler</div>
+            </div>
+
+            <div class="ndnm-category">
+                <div class="ndnm-category-icon">FI</div>
+                <div class="ndnm-category-label">OUTPUT</div>
+                <div class="ndnm-category-count">1</div>
+            </div>
+        </div>
+
+        <div class="ndnm-queue">
+            <div class="ndnm-queue-button">
+                <div class="ndnm-queue-fill"></div>
+                <div class="ndnm-queue-label">PLAY QUEUE PROMPT</div>
+            </div>
+        </div>
+
+        <div class="ndnm-system">
+            <div class="ndnm-system-title">SYSTEM</div>
+            <div class="ndnm-stat-grid">
+                <div class="ndnm-stat-pill"><span class="ndnm-stat-accent">CPU</span> 34%</div>
+                <div class="ndnm-stat-pill"><span class="ndnm-vae-text">RAM</span> 62%</div>
+                <div class="ndnm-stat-pill"><span class="ndnm-clip-text">VRAM</span> 48%</div>
+                <div class="ndnm-stat-pill"><span class="ndnm-conditioning-text">GPU</span> 67 C</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="ndnm-main">
+        <div class="ndnm-canvas">
+            <div class="ndnm-wire ndnm-wire-model"></div>
+            <div class="ndnm-wire ndnm-wire-clip-pos"></div>
+            <div class="ndnm-wire ndnm-wire-clip-neg"></div>
+            <div class="ndnm-wire ndnm-wire-vae"></div>
+            <div class="ndnm-wire ndnm-wire-pos"></div>
+            <div class="ndnm-wire ndnm-wire-neg"></div>
+            <div class="ndnm-wire ndnm-wire-latent"></div>
+            <div class="ndnm-wire ndnm-wire-samples"></div>
+            <div class="ndnm-wire ndnm-wire-image"></div>
+
+            <div class="ndnm-node ndnm-node-ckpt">
+                <div class="ndnm-port ndnm-port-out ndnm-port-model ndnm-port-out-a"></div>
+                <div class="ndnm-port ndnm-port-out ndnm-port-clip ndnm-port-out-b"></div>
+                <div class="ndnm-port ndnm-port-out ndnm-port-vae ndnm-port-out-c"></div>
+                <div class="ndnm-node-header">
+                    <div class="ndnm-node-icon ndnm-model-text">DB</div>
+                    <div class="ndnm-node-title">Load Checkpoint</div>
+                    <div class="ndnm-node-info">i</div>
+                </div>
+                <div class="ndnm-node-body">
+                    <div class="ndnm-field-row">
+                        <div class="ndnm-field-label">ckpt_name</div>
+                        <div class="ndnm-field-value ndnm-dropdown">dreamshaper_8.safetensors v</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="ndnm-node ndnm-node-clip-pos">
+                <div class="ndnm-port ndnm-port-in ndnm-port-clip ndnm-port-in-a"></div>
+                <div class="ndnm-port ndnm-port-out ndnm-port-conditioning ndnm-port-out-a"></div>
+                <div class="ndnm-node-header">
+                    <div class="ndnm-node-icon ndnm-conditioning-text">LY</div>
+                    <div class="ndnm-node-title">CLIP Text Encode</div>
+                    <div class="ndnm-node-info">i</div>
+                </div>
+                <div class="ndnm-node-body">
+                    <div class="ndnm-field-row">
+                        <div class="ndnm-field-label">prompt</div>
+                        <div class="ndnm-field-value">mao mao, golshi pose, confident stance, anime style</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="ndnm-node ndnm-node-clip-neg">
+                <div class="ndnm-port ndnm-port-in ndnm-port-clip ndnm-port-in-a"></div>
+                <div class="ndnm-port ndnm-port-out ndnm-port-conditioning ndnm-port-out-a"></div>
+                <div class="ndnm-node-header">
+                    <div class="ndnm-node-icon ndnm-conditioning-text">LY</div>
+                    <div class="ndnm-node-title">CLIP Text Encode</div>
+                    <div class="ndnm-node-info">i</div>
+                </div>
+                <div class="ndnm-node-body">
+                    <div class="ndnm-field-row">
+                        <div class="ndnm-field-label">prompt</div>
+                        <div class="ndnm-field-value">worst quality, blurry, deformed</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="ndnm-node ndnm-node-empty-latent">
+                <div class="ndnm-port ndnm-port-out ndnm-port-latent ndnm-port-out-a"></div>
+                <div class="ndnm-node-header">
+                    <div class="ndnm-node-icon ndnm-latent-text">HD</div>
+                    <div class="ndnm-node-title">Empty Latent Image</div>
+                    <div class="ndnm-node-info">i</div>
+                </div>
+                <div class="ndnm-node-body">
+                    <div class="ndnm-field-row">
+                        <div class="ndnm-field-label">width</div>
+                        <div class="ndnm-field-value">512</div>
+                    </div>
+                    <div class="ndnm-field-row">
+                        <div class="ndnm-field-label">height</div>
+                        <div class="ndnm-field-value">512</div>
+                    </div>
+                    <div class="ndnm-field-row">
+                        <div class="ndnm-field-label">batch</div>
+                        <div class="ndnm-field-value">1</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="ndnm-node ndnm-node-ksampler ndnm-node-selected">
+                <div class="ndnm-port ndnm-port-in ndnm-port-model ndnm-port-in-a"></div>
+                <div class="ndnm-port ndnm-port-in ndnm-port-conditioning ndnm-port-in-b"></div>
+                <div class="ndnm-port ndnm-port-in ndnm-port-conditioning ndnm-port-in-c"></div>
+                <div class="ndnm-port ndnm-port-in ndnm-port-latent ndnm-port-in-d"></div>
+                <div class="ndnm-port ndnm-port-out ndnm-port-latent ndnm-port-out-a"></div>
+                <div class="ndnm-node-header">
+                    <div class="ndnm-node-icon ndnm-latent-text">SH</div>
+                    <div class="ndnm-node-title">KSampler</div>
+                    <div class="ndnm-node-info">i</div>
+                </div>
+                <div class="ndnm-node-body">
+                    <div class="ndnm-field-row">
+                        <div class="ndnm-field-label">seed</div>
+                        <div class="ndnm-field-value">42</div>
+                    </div>
+                    <div class="ndnm-field-row">
+                        <div class="ndnm-field-label">steps</div>
+                        <div class="ndnm-field-value">20</div>
+                    </div>
+                    <div class="ndnm-field-row">
+                        <div class="ndnm-field-label">cfg</div>
+                        <div class="ndnm-field-value">7.0</div>
+                    </div>
+                    <div class="ndnm-field-row">
+                        <div class="ndnm-field-label">sampler</div>
+                        <div class="ndnm-field-value ndnm-dropdown">euler_a v</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="ndnm-node ndnm-node-vae-decode">
+                <div class="ndnm-port ndnm-port-in ndnm-port-latent ndnm-port-in-a"></div>
+                <div class="ndnm-port ndnm-port-in ndnm-port-vae ndnm-port-in-b"></div>
+                <div class="ndnm-port ndnm-port-out ndnm-port-image ndnm-port-out-a"></div>
+                <div class="ndnm-node-header">
+                    <div class="ndnm-node-icon ndnm-image-text">BC</div>
+                    <div class="ndnm-node-title">VAE Decode</div>
+                    <div class="ndnm-node-info">i</div>
+                </div>
+                <div class="ndnm-node-body">
+                    <div class="ndnm-node-desc">Decodes latent to pixel space via VAE</div>
+                </div>
+            </div>
+
+            <div class="ndnm-node ndnm-node-save">
+                <div class="ndnm-port ndnm-port-in ndnm-port-image ndnm-port-in-a"></div>
+                <div class="ndnm-node-header">
+                    <div class="ndnm-node-icon ndnm-image-text">FI</div>
+                    <div class="ndnm-node-title">Save Image</div>
+                    <div class="ndnm-node-info">i</div>
+                </div>
+                <div class="ndnm-node-body">
+                    <div class="ndnm-field-row">
+                        <div class="ndnm-field-label">prefix</div>
+                        <div class="ndnm-field-value">ndnm_output</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="ndnm-status-bar">
+            <div class="ndnm-status-left">
+                <div class="ndnm-status-item"><span class="ndnm-stat-accent">o</span> 7 nodes</div>
+                <div class="ndnm-status-item"><span class="ndnm-clip-text">o</span> 9 wires</div>
+                <div class="ndnm-status-item">zoom: 85%</div>
+            </div>
+            <div class="ndnm-status-right">
+                <div class="ndnm-god-status"><span class="ndnm-dot ndnm-dot-green"></span> Hermes: ready</div>
+                <div class="ndnm-god-status"><span class="ndnm-dot ndnm-dot-green"></span> Atlas: ready</div>
+                <div class="ndnm-god-status"><span class="ndnm-dot ndnm-dot-yellow"></span> Argus: logging</div>
+            </div>
+        </div>
+    </div>
+</div>

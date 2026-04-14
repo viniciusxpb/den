@@ -471,6 +471,512 @@ input {
     font-size: 11px;
 }
 
+.den-page-ndnm {
+    background: #08080d;
+    color: #c4c4d0;
+    font-family: "DenMonospace", "JetBrains Mono", "SF Mono", monospace;
+    font-size: 11px;
+}
+.den-page-ndnm .ndnm-shell {
+    width: 100%;
+    height: 100%;
+    min-height: 720px;
+    display: flex;
+    background: #08080d;
+    color: #c4c4d0;
+    font-family: "DenMonospace", "JetBrains Mono", "SF Mono", monospace;
+    font-size: 11px;
+    line-height: 1.25;
+    overflow: hidden;
+    position: relative;
+}
+.den-page-ndnm .ndnm-scanline {
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    pointer-events: none;
+    height: 100%;
+    background-image: repeating-linear-gradient(0deg, #00000008 0px, #00000008 1px, transparent 1px, transparent 3px);
+    opacity: 0.5;
+}
+.den-page-ndnm .ndnm-sidebar {
+    width: 200px;
+    height: 100%;
+    background: #0b0b12;
+    border: 1px solid #1a1a28;
+    border-radius: 0px;
+    flex: 0;
+    overflow: hidden;
+}
+.den-page-ndnm .ndnm-brand-row {
+    display: flex;
+    width: 100%;
+    gap: 8px;
+    padding: 14px;
+    border: 1px solid #1a1a28;
+    border-left-width: 0px;
+    border-right-width: 0px;
+    border-top-width: 0px;
+}
+.den-page-ndnm .ndnm-logo {
+    width: 28px;
+    height: 28px;
+    padding: 4px;
+    border: 2px solid #00d4aa;
+    border-radius: 6px;
+    background: #07211d;
+    color: #00d4aa;
+    font-size: 15px;
+    font-weight: 700;
+    text-align: center;
+    line-height: 1.2;
+}
+.den-page-ndnm .ndnm-brand-copy {
+    flex: 1;
+}
+.den-page-ndnm .ndnm-brand-title {
+    color: #e8e8f2;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 2px;
+}
+.den-page-ndnm .ndnm-brand-subtitle {
+    color: #555568;
+    font-size: 8px;
+    letter-spacing: 1px;
+}
+.den-page-ndnm .ndnm-categories {
+    padding: 8px;
+    width: 100%;
+    min-height: 390px;
+}
+.den-page-ndnm .ndnm-category {
+    display: flex;
+    width: 100%;
+    gap: 8px;
+    padding: 7px;
+    border: 1px solid #0b0b12;
+    border-radius: 0px;
+    color: #555568;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+.den-page-ndnm .ndnm-category-active {
+    color: #e8e8f2;
+    background: #081a17;
+    border-left: 2px solid #00d4aa;
+}
+.den-page-ndnm .ndnm-category-icon {
+    width: 18px;
+    color: #555568;
+    font-size: 10px;
+}
+.den-page-ndnm .ndnm-category-label {
+    flex: 1;
+}
+.den-page-ndnm .ndnm-category-count {
+    width: 14px;
+    color: #555568;
+    font-size: 9px;
+    text-align: right;
+}
+.den-page-ndnm .ndnm-node-list {
+    width: 100%;
+    padding: 4px;
+    margin-left: 16px;
+}
+.den-page-ndnm .ndnm-node-list-item {
+    color: #c4c4d0;
+    font-size: 10px;
+    padding: 4px;
+    border-radius: 4px;
+}
+.den-page-ndnm .ndnm-queue {
+    padding: 12px;
+    border: 1px solid #1a1a28;
+    border-left-width: 0px;
+    border-right-width: 0px;
+    border-bottom-width: 0px;
+}
+.den-page-ndnm .ndnm-queue-button {
+    width: 100%;
+    padding: 10px;
+    background: #07211d;
+    border: 1px solid #00d4aa;
+    border-radius: 6px;
+    color: #00d4aa;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+}
+.den-page-ndnm .ndnm-queue-fill {
+    position: absolute;
+    left: 0px;
+    top: 0px;
+    bottom: 0px;
+    width: 38%;
+    background: #07211d;
+    background-color: rgba(0, 212, 170, 0.15);
+}
+.den-page-ndnm .ndnm-queue-label {
+    position: relative;
+    z-index: 1;
+}
+.den-page-ndnm .ndnm-system {
+    padding: 8px 12px;
+    border: 1px solid #1a1a28;
+    border-left-width: 0px;
+    border-right-width: 0px;
+    border-bottom-width: 0px;
+}
+.den-page-ndnm .ndnm-system-title {
+    color: #555568;
+    font-size: 8px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+}
+.den-page-ndnm .ndnm-stat-grid {
+    display: grid;
+    width: 100%;
+    gap: 4px;
+    grid-template-columns: 1fr 1fr;
+}
+.den-page-ndnm .ndnm-stat-pill {
+    color: #c4c4d0;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px;
+}
+.den-page-ndnm .ndnm-main {
+    flex: 1;
+    min-width: 0px;
+    height: 100%;
+    background: #0a0a10;
+}
+.den-page-ndnm .ndnm-canvas {
+    width: 100%;
+    height: 688px;
+    background: #0a0a10;
+    background-image: radial-gradient(circle, #16161f 1px, transparent 1px);
+    background-size: 20px 20px;
+    position: relative;
+    overflow: hidden;
+}
+.den-page-ndnm .ndnm-node {
+    width: 240px;
+    min-height: 84px;
+    background: #0e0e16;
+    border: 1px solid #1a1a28;
+    border-radius: 8px;
+    color: #c4c4d0;
+    position: absolute;
+    overflow: visible;
+    box-shadow: 0 2px 12px #00000066;
+}
+.den-page-ndnm .ndnm-node-selected {
+    border: 1px solid #ff4488;
+    box-shadow: 0 0 20px #ff448833, 0 0 6px #ff448866;
+}
+.den-page-ndnm .ndnm-node-header {
+    display: flex;
+    width: 100%;
+    gap: 8px;
+    padding: 6px 10px;
+    background: #111119;
+    border: 1px solid #1a1a28;
+    border-left-width: 0px;
+    border-right-width: 0px;
+    border-top-width: 0px;
+    border-radius: 8px;
+}
+.den-page-ndnm .ndnm-node-icon {
+    width: 18px;
+    color: #00d4aa;
+    font-size: 10px;
+    font-weight: 700;
+}
+.den-page-ndnm .ndnm-node-title {
+    flex: 1;
+    color: #e8e8f2;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+.den-page-ndnm .ndnm-node-info {
+    width: 12px;
+    color: #555568;
+    font-size: 10px;
+    text-align: right;
+}
+.den-page-ndnm .ndnm-node-body {
+    padding: 6px 10px 8px;
+}
+.den-page-ndnm .ndnm-field-row {
+    display: flex;
+    width: 100%;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+.den-page-ndnm .ndnm-field-label {
+    width: 56px;
+    color: #555568;
+    font-size: 10px;
+}
+.den-page-ndnm .ndnm-field-value {
+    flex: 1;
+    background: #090911;
+    border: 1px solid #1a1a28;
+    border-radius: 3px;
+    padding: 2px 6px;
+    color: #c4c4d0;
+    font-size: 9px;
+    min-height: 17px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.den-page-ndnm .ndnm-dropdown {
+    color: #00d4aa;
+}
+.den-page-ndnm .ndnm-node-desc {
+    color: #555568;
+    font-size: 9px;
+    font-style: italic;
+}
+.den-page-ndnm .ndnm-port {
+    width: 12px;
+    height: 12px;
+    border: 2px solid #0e0e16;
+    border-radius: 50%;
+    position: absolute;
+    z-index: 5;
+    box-shadow: 0 0 6px #88889966, 0 0 2px #888899aa;
+}
+.den-page-ndnm .ndnm-port-in {
+    left: -6px;
+}
+.den-page-ndnm .ndnm-port-out {
+    right: -6px;
+}
+.den-page-ndnm .ndnm-port-in-a {
+    top: 45px;
+}
+.den-page-ndnm .ndnm-port-in-b {
+    top: 68px;
+}
+.den-page-ndnm .ndnm-port-in-c {
+    top: 91px;
+}
+.den-page-ndnm .ndnm-port-in-d {
+    top: 114px;
+}
+.den-page-ndnm .ndnm-port-out-a {
+    top: 45px;
+}
+.den-page-ndnm .ndnm-port-out-b {
+    top: 68px;
+}
+.den-page-ndnm .ndnm-port-out-c {
+    top: 91px;
+}
+.den-page-ndnm .ndnm-port-model {
+    background: #ff8844;
+    box-shadow: 0 0 6px #ff884466, 0 0 2px #ff8844aa;
+}
+.den-page-ndnm .ndnm-port-clip {
+    background: #aa66ff;
+    box-shadow: 0 0 6px #aa66ff66, 0 0 2px #aa66ffaa;
+}
+.den-page-ndnm .ndnm-port-vae {
+    background: #4488ff;
+    box-shadow: 0 0 6px #4488ff66, 0 0 2px #4488ffaa;
+}
+.den-page-ndnm .ndnm-port-conditioning {
+    background: #ffcc00;
+    box-shadow: 0 0 6px #ffcc0066, 0 0 2px #ffcc00aa;
+}
+.den-page-ndnm .ndnm-port-latent {
+    background: #ff4488;
+    box-shadow: 0 0 6px #ff448866, 0 0 2px #ff4488aa;
+}
+.den-page-ndnm .ndnm-port-image {
+    background: #00d4aa;
+    box-shadow: 0 0 6px #00d4aa66, 0 0 2px #00d4aaaa;
+}
+.den-page-ndnm .ndnm-wire {
+    height: 2px;
+    border-radius: 2px;
+    position: absolute;
+    transform-origin: left center;
+    opacity: 0.65;
+}
+.den-page-ndnm .ndnm-wire-model {
+    left: 300px;
+    top: 214px;
+    width: 456px;
+    background: #ff8844;
+    transform: rotate(4deg);
+}
+.den-page-ndnm .ndnm-wire-clip-pos {
+    left: 300px;
+    top: 237px;
+    width: 118px;
+    background: #aa66ff;
+    transform: rotate(-50deg);
+}
+.den-page-ndnm .ndnm-wire-clip-neg {
+    left: 300px;
+    top: 237px;
+    width: 128px;
+    background: #aa66ff;
+    transform: rotate(33deg);
+}
+.den-page-ndnm .ndnm-wire-vae {
+    left: 300px;
+    top: 260px;
+    width: 800px;
+    background: #4488ff;
+    transform: rotate(2deg);
+}
+.den-page-ndnm .ndnm-wire-pos {
+    left: 660px;
+    top: 115px;
+    width: 120px;
+    background: #ffcc00;
+    transform: rotate(46deg);
+}
+.den-page-ndnm .ndnm-wire-neg {
+    left: 660px;
+    top: 335px;
+    width: 105px;
+    background: #ffcc00;
+    transform: rotate(-36deg);
+}
+.den-page-ndnm .ndnm-wire-latent {
+    left: 620px;
+    top: 515px;
+    width: 203px;
+    background: #ff4488;
+    transform: rotate(-51deg);
+}
+.den-page-ndnm .ndnm-wire-samples {
+    left: 1010px;
+    top: 235px;
+    width: 90px;
+    background: #ff4488;
+    transform: rotate(0deg);
+}
+.den-page-ndnm .ndnm-wire-image {
+    left: 1320px;
+    top: 245px;
+    width: 80px;
+    background: #00d4aa;
+    transform: rotate(0deg);
+}
+.den-page-ndnm .ndnm-node-ckpt {
+    left: 60px;
+    top: 160px;
+    width: 240px;
+}
+.den-page-ndnm .ndnm-node-clip-pos {
+    left: 400px;
+    top: 60px;
+    width: 260px;
+}
+.den-page-ndnm .ndnm-node-clip-neg {
+    left: 400px;
+    top: 280px;
+    width: 260px;
+}
+.den-page-ndnm .ndnm-node-empty-latent {
+    left: 400px;
+    top: 470px;
+    width: 220px;
+}
+.den-page-ndnm .ndnm-node-ksampler {
+    left: 760px;
+    top: 180px;
+    width: 250px;
+}
+.den-page-ndnm .ndnm-node-vae-decode {
+    left: 1100px;
+    top: 200px;
+    width: 220px;
+}
+.den-page-ndnm .ndnm-node-save {
+    left: 1400px;
+    top: 200px;
+    width: 220px;
+}
+.den-page-ndnm .ndnm-status-bar {
+    height: 32px;
+    display: flex;
+    width: 100%;
+    gap: 16px;
+    background: #0a0a0f;
+    border: 1px solid #1a1a28;
+    border-left-width: 0px;
+    border-right-width: 0px;
+    border-bottom-width: 0px;
+    padding: 8px 16px;
+}
+.den-page-ndnm .ndnm-status-left {
+    display: flex;
+    flex: 1;
+    gap: 16px;
+}
+.den-page-ndnm .ndnm-status-right {
+    display: flex;
+    gap: 16px;
+}
+.den-page-ndnm .ndnm-status-item {
+    color: #555568;
+    font-size: 10px;
+}
+.den-page-ndnm .ndnm-god-status {
+    color: #555568;
+    font-size: 10px;
+}
+.den-page-ndnm .ndnm-dot {
+    width: 6px;
+    height: 6px;
+    padding: 3px;
+    border-radius: 50%;
+}
+.den-page-ndnm .ndnm-dot-green {
+    background: #00d4aa;
+}
+.den-page-ndnm .ndnm-dot-yellow {
+    background: #ffcc00;
+}
+.den-page-ndnm .ndnm-stat-accent {
+    color: #00d4aa;
+}
+.den-page-ndnm .ndnm-model-text {
+    color: #ff8844;
+}
+.den-page-ndnm .ndnm-clip-text {
+    color: #aa66ff;
+}
+.den-page-ndnm .ndnm-vae-text {
+    color: #4488ff;
+}
+.den-page-ndnm .ndnm-conditioning-text {
+    color: #ffcc00;
+}
+.den-page-ndnm .ndnm-latent-text {
+    color: #ff4488;
+}
+.den-page-ndnm .ndnm-image-text {
+    color: #00d4aa;
+}
+
 .den-page-nodes .canvas {
     background: #0d0d1a;
     padding: 16px;
@@ -575,6 +1081,7 @@ input {
   <nav class="den-preview-nav">
     <a href="#page-hello">hello</a>
     <a href="#page-home">home</a>
+    <a href="#page-ndnm">ndnm</a>
     <a href="#page-nodes">nodes</a>
     <a href="#page-usuario">usuario</a>
   </nav>
@@ -719,6 +1226,240 @@ input {
     </div>
 
 
+
+  </div>
+</section>
+
+<section id="page-ndnm" class="den-page-frame">
+  <h2>ndnm</h2>
+  <div class="den-viewport den-page-ndnm">
+<div class="ndnm-shell">
+    <div class="ndnm-scanline"></div>
+
+    <div class="ndnm-sidebar">
+        <div class="ndnm-brand-row">
+            <div class="ndnm-logo">Z</div>
+            <div class="ndnm-brand-copy">
+                <div class="ndnm-brand-title">NDNM</div>
+                <div class="ndnm-brand-subtitle">NO DEPS NO MASTERS</div>
+            </div>
+        </div>
+
+        <div class="ndnm-categories">
+            <div class="ndnm-category ndnm-category-active">
+                <div class="ndnm-category-icon">DB</div>
+                <div class="ndnm-category-label">LOADERS</div>
+                <div class="ndnm-category-count">1</div>
+            </div>
+            <div class="ndnm-node-list">
+                <div class="ndnm-node-list-item ndnm-model-text">DB Load Checkpoint</div>
+            </div>
+
+            <div class="ndnm-category">
+                <div class="ndnm-category-icon">LY</div>
+                <div class="ndnm-category-label">CONDITIONING</div>
+                <div class="ndnm-category-count">1</div>
+            </div>
+
+            <div class="ndnm-category">
+                <div class="ndnm-category-icon">HD</div>
+                <div class="ndnm-category-label">LATENT</div>
+                <div class="ndnm-category-count">2</div>
+            </div>
+
+            <div class="ndnm-category ndnm-category-active">
+                <div class="ndnm-category-icon">SH</div>
+                <div class="ndnm-category-label">SAMPLING</div>
+                <div class="ndnm-category-count">1</div>
+            </div>
+            <div class="ndnm-node-list">
+                <div class="ndnm-node-list-item ndnm-latent-text">SH KSampler</div>
+            </div>
+
+            <div class="ndnm-category">
+                <div class="ndnm-category-icon">FI</div>
+                <div class="ndnm-category-label">OUTPUT</div>
+                <div class="ndnm-category-count">1</div>
+            </div>
+        </div>
+
+        <div class="ndnm-queue">
+            <div class="ndnm-queue-button">
+                <div class="ndnm-queue-fill"></div>
+                <div class="ndnm-queue-label">PLAY QUEUE PROMPT</div>
+            </div>
+        </div>
+
+        <div class="ndnm-system">
+            <div class="ndnm-system-title">SYSTEM</div>
+            <div class="ndnm-stat-grid">
+                <div class="ndnm-stat-pill"><span class="ndnm-stat-accent">CPU</span> 34%</div>
+                <div class="ndnm-stat-pill"><span class="ndnm-vae-text">RAM</span> 62%</div>
+                <div class="ndnm-stat-pill"><span class="ndnm-clip-text">VRAM</span> 48%</div>
+                <div class="ndnm-stat-pill"><span class="ndnm-conditioning-text">GPU</span> 67 C</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="ndnm-main">
+        <div class="ndnm-canvas">
+            <div class="ndnm-wire ndnm-wire-model"></div>
+            <div class="ndnm-wire ndnm-wire-clip-pos"></div>
+            <div class="ndnm-wire ndnm-wire-clip-neg"></div>
+            <div class="ndnm-wire ndnm-wire-vae"></div>
+            <div class="ndnm-wire ndnm-wire-pos"></div>
+            <div class="ndnm-wire ndnm-wire-neg"></div>
+            <div class="ndnm-wire ndnm-wire-latent"></div>
+            <div class="ndnm-wire ndnm-wire-samples"></div>
+            <div class="ndnm-wire ndnm-wire-image"></div>
+
+            <div class="ndnm-node ndnm-node-ckpt">
+                <div class="ndnm-port ndnm-port-out ndnm-port-model ndnm-port-out-a"></div>
+                <div class="ndnm-port ndnm-port-out ndnm-port-clip ndnm-port-out-b"></div>
+                <div class="ndnm-port ndnm-port-out ndnm-port-vae ndnm-port-out-c"></div>
+                <div class="ndnm-node-header">
+                    <div class="ndnm-node-icon ndnm-model-text">DB</div>
+                    <div class="ndnm-node-title">Load Checkpoint</div>
+                    <div class="ndnm-node-info">i</div>
+                </div>
+                <div class="ndnm-node-body">
+                    <div class="ndnm-field-row">
+                        <div class="ndnm-field-label">ckpt_name</div>
+                        <div class="ndnm-field-value ndnm-dropdown">dreamshaper_8.safetensors v</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="ndnm-node ndnm-node-clip-pos">
+                <div class="ndnm-port ndnm-port-in ndnm-port-clip ndnm-port-in-a"></div>
+                <div class="ndnm-port ndnm-port-out ndnm-port-conditioning ndnm-port-out-a"></div>
+                <div class="ndnm-node-header">
+                    <div class="ndnm-node-icon ndnm-conditioning-text">LY</div>
+                    <div class="ndnm-node-title">CLIP Text Encode</div>
+                    <div class="ndnm-node-info">i</div>
+                </div>
+                <div class="ndnm-node-body">
+                    <div class="ndnm-field-row">
+                        <div class="ndnm-field-label">prompt</div>
+                        <div class="ndnm-field-value">mao mao, golshi pose, confident stance, anime style</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="ndnm-node ndnm-node-clip-neg">
+                <div class="ndnm-port ndnm-port-in ndnm-port-clip ndnm-port-in-a"></div>
+                <div class="ndnm-port ndnm-port-out ndnm-port-conditioning ndnm-port-out-a"></div>
+                <div class="ndnm-node-header">
+                    <div class="ndnm-node-icon ndnm-conditioning-text">LY</div>
+                    <div class="ndnm-node-title">CLIP Text Encode</div>
+                    <div class="ndnm-node-info">i</div>
+                </div>
+                <div class="ndnm-node-body">
+                    <div class="ndnm-field-row">
+                        <div class="ndnm-field-label">prompt</div>
+                        <div class="ndnm-field-value">worst quality, blurry, deformed</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="ndnm-node ndnm-node-empty-latent">
+                <div class="ndnm-port ndnm-port-out ndnm-port-latent ndnm-port-out-a"></div>
+                <div class="ndnm-node-header">
+                    <div class="ndnm-node-icon ndnm-latent-text">HD</div>
+                    <div class="ndnm-node-title">Empty Latent Image</div>
+                    <div class="ndnm-node-info">i</div>
+                </div>
+                <div class="ndnm-node-body">
+                    <div class="ndnm-field-row">
+                        <div class="ndnm-field-label">width</div>
+                        <div class="ndnm-field-value">512</div>
+                    </div>
+                    <div class="ndnm-field-row">
+                        <div class="ndnm-field-label">height</div>
+                        <div class="ndnm-field-value">512</div>
+                    </div>
+                    <div class="ndnm-field-row">
+                        <div class="ndnm-field-label">batch</div>
+                        <div class="ndnm-field-value">1</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="ndnm-node ndnm-node-ksampler ndnm-node-selected">
+                <div class="ndnm-port ndnm-port-in ndnm-port-model ndnm-port-in-a"></div>
+                <div class="ndnm-port ndnm-port-in ndnm-port-conditioning ndnm-port-in-b"></div>
+                <div class="ndnm-port ndnm-port-in ndnm-port-conditioning ndnm-port-in-c"></div>
+                <div class="ndnm-port ndnm-port-in ndnm-port-latent ndnm-port-in-d"></div>
+                <div class="ndnm-port ndnm-port-out ndnm-port-latent ndnm-port-out-a"></div>
+                <div class="ndnm-node-header">
+                    <div class="ndnm-node-icon ndnm-latent-text">SH</div>
+                    <div class="ndnm-node-title">KSampler</div>
+                    <div class="ndnm-node-info">i</div>
+                </div>
+                <div class="ndnm-node-body">
+                    <div class="ndnm-field-row">
+                        <div class="ndnm-field-label">seed</div>
+                        <div class="ndnm-field-value">42</div>
+                    </div>
+                    <div class="ndnm-field-row">
+                        <div class="ndnm-field-label">steps</div>
+                        <div class="ndnm-field-value">20</div>
+                    </div>
+                    <div class="ndnm-field-row">
+                        <div class="ndnm-field-label">cfg</div>
+                        <div class="ndnm-field-value">7.0</div>
+                    </div>
+                    <div class="ndnm-field-row">
+                        <div class="ndnm-field-label">sampler</div>
+                        <div class="ndnm-field-value ndnm-dropdown">euler_a v</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="ndnm-node ndnm-node-vae-decode">
+                <div class="ndnm-port ndnm-port-in ndnm-port-latent ndnm-port-in-a"></div>
+                <div class="ndnm-port ndnm-port-in ndnm-port-vae ndnm-port-in-b"></div>
+                <div class="ndnm-port ndnm-port-out ndnm-port-image ndnm-port-out-a"></div>
+                <div class="ndnm-node-header">
+                    <div class="ndnm-node-icon ndnm-image-text">BC</div>
+                    <div class="ndnm-node-title">VAE Decode</div>
+                    <div class="ndnm-node-info">i</div>
+                </div>
+                <div class="ndnm-node-body">
+                    <div class="ndnm-node-desc">Decodes latent to pixel space via VAE</div>
+                </div>
+            </div>
+
+            <div class="ndnm-node ndnm-node-save">
+                <div class="ndnm-port ndnm-port-in ndnm-port-image ndnm-port-in-a"></div>
+                <div class="ndnm-node-header">
+                    <div class="ndnm-node-icon ndnm-image-text">FI</div>
+                    <div class="ndnm-node-title">Save Image</div>
+                    <div class="ndnm-node-info">i</div>
+                </div>
+                <div class="ndnm-node-body">
+                    <div class="ndnm-field-row">
+                        <div class="ndnm-field-label">prefix</div>
+                        <div class="ndnm-field-value">ndnm_output</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="ndnm-status-bar">
+            <div class="ndnm-status-left">
+                <div class="ndnm-status-item"><span class="ndnm-stat-accent">o</span> 7 nodes</div>
+                <div class="ndnm-status-item"><span class="ndnm-clip-text">o</span> 9 wires</div>
+                <div class="ndnm-status-item">zoom: 85%</div>
+            </div>
+            <div class="ndnm-status-right">
+                <div class="ndnm-god-status"><span class="ndnm-dot ndnm-dot-green"></span> Hermes: ready</div>
+                <div class="ndnm-god-status"><span class="ndnm-dot ndnm-dot-green"></span> Atlas: ready</div>
+                <div class="ndnm-god-status"><span class="ndnm-dot ndnm-dot-yellow"></span> Argus: logging</div>
+            </div>
+        </div>
+    </div>
+</div>
 
   </div>
 </section>
