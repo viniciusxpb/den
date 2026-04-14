@@ -1,7 +1,10 @@
 //! Parser SCSS mínimo usado em compile time pelo pipeline Den.
 
 use super::color::parse_hex_color;
-use crate::types::{BorderStyle, DisplayMode, StyleMap, StyleRule, WidthValue};
+use crate::types::{
+    BorderStyle, DisplayMode, LineHeightValue, StyleMap, StyleRule, TextAlign, TextTransform,
+    WidthValue,
+};
 use std::collections::HashMap;
 
 // SCSS identifiers são ASCII-only, então parsing byte-level é seguro aqui.
@@ -117,6 +120,23 @@ pub fn parse_scss(input: &str) -> StyleMap {
             match prop_name.as_str() {
                 "color" => rule.color = parse_hex_color(&value),
                 "font-size" => rule.font_size = parse_size_value(&value),
+                "font-family" => rule.font_family = parse_font_family(&value),
+                "font-weight" => rule.font_weight = parse_font_weight(&value),
+                "font-style" => rule.font_italic = parse_font_style(&value),
+                "font" => apply_font_shorthand(&value, &mut rule),
+                "line-height" => rule.line_height = parse_line_height(&value),
+                "letter-spacing" => rule.letter_spacing = parse_letter_spacing(&value),
+                "text-transform" => rule.text_transform = parse_text_transform(&value),
+                "text-align" => rule.text_align = parse_text_align(&value),
+                "text-decoration" | "text-decoration-line" => {
+                    let (underline, strikethrough) = parse_text_decoration(&value);
+                    if underline.is_some() {
+                        rule.underline = underline;
+                    }
+                    if strikethrough.is_some() {
+                        rule.strikethrough = strikethrough;
+                    }
+                }
                 "background" => rule.background = parse_hex_color(&value),
                 "padding" => rule.padding = parse_size_value(&value),
                 "margin" => rule.margin = parse_size_value(&value),
@@ -202,17 +222,251 @@ fn resolve_vars(value: &str, vars: &HashMap<String, String>) -> String {
         return value.to_string();
     }
     let mut result = value.to_string();
-    for (name, val) in vars {
+    for (name, val) in vars_by_longest_name(vars) {
         result = result.replace(&format!("${name}"), val);
     }
     result
 }
 
+fn vars_by_longest_name(vars: &HashMap<String, String>) -> Vec<(&String, &String)> {
+    let mut ordered: Vec<_> = vars.iter().collect();
+    ordered.sort_by(|(a, _), (b, _)| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
+    ordered
+}
+
 fn parse_size_value(value: &str) -> Option<f32> {
-    value.trim_end_matches("px").parse::<f32>().ok()
+    strip_important(value)
+        .trim_end_matches("px")
+        .parse::<f32>()
+        .ok()
+}
+
+fn strip_important(value: &str) -> &str {
+    let trimmed = value.trim();
+    if trimmed
+        .to_ascii_lowercase()
+        .strip_suffix("!important")
+        .is_some()
+    {
+        trimmed[..trimmed.len() - "!important".len()].trim_end()
+    } else {
+        trimmed
+    }
+}
+
+fn parse_font_family(value: &str) -> Option<String> {
+    let value = strip_important(value).trim();
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_string())
+    }
+}
+
+fn parse_font_weight(value: &str) -> Option<u16> {
+    let value = strip_important(value).trim().to_ascii_lowercase();
+    match value.as_str() {
+        "normal" => Some(400),
+        "bold" | "bolder" => Some(700),
+        "lighter" => Some(300),
+        _ => value
+            .parse::<u16>()
+            .ok()
+            .map(|weight| weight.clamp(1, 1000)),
+    }
+}
+
+fn parse_font_style(value: &str) -> Option<bool> {
+    let value = strip_important(value).trim().to_ascii_lowercase();
+    match value.as_str() {
+        "normal" => Some(false),
+        "italic" | "oblique" => Some(true),
+        _ => None,
+    }
+}
+
+fn parse_line_height(value: &str) -> Option<LineHeightValue> {
+    let value = strip_important(value).trim();
+    if value.eq_ignore_ascii_case("normal") {
+        return None;
+    }
+    if let Some(px) = value.strip_suffix("px")
+        && let Ok(v) = px.trim().parse::<f32>()
+    {
+        return Some(LineHeightValue::Px(v));
+    }
+    if let Some(percent) = value.strip_suffix('%')
+        && let Ok(v) = percent.trim().parse::<f32>()
+    {
+        return Some(LineHeightValue::Factor(v / 100.0));
+    }
+    value.parse::<f32>().ok().map(LineHeightValue::Factor)
+}
+
+fn parse_letter_spacing(value: &str) -> Option<f32> {
+    if strip_important(value).eq_ignore_ascii_case("normal") {
+        Some(0.0)
+    } else {
+        parse_size_value(value)
+    }
+}
+
+fn parse_text_transform(value: &str) -> Option<TextTransform> {
+    let value = strip_important(value).trim().to_ascii_lowercase();
+    match value.as_str() {
+        "none" => Some(TextTransform::None),
+        "uppercase" => Some(TextTransform::Uppercase),
+        "lowercase" => Some(TextTransform::Lowercase),
+        "capitalize" => Some(TextTransform::Capitalize),
+        _ => None,
+    }
+}
+
+fn parse_text_align(value: &str) -> Option<TextAlign> {
+    let value = strip_important(value).trim().to_ascii_lowercase();
+    match value.as_str() {
+        "left" | "start" => Some(TextAlign::Left),
+        "center" => Some(TextAlign::Center),
+        "right" | "end" => Some(TextAlign::Right),
+        _ => None,
+    }
+}
+
+fn parse_text_decoration(value: &str) -> (Option<bool>, Option<bool>) {
+    let value = strip_important(value).trim().to_ascii_lowercase();
+    if value == "none" {
+        return (Some(false), Some(false));
+    }
+    let underline = value
+        .split_whitespace()
+        .any(|part| part == "underline")
+        .then_some(true);
+    let strikethrough = value
+        .split_whitespace()
+        .any(|part| part == "line-through")
+        .then_some(true);
+    (underline, strikethrough)
+}
+
+#[derive(Debug)]
+struct CssToken<'a> {
+    text: &'a str,
+    start: usize,
+}
+
+fn apply_font_shorthand(value: &str, rule: &mut StyleRule) {
+    let value = strip_important(value);
+    let tokens = css_tokens(value);
+    let Some((size_idx, size_part, inline_line_height)) = find_font_shorthand_size(&tokens) else {
+        return;
+    };
+
+    for token in &tokens[..size_idx] {
+        if let Some(italic) = parse_font_style(token.text) {
+            rule.font_italic = Some(italic);
+        } else if let Some(weight) = parse_font_weight(token.text) {
+            rule.font_weight = Some(weight);
+        }
+    }
+
+    rule.font_size = parse_size_value(size_part);
+
+    let mut family_start_idx = size_idx + 1;
+    if let Some(line_height) = inline_line_height {
+        rule.line_height = parse_line_height(line_height);
+    } else if tokens
+        .get(family_start_idx)
+        .is_some_and(|token| token.text == "/")
+        && let Some(line_height_token) = tokens.get(family_start_idx + 1)
+    {
+        rule.line_height = parse_line_height(line_height_token.text);
+        family_start_idx += 2;
+    }
+
+    if let Some(family_token) = tokens.get(family_start_idx) {
+        let family = value[family_token.start..].trim();
+        if !family.is_empty() {
+            rule.font_family = Some(family.to_string());
+        }
+    }
+}
+
+fn find_font_shorthand_size<'a>(
+    tokens: &'a [CssToken<'a>],
+) -> Option<(usize, &'a str, Option<&'a str>)> {
+    tokens
+        .iter()
+        .enumerate()
+        .find_map(|(idx, token)| parse_font_size_token(token.text, true).map(|s| (idx, s.0, s.1)))
+        .or_else(|| {
+            tokens.iter().enumerate().find_map(|(idx, token)| {
+                parse_font_size_token(token.text, false).map(|s| (idx, s.0, s.1))
+            })
+        })
+}
+
+fn parse_font_size_token(token: &str, require_unit: bool) -> Option<(&str, Option<&str>)> {
+    let (size, line_height) = token.split_once('/').unwrap_or((token, ""));
+    if require_unit && !size.trim().ends_with("px") {
+        return None;
+    }
+    parse_size_value(size)?;
+    Some((
+        size,
+        if line_height.is_empty() {
+            None
+        } else {
+            Some(line_height)
+        },
+    ))
+}
+
+fn css_tokens(value: &str) -> Vec<CssToken<'_>> {
+    let mut tokens = Vec::new();
+    let mut start: Option<usize> = None;
+    let mut quote: Option<char> = None;
+    let mut paren_depth = 0usize;
+
+    for (idx, ch) in value.char_indices() {
+        match quote {
+            Some(q) => {
+                if ch == q {
+                    quote = None;
+                }
+            }
+            None => match ch {
+                '"' | '\'' => quote = Some(ch),
+                '(' => paren_depth += 1,
+                ')' => paren_depth = paren_depth.saturating_sub(1),
+                _ if ch.is_ascii_whitespace() && paren_depth == 0 => {
+                    if let Some(s) = start.take() {
+                        tokens.push(CssToken {
+                            text: &value[s..idx],
+                            start: s,
+                        });
+                    }
+                    continue;
+                }
+                _ => {}
+            },
+        }
+        if start.is_none() {
+            start = Some(idx);
+        }
+    }
+
+    if let Some(s) = start {
+        tokens.push(CssToken {
+            text: &value[s..],
+            start: s,
+        });
+    }
+
+    tokens
 }
 
 fn parse_width_value(value: &str) -> WidthValue {
+    let value = strip_important(value);
     if value == "auto" {
         return WidthValue::Auto;
     }
@@ -314,6 +568,7 @@ fn read_css_identifier(bytes: &[u8], pos: &mut usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::parse_scss;
+    use crate::types::{LineHeightValue, TextAlign, TextTransform};
 
     #[test]
     fn line_comment_inside_rule_is_ignored() {
@@ -360,5 +615,75 @@ mod tests {
 
         let card = styles.get("card").expect("card style");
         assert_eq!(card.color, Some((18, 52, 86)));
+    }
+
+    #[test]
+    fn variable_names_with_shared_prefix_resolve_longest_first() {
+        let styles = parse_scss(
+            r#"
+            $text: #c8c8e0;
+            $text-dim: #6a6a8a;
+
+            .subtitle {
+                color: $text-dim;
+            }
+            "#,
+        );
+
+        let subtitle = styles.get("subtitle").expect("subtitle style");
+        assert_eq!(subtitle.color, Some((106, 106, 138)));
+    }
+
+    #[test]
+    fn parses_text_and_font_rules_that_affect_measurement() {
+        let styles = parse_scss(
+            r#"
+            .title {
+                font-family: "Inter Tight", Arial, sans-serif;
+                font-weight: 700;
+                font-style: italic;
+                line-height: 1.35;
+                letter-spacing: 0.5px;
+                text-transform: uppercase;
+                text-align: center;
+                text-decoration: underline line-through;
+            }
+            "#,
+        );
+
+        let title = styles.get("title").expect("title style");
+        assert_eq!(
+            title.font_family.as_deref(),
+            Some(r#""Inter Tight", Arial, sans-serif"#)
+        );
+        assert_eq!(title.font_weight, Some(700));
+        assert_eq!(title.font_italic, Some(true));
+        assert_eq!(title.line_height, Some(LineHeightValue::Factor(1.35)));
+        assert_eq!(title.letter_spacing, Some(0.5));
+        assert_eq!(title.text_transform, Some(TextTransform::Uppercase));
+        assert_eq!(title.text_align, Some(TextAlign::Center));
+        assert_eq!(title.underline, Some(true));
+        assert_eq!(title.strikethrough, Some(true));
+    }
+
+    #[test]
+    fn parses_conventional_font_shorthand() {
+        let styles = parse_scss(
+            r#"
+            .label {
+                font: italic 600 16px/140% "Fira Sans", sans-serif;
+            }
+            "#,
+        );
+
+        let label = styles.get("label").expect("label style");
+        assert_eq!(label.font_italic, Some(true));
+        assert_eq!(label.font_weight, Some(600));
+        assert_eq!(label.font_size, Some(16.0));
+        assert_eq!(label.line_height, Some(LineHeightValue::Factor(1.4)));
+        assert_eq!(
+            label.font_family.as_deref(),
+            Some(r#""Fira Sans", sans-serif"#)
+        );
     }
 }

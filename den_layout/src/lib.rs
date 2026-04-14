@@ -24,7 +24,10 @@ pub use display::DisplayMode;
 pub use element_style::DenElementStyle;
 pub use entry::LayoutEntry;
 pub use geometry::LayoutRect;
-pub use render::{Interact, LayoutIntent, PaintStyle, RenderKind, RenderNode, RenderTree, Rgb};
+pub use render::{
+    Interact, LayoutIntent, PaintStyle, RenderKind, RenderNode, RenderTree, Rgb, TextAlign,
+    TextTransform,
+};
 pub use router::{DenPage, DenRouter};
 pub use state::{DenDebugState, DenInputState, DenNodeId, DenRouteState};
 pub use table::{LayoutTable, layout_debug_enabled};

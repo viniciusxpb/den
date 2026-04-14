@@ -225,7 +225,7 @@ $accent:  #e94560;
 
 ### Zoom / Scale System
 
-All pixel values (`font-size`, `padding`, `margin`, `border-width`, `border-radius`, `width: Npx`) are multiplied by `__den_scale` at render time. Colors, percentages, and layout modes are unaffected.
+All pixel values (`font-size`, `line-height`, `letter-spacing`, `padding`, `margin`, `border-width`, `border-radius`, `width: Npx`) are multiplied by `__den_scale` at render time. Colors, percentages, and layout modes are unaffected.
 
 Built-in controls:
 - **Ctrl+scroll** or **Ctrl+=** / **Ctrl+-**: zoom in/out (10% steps)
@@ -287,7 +287,7 @@ Generates `preview/preview.html` with every page in one auto-refreshing file:
 <div class="my-component">...</div>
 ```
 
-Pages render as static HTML with real CSS, scoped page styles, placeholder values for `{{ expr }}`, and auto-refresh every 3 seconds.
+Pages render as static HTML with real CSS, scoped page styles, copied relative `@font-face url(...)` assets, placeholder values for `{{ expr }}`, and auto-refresh every 3 seconds.
 
 ### Style Editor (`cargo run --bin style_editor`)
 
@@ -304,7 +304,16 @@ Changes write back to disk with 300ms debounce. The `cargo-watch` in `make dev` 
 | SCSS Property    | Maps To                    | Example              |
 |------------------|----------------------------|----------------------|
 | `color`          | `PaintStyle.color` / text galley | `#e94560`            |
-| `font-size`      | `FontId::proportional()`   | `24` or `24px`       |
+| `font-size`      | TextBox `FontId` size      | `24` or `24px`       |
+| `font-family`    | TextBox font stack         | `"Inter", sans-serif` |
+| `font-weight`    | `PaintStyle.font_weight`   | `normal`, `bold`, `700` |
+| `font-style`     | text italics flag          | `normal`, `italic`   |
+| `font`           | font shorthand             | `italic 600 16px/1.4 Inter` |
+| `line-height`    | TextBox line height        | `20px`, `1.4`, `140%` |
+| `letter-spacing` | TextBox letter spacing     | `0.5px`, `normal`    |
+| `text-transform` | text before measure/paint  | `uppercase`          |
+| `text-align`     | text position in rect      | `left`, `center`, `right` |
+| `text-decoration`| underline/line-through     | `underline`          |
 | `background`     | `painter.rect_filled()`    | `#1a1a2e`            |
 | `padding`        | `LayoutIntent.padding`     | `16` or `16px`       |
 | `margin`         | layout positioning         | `16` or `16px`       |
@@ -379,6 +388,7 @@ make push       # AI-generated commit + push
 - [x] `(click)="method()"` event binding
 - [x] `:hover` pseudo-selector with cursor support
 - [x] `display: flex`, `border`, `border-radius`, `width`, `height`, `gap`, `margin` CSS properties
+- [x] CSS text/font properties measured through TextBox (`font-family`, `line-height`, `text-transform`, etc.)
 - [x] `<for each="item" in="self.list">` loop rendering
 - [x] `<if cond="self.flag">` / `<else>` conditional rendering
 - [x] SCSS variables (`$var: value`)

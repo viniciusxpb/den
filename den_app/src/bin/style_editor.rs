@@ -523,10 +523,16 @@ mod io {
             return value.to_string();
         }
         let mut result = value.to_string();
-        for (name, val) in vars {
+        for (name, val) in vars_by_longest_name(vars) {
             result = result.replace(&format!("${name}"), val);
         }
         result
+    }
+
+    fn vars_by_longest_name(vars: &HashMap<String, String>) -> Vec<(&String, &String)> {
+        let mut ordered: Vec<_> = vars.iter().collect();
+        ordered.sort_by(|(a, _), (b, _)| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
+        ordered
     }
 
     fn parse_num(s: &str) -> Option<f32> {

@@ -52,6 +52,21 @@ Os parsers HTML/SCSS estão duplicados entre `den_macros`, `preview.rs` e `style
 
 ---
 
+## Registro nativo de fontes `@font-face`
+
+O parser já transporta propriedades textuais vindas do CSS (`font-family`, `font`, `font-weight`, `font-style`, `line-height`, `letter-spacing`, `text-transform`, `text-align`, `text-decoration`) até o `PaintStyle`, e o painter mede/pinta usando uma TextBox antes do layout final.
+
+O preview HTML já copia URLs relativas de fontes declaradas em `@font-face` para `preview/fonts/` e deixa o browser resolver a família como CSS normal. No backend egui nativo, porém, ainda falta registrar automaticamente os bytes dessas fontes em `egui::FontDefinitions`.
+
+**Decisão pendente**: escolher onde vive o registro de fontes:
+1. o macro coleta `@font-face` no SCSS e gera uma função/constante de assets por página;
+2. um `den_core` compartilhado coleta fontes e o app chama um bootstrap único antes de renderizar;
+3. o app declara manualmente um mapa de fontes, e o CSS só referencia nomes já registrados.
+
+Também falta decidir como mapear peso/estilo para faces reais (`font-weight: 700`, itálico, variável). O egui 0.33 não seleciona peso automaticamente só pelo `TextFormat`, então o Den precisa escolher uma política própria.
+
+---
+
 ## Política para `display: grid`
 
 Hoje o parser aceita `display: grid`, mas `den_layout::LayoutTable` trata `Grid` como fluxo block. Isso é útil para experimentação, porém pode induzir usuário a achar que grid real já existe.

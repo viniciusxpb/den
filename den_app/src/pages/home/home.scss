@@ -249,6 +249,50 @@ body {
     cursor: pointer;
 }
 
+.font-tags-row {
+    gap: 8px;
+}
+
+.font-tag {
+    flex: 1;
+    text-align: center;
+    line-height: 1.2;
+}
+
+.font-serif {
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 15px;
+    color: $text-main;
+}
+
+.font-mono {
+    font-family: "Courier New", monospace;
+    font-size: 13px;
+    letter-spacing: 1px;
+    color: $green;
+}
+
+.font-script {
+    font-family: "Comic Sans MS", "Brush Script MT", cursive;
+    font-size: 15px;
+    font-style: italic;
+    color: $orange;
+}
+
+.font-impact {
+    font-family: Impact, "Arial Black", fantasy;
+    font-size: 15px;
+    text-transform: uppercase;
+    color: $crimson;
+}
+
+.font-system {
+    font-family: "Trebuchet MS", Verdana, sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    color: $blue;
+}
+
 // -- Width Bars ------------------------------------------------
 
 .bar-100 {

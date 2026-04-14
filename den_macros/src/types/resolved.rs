@@ -11,6 +11,15 @@ use super::style::*;
 pub struct DenVisual {
     pub color: Option<RgbColor>,
     pub font_size: Option<f32>,
+    pub font_family: Option<String>,
+    pub font_weight: Option<u16>,
+    pub font_italic: Option<bool>,
+    pub line_height: Option<LineHeightValue>,
+    pub letter_spacing: Option<f32>,
+    pub text_transform: Option<TextTransform>,
+    pub text_align: Option<TextAlign>,
+    pub underline: Option<bool>,
+    pub strikethrough: Option<bool>,
     pub background: Option<RgbColor>,
     pub padding: Option<f32>,
     pub margin: Option<f32>,
@@ -37,6 +46,15 @@ impl DenVisual {
         Self {
             color: rule.color,
             font_size: rule.font_size,
+            font_family: rule.font_family.clone(),
+            font_weight: rule.font_weight,
+            font_italic: rule.font_italic,
+            line_height: rule.line_height,
+            letter_spacing: rule.letter_spacing,
+            text_transform: rule.text_transform,
+            text_align: rule.text_align,
+            underline: rule.underline,
+            strikethrough: rule.strikethrough,
             background: rule.background,
             padding: rule.padding,
             margin: rule.margin,
@@ -70,6 +88,33 @@ impl DenVisual {
         }
         if other.font_size.is_some() {
             self.font_size = other.font_size;
+        }
+        if other.font_family.is_some() {
+            self.font_family = other.font_family.clone();
+        }
+        if other.font_weight.is_some() {
+            self.font_weight = other.font_weight;
+        }
+        if other.font_italic.is_some() {
+            self.font_italic = other.font_italic;
+        }
+        if other.line_height.is_some() {
+            self.line_height = other.line_height;
+        }
+        if other.letter_spacing.is_some() {
+            self.letter_spacing = other.letter_spacing;
+        }
+        if other.text_transform.is_some() {
+            self.text_transform = other.text_transform;
+        }
+        if other.text_align.is_some() {
+            self.text_align = other.text_align;
+        }
+        if other.underline.is_some() {
+            self.underline = other.underline;
+        }
+        if other.strikethrough.is_some() {
+            self.strikethrough = other.strikethrough;
         }
         if other.background.is_some() {
             self.background = other.background;
@@ -134,6 +179,15 @@ impl DenVisual {
         Self {
             color: self.color,
             font_size: self.font_size,
+            font_family: self.font_family.clone(),
+            font_weight: self.font_weight,
+            font_italic: self.font_italic,
+            line_height: self.line_height,
+            letter_spacing: self.letter_spacing,
+            text_transform: self.text_transform,
+            text_align: self.text_align,
+            underline: self.underline,
+            strikethrough: self.strikethrough,
             ..Default::default()
         }
     }

@@ -166,7 +166,7 @@ For a template `den_template!("pages/home/home", self)`, the macro expands to ro
 
 **SCSS variables**: `$var: value;` at top of file, referenced as `color: $var;`.
 
-**Style inheritance**: only `color` and `font-size` inherit parent → child (not hover, not layout).
+**Style inheritance**: text-affecting CSS inherits parent → child (`color`, font family/size/weight/style, line-height, letter-spacing, text-transform, text-align, text-decoration). Hover and layout rules do not inherit.
 
 **Control flow**:
 - `<for each="item" in="self.items">...</for>` — generates `for (idx, item) in self.items.iter().enumerate() { /* push children */ }`. The loop index salts `node_id` hashes so hover/focus state is stable per item.
@@ -205,7 +205,7 @@ pub fn paint_tree(
 ```
 
 Steps:
-1. **Measure**: `ui.fonts_mut().layout_no_wrap` for each `RenderKind::Text`, writes back to `LayoutIntent::intrinsic_{width,height}` in CSS pixels.
+1. **Measure**: build a TextBox/galley for each `RenderKind::Text` and `Input` using CSS-declared font/text properties, then write `LayoutIntent::intrinsic_{width,height}` in CSS pixels.
 2. **Populate**: `layout.entries = tree.to_layout_entries()`, resize `sizes`/`rects`.
 3. **Resolve**: `layout.resolve_in_viewport(available / scale)`.
 4. **Paint**: DFS walk. For each node:
@@ -230,7 +230,7 @@ The paint function owns read/write access; dispatch also writes to `inputs` when
 ### Scale system
 
 - `__den_scale: f32` parameter on `render()`, multiplies all pixel values at paint time
-- Scales: `font-size` (min 6.0 screen px), `padding`, `margin`, `border-width` (min 1.0), `border-radius`, `width: Npx`, `height: Npx`, `gap`
+- Scales: `font-size` (min 6.0 screen px), `line-height`, `letter-spacing`, `padding`, `margin`, `border-width` (min 1.0), `border-radius`, `width: Npx`, `height: Npx`, `gap`
 - Does NOT scale: `color`, `background`, `%` widths, `display`, `cursor`
 - Controls: Ctrl+=/Ctrl+-/Ctrl+0/Ctrl+scroll, +/-/% widget at bottom-right
 - Zoom is global for the demo app
@@ -240,7 +240,16 @@ The paint function owns read/write access; dispatch also writes to `inputs` when
 | SCSS Property    | Paint operation                          | Scaled | Values                            |
 |------------------|------------------------------------------|--------|-----------------------------------|
 | `color`          | `painter.galley` color                   | —      | `#RRGGBB`, `#RGB`, `$variable`    |
-| `font-size`      | `FontId::proportional(size)`             | yes    | `24` or `24px`                    |
+| `font-size`      | TextBox `FontId` size                    | yes    | `24` or `24px`                    |
+| `font-family`    | TextBox `FontFamily` stack               | —      | `"Inter", sans-serif`             |
+| `font-weight`    | `PaintStyle.font_weight`                 | —      | `normal`, `bold`, `100`-`1000`    |
+| `font-style`     | `TextFormat.italics`                     | —      | `normal`, `italic`, `oblique`     |
+| `font`           | shorthand for style/weight/size/line/family | mixed | `italic 600 16px/1.4 Inter`       |
+| `line-height`    | TextBox line height                      | yes    | `20px`, `1.4`, `140%`             |
+| `letter-spacing` | TextBox extra letter spacing             | yes    | `0.5px`, `normal`                 |
+| `text-transform` | text transform before measure/paint      | —      | `uppercase`, `lowercase`, etc.    |
+| `text-align`     | text x-position inside node rect         | —      | `left`, `center`, `right`         |
+| `text-decoration`| `TextFormat` underline/strikethrough     | yes    | `underline`, `line-through`, `none`|
 | `background`     | `painter.rect_filled`                    | —      | `#RRGGBB`, `#RGB`, `$variable`    |
 | `padding`        | `LayoutIntent.padding`                   | yes    | `16` or `16px`                    |
 | `margin`         | `LayoutIntent.margin`                    | yes    | `16` or `16px`                    |
@@ -258,13 +267,13 @@ Supported HTML tags: `div`, `span`, `p`, `heading`/`h1`-`h3`, `input`, `for`, `i
 
 ### Dev tools (binaries in `den_app/src/bin/`)
 
-- `preview.rs` — Generates a single `preview/preview.html` containing all pages as static HTML. Page CSS is scoped per preview section to avoid class collisions. Has its own HTML/SCSS helpers (duplicated from `den_macros` — see PENDING.md).
+- `preview.rs` — Generates a single `preview/preview.html` containing all pages as static HTML. Page CSS is scoped per preview section to avoid class collisions. Relative `url(...)` font assets are copied to `preview/fonts/`. Has its own HTML/SCSS helpers (duplicated from `den_macros` — see PENDING.md).
 - `style_editor.rs` — Separate egui window with visual controls per SCSS class. Writes back with surgical byte-offset replacement and 300ms debounce. Resolves `$variables` to literals on write-back.
 
 ### Known limitations
 
 - **`(click)` with arguments**: compile error in the renderer. Simple `(click)="handler()"` works. See PENDING.md for the planned dispatch-by-node-id fix.
-- **Text wrapping**: the paint function uses `layout_no_wrap`. Long text may overflow its container. Layout engine still reserves width correctly.
+- **Text wrapping**: TextBox measurement is single-line for now. Long text may overflow its container. Layout engine still reserves width from the measured galley.
 - **No text selection / no IME range** in inputs — keyboard editing is basic (insert, backspace, arrows, home/end).
 - **Grid layout** declared but not implemented; falls back to Block.
 - **Margin collapse** not implemented; each margin is fully reserved.

@@ -278,6 +278,43 @@ input {
     border: 1px solid #7eb8f7;
     cursor: pointer;
 }
+.den-page-home .font-tags-row {
+    gap: 8px;
+}
+.den-page-home .font-tag {
+    flex: 1;
+    text-align: center;
+    line-height: 1.2;
+}
+.den-page-home .font-serif {
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 15px;
+    color: #c0c0d8;
+}
+.den-page-home .font-mono {
+    font-family: "Courier New", monospace;
+    font-size: 13px;
+    letter-spacing: 1px;
+    color: #5cdb95;
+}
+.den-page-home .font-script {
+    font-family: "Comic Sans MS", "Brush Script MT", cursive;
+    font-size: 15px;
+    font-style: italic;
+    color: #f0a050;
+}
+.den-page-home .font-impact {
+    font-family: Impact, "Arial Black", fantasy;
+    font-size: 15px;
+    text-transform: uppercase;
+    color: #e94560;
+}
+.den-page-home .font-system {
+    font-family: "Trebuchet MS", Verdana, sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    color: #7eb8f7;
+}
 .den-page-home .bar-100 {
     background: #7eb8f7;
     border-radius: 4px;
@@ -489,7 +526,7 @@ input {
     color: #e94560;
 }
 .den-page-nodes .node-subtitle {
-    color: #c8c8e0-dim;
+    color: #6a6a8a;
     font-size: 10px;
 }
 .den-page-nodes .node-body {
@@ -637,6 +674,14 @@ input {
                 <div class="tag"><span class="den-placeholder">[tag #3]</span></div>
             
         </div>
+        <div class="section-label">Font tags</div>
+        <div class="display__flex font-tags-row">
+            <div class="tag font-tag font-serif">Georgia Serif</div>
+            <div class="tag font-tag font-mono">Courier Mono</div>
+            <div class="tag font-tag font-script">Comic Script</div>
+            <div class="tag font-tag font-impact">Impact Display</div>
+            <div class="tag font-tag font-system">Trebuchet UI</div>
+        </div>
     </div>
 
     
@@ -672,6 +717,7 @@ input {
     <div class="footer">
         <div class="footer-text">Den v0.1.0</div>
     </div>
+
 
 
   </div>

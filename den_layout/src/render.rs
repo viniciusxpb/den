@@ -9,8 +9,34 @@ use crate::{DenNodeId, DimensionRule, DisplayMode, LayoutEntry};
 /// RGB sem canal alpha — formato canônico do Den pra cores.
 pub type Rgb = (u8, u8, u8);
 
+/// Transformação textual declarada via `text-transform`.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub enum TextTransform {
+    /// Sem transformação.
+    #[default]
+    None,
+    /// Converte texto para maiúsculas.
+    Uppercase,
+    /// Converte texto para minúsculas.
+    Lowercase,
+    /// Capitaliza a primeira letra de cada palavra.
+    Capitalize,
+}
+
+/// Alinhamento horizontal de texto dentro da caixa do nó.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub enum TextAlign {
+    /// Alinha à esquerda.
+    #[default]
+    Left,
+    /// Centraliza.
+    Center,
+    /// Alinha à direita.
+    Right,
+}
+
 /// Estilo visual resolvido de um nó pronto pro painter.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PaintStyle {
     /// Cor do texto (quando houver).
     pub color: Option<Rgb>,
@@ -24,8 +50,52 @@ pub struct PaintStyle {
     pub border_radius: f32,
     /// Tamanho da fonte em CSS pixels (quando o nó renderizar texto).
     pub font_size: f32,
+    /// Pilha CSS de fontes, como declarada por `font-family`.
+    pub font_family: Option<&'static str>,
+    /// Peso CSS da fonte (`400`, `700`, etc.). Armazenado para seleção futura de faces.
+    pub font_weight: u16,
+    /// Se `font-style` pediu itálico/oblíquo.
+    pub font_italic: bool,
+    /// Altura de linha absoluta em CSS pixels. `0` = usar métrica da fonte.
+    pub line_height: f32,
+    /// Altura de linha multiplicadora. `0` = não declarada.
+    pub line_height_factor: f32,
+    /// Espaço extra entre letras em CSS pixels.
+    pub letter_spacing: f32,
+    /// Transformação textual aplicada antes de medir/pintar.
+    pub text_transform: TextTransform,
+    /// Alinhamento horizontal do texto dentro do rect.
+    pub text_align: TextAlign,
+    /// Desenha sublinhado.
+    pub underline: bool,
+    /// Desenha tachado.
+    pub strikethrough: bool,
     /// Trocar o cursor pra pointer quando o mouse tá em cima.
     pub cursor_pointer: bool,
+}
+
+impl Default for PaintStyle {
+    fn default() -> Self {
+        Self {
+            color: None,
+            background: None,
+            border_color: None,
+            border_width: 0.0,
+            border_radius: 0.0,
+            font_size: 0.0,
+            font_family: None,
+            font_weight: 400,
+            font_italic: false,
+            line_height: 0.0,
+            line_height_factor: 0.0,
+            letter_spacing: 0.0,
+            text_transform: TextTransform::None,
+            text_align: TextAlign::Left,
+            underline: false,
+            strikethrough: false,
+            cursor_pointer: false,
+        }
+    }
 }
 
 /// Conteúdo pintado por um nó.

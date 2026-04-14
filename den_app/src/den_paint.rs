@@ -10,8 +10,13 @@
 
 use den_layout::{
     DenNodeId, DenRouteState, LayoutRect, LayoutTable, PaintStyle, RenderKind, RenderTree, Rgb,
+    TextAlign, TextTransform,
 };
-use eframe::egui::{self, Color32, FontId, Id, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, Vec2};
+use eframe::egui::{
+    self, Align, Color32, FontId, Id, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, Vec2,
+    text::{FontFamily, Galley, LayoutJob, TextFormat},
+};
+use std::sync::Arc;
 
 /// Tamanho mínimo de fonte antes de desenhar (evita fontes impossíveis de ler).
 const MIN_FONT_SIZE_PX: f32 = 6.0;
@@ -22,6 +27,14 @@ const MIN_BORDER_WIDTH_PX: f32 = 1.0;
 /// Padding interno mínimo (CSS px) pra não encostar texto na borda do input.
 const INPUT_TEXT_PADDING_X: f32 = 6.0;
 const INPUT_TEXT_PADDING_Y: f32 = 4.0;
+
+/// Galley medida mais seu retângulo intrínseco. É a "caixa invisível" que o
+/// layout usa em vez de depender do texto cru.
+struct TextBox {
+    galley: Arc<Galley>,
+    width: f32,
+    height: f32,
+}
 
 /// Eventos emitidos pelo painter — despachados pelo código gerado.
 #[derive(Debug, Clone)]
@@ -119,27 +132,15 @@ fn measure_tree_text(ui: &Ui, tree: &mut RenderTree) {
                     node.layout.intrinsic_height = 0.0;
                     continue;
                 }
-                let base = if node.style.font_size > 0.0 {
-                    node.style.font_size
-                } else if *heading {
-                    20.0
-                } else {
-                    14.0
-                };
-                let font = FontId::proportional(base);
-                let galley =
-                    ui.fonts_mut(|f| f.layout_no_wrap(content.clone(), font, Color32::WHITE));
-                node.layout.intrinsic_width = galley.rect.width();
-                node.layout.intrinsic_height = galley.rect.height();
+                let text = apply_text_transform(content, node.style.text_transform);
+                let text_box =
+                    layout_text_box(ui, &text, *heading, &node.style, 1.0, Color32::WHITE);
+                node.layout.intrinsic_width = text_box.width;
+                node.layout.intrinsic_height = text_box.height;
             }
             RenderKind::Input { .. } => {
-                // Input: uma linha de texto (font_size ou default 14).
-                let base = if node.style.font_size > 0.0 {
-                    node.style.font_size
-                } else {
-                    14.0
-                };
-                node.layout.intrinsic_height = base;
+                let text_box = layout_text_box(ui, "M", false, &node.style, 1.0, Color32::WHITE);
+                node.layout.intrinsic_height = text_box.height;
                 // Se o codegen não pré-preencheu intrinsic_width (via DEFAULT_INPUT_WIDTH),
                 // garante um mínimo razoável pro input ser clicável.
                 if node.layout.intrinsic_width < 40.0 {
@@ -277,7 +278,7 @@ fn paint_border(painter: &egui::Painter, rect: Rect, style: &PaintStyle, scale: 
     );
 }
 
-/// Pinta texto dentro do rect usando a fonte proporcional do egui.
+/// Pinta texto dentro do rect usando a caixa textual já medida pelo egui.
 fn paint_text(
     ui: &Ui,
     painter: &egui::Painter,
@@ -290,24 +291,14 @@ fn paint_text(
     if content.is_empty() {
         return;
     }
-    let base = if style.font_size > 0.0 {
-        style.font_size
-    } else if heading {
-        20.0
-    } else {
-        14.0
-    };
-    let size = (base * scale).max(MIN_FONT_SIZE_PX);
     let color = style
         .color
         .map(rgb_to_color)
         .unwrap_or(Color32::from_gray(220));
-
-    // `layout_no_wrap` mantém o texto numa linha só; quebras de linha viram
-    // no próximo passo quando tivermos wrap de texto na tree.
-    let font = FontId::proportional(size);
-    let galley = ui.fonts_mut(|f| f.layout_no_wrap(content.to_string(), font, color));
-    painter.galley(rect.min, galley, color);
+    let content = apply_text_transform(content, style.text_transform);
+    let text_box = layout_text_box(ui, &content, heading, style, scale, color);
+    let x = aligned_text_x(rect, text_box.width, style.text_align);
+    painter.galley(Pos2::new(x, rect.min.y), text_box.galley, color);
 }
 
 /// Pinta um input: fundo (desenhado pelo caller), texto ou placeholder, e caret piscante
@@ -459,12 +450,6 @@ fn paint_input(
         (display_value.clone(), false)
     };
 
-    let base_font = if style.font_size > 0.0 {
-        style.font_size
-    } else {
-        14.0
-    };
-    let size = (base_font * scale).max(MIN_FONT_SIZE_PX);
     let text_color = if is_placeholder {
         Color32::from_gray(130)
     } else {
@@ -473,13 +458,12 @@ fn paint_input(
             .map(rgb_to_color)
             .unwrap_or(Color32::from_gray(220))
     };
-    let font = FontId::proportional(size);
     let text_pos = rect.min + Vec2::new(INPUT_TEXT_PADDING_X * scale, INPUT_TEXT_PADDING_Y * scale);
 
     if !display_text.is_empty() {
-        let galley =
-            ui.fonts_mut(|f| f.layout_no_wrap(display_text.clone(), font.clone(), text_color));
-        painter.galley(text_pos, galley, text_color);
+        let painted_text = apply_text_transform(&display_text, style.text_transform);
+        let text_box = layout_text_box(ui, &painted_text, false, style, scale, text_color);
+        painter.galley(text_pos, text_box.galley, text_color);
     }
 
     // Caret pisca quando focado.
@@ -493,8 +477,9 @@ fn paint_input(
             let display_cursor =
                 clamp_char_boundary(&display_value, cursor.min(display_value.len()));
             let pre = &display_value[..display_cursor];
-            let pre_galley = ui.fonts_mut(|f| f.layout_no_wrap(pre.to_string(), font, caret_color));
-            let caret_x = text_pos.x + pre_galley.rect.width();
+            let painted_pre = apply_text_transform(pre, style.text_transform);
+            let pre_box = layout_text_box(ui, &painted_pre, false, style, scale, caret_color);
+            let caret_x = text_pos.x + pre_box.width;
             let top = rect.min.y + INPUT_TEXT_PADDING_Y * scale;
             let bot = rect.max.y - INPUT_TEXT_PADDING_Y * scale;
             painter.line_segment(
@@ -504,6 +489,186 @@ fn paint_input(
         }
         // Solicita repaint contínuo pra piscar o caret.
         ui.ctx().request_repaint();
+    }
+}
+
+fn layout_text_box(
+    ui: &Ui,
+    text: &str,
+    heading: bool,
+    style: &PaintStyle,
+    scale: f32,
+    color: Color32,
+) -> TextBox {
+    ui.fonts_mut(|fonts| {
+        let available_families = fonts.families();
+        let format = text_format_for_style(style, heading, scale, color, &available_families);
+        let mut job = LayoutJob::single_section(text.to_string(), format);
+        // Den ainda não faz wrap de texto; medir em uma linha replica o contrato atual.
+        job.break_on_newline = false;
+        job.halign = Align::LEFT;
+
+        let galley = fonts.layout_job(job);
+        TextBox {
+            width: galley.rect.width(),
+            height: galley.rect.height(),
+            galley,
+        }
+    })
+}
+
+fn text_format_for_style(
+    style: &PaintStyle,
+    heading: bool,
+    scale: f32,
+    color: Color32,
+    available_families: &[FontFamily],
+) -> TextFormat {
+    let base = if style.font_size > 0.0 {
+        style.font_size
+    } else if heading {
+        20.0
+    } else {
+        14.0
+    };
+    let size = (base * scale).max(MIN_FONT_SIZE_PX);
+    let decoration = Stroke::new((1.0 * scale).max(1.0), color);
+
+    TextFormat {
+        font_id: FontId::new(size, font_family_for_style(style, available_families)),
+        extra_letter_spacing: style.letter_spacing * scale,
+        line_height: line_height_for_style(style, base, scale),
+        color,
+        italics: style.font_italic,
+        underline: if style.underline {
+            decoration
+        } else {
+            Stroke::NONE
+        },
+        strikethrough: if style.strikethrough {
+            decoration
+        } else {
+            Stroke::NONE
+        },
+        ..Default::default()
+    }
+}
+
+fn line_height_for_style(style: &PaintStyle, base_font_size: f32, scale: f32) -> Option<f32> {
+    if style.line_height > 0.0 {
+        Some(style.line_height * scale)
+    } else if style.line_height_factor > 0.0 {
+        Some(base_font_size * style.line_height_factor * scale)
+    } else {
+        None
+    }
+}
+
+fn font_family_for_style(style: &PaintStyle, available_families: &[FontFamily]) -> FontFamily {
+    let Some(stack) = style.font_family else {
+        return FontFamily::Proportional;
+    };
+
+    for requested in css_font_family_stack(stack) {
+        let normalized = requested.to_ascii_lowercase();
+        match normalized.as_str() {
+            "monospace" | "ui-monospace" => return FontFamily::Monospace,
+            "serif" | "sans-serif" | "system-ui" | "ui-sans-serif" | "cursive" | "fantasy" => {
+                return FontFamily::Proportional;
+            }
+            _ => {
+                if let Some(found) = find_registered_font_family(&requested, available_families) {
+                    return found;
+                }
+            }
+        }
+    }
+
+    FontFamily::Proportional
+}
+
+fn find_registered_font_family(
+    requested: &str,
+    available_families: &[FontFamily],
+) -> Option<FontFamily> {
+    available_families.iter().find_map(|family| {
+        if let FontFamily::Name(name) = family
+            && name.eq_ignore_ascii_case(requested)
+        {
+            return Some(family.clone());
+        }
+        None
+    })
+}
+
+fn css_font_family_stack(stack: &str) -> Vec<String> {
+    let mut families = Vec::new();
+    let mut current = String::new();
+    let mut quote: Option<char> = None;
+
+    for ch in stack.chars() {
+        match quote {
+            Some(q) => {
+                if ch == q {
+                    quote = None;
+                } else {
+                    current.push(ch);
+                }
+            }
+            None => match ch {
+                '"' | '\'' => quote = Some(ch),
+                ',' => {
+                    push_css_font_family(&mut families, &current);
+                    current.clear();
+                }
+                _ => current.push(ch),
+            },
+        }
+    }
+    push_css_font_family(&mut families, &current);
+    families
+}
+
+fn push_css_font_family(families: &mut Vec<String>, family: &str) {
+    let family = family.trim();
+    if !family.is_empty() {
+        families.push(family.to_string());
+    }
+}
+
+fn apply_text_transform(text: &str, transform: TextTransform) -> String {
+    match transform {
+        TextTransform::None => text.to_string(),
+        TextTransform::Uppercase => text.to_uppercase(),
+        TextTransform::Lowercase => text.to_lowercase(),
+        TextTransform::Capitalize => capitalize_text(text),
+    }
+}
+
+fn capitalize_text(text: &str) -> String {
+    let mut result = String::new();
+    let mut start_of_word = true;
+    for ch in text.chars() {
+        if ch.is_alphanumeric() {
+            if start_of_word {
+                result.extend(ch.to_uppercase());
+                start_of_word = false;
+            } else {
+                result.push(ch);
+            }
+        } else {
+            result.push(ch);
+            start_of_word = true;
+        }
+    }
+    result
+}
+
+fn aligned_text_x(rect: Rect, text_width: f32, align: TextAlign) -> f32 {
+    match align {
+        TextAlign::Left => rect.min.x,
+        TextAlign::Center => rect.min.x + (rect.width() - text_width) / 2.0,
+        TextAlign::Right => rect.max.x - text_width,
     }
 }
 
@@ -548,7 +713,11 @@ fn rgb_to_color(rgb: Rgb) -> Color32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{clamp_char_boundary, next_char_boundary, prev_char_boundary};
+    use super::{
+        apply_text_transform, clamp_char_boundary, css_font_family_stack, next_char_boundary,
+        prev_char_boundary,
+    };
+    use den_layout::TextTransform;
 
     #[test]
     fn clamps_cursor_to_previous_utf8_boundary() {
@@ -564,5 +733,25 @@ mod tests {
 
         assert_eq!(next_char_boundary(value, 1), 3);
         assert_eq!(prev_char_boundary(value, 3), 1);
+    }
+
+    #[test]
+    fn splits_css_font_family_stack_with_quoted_names() {
+        assert_eq!(
+            css_font_family_stack(r#""Inter Tight", Arial, sans-serif"#),
+            vec!["Inter Tight", "Arial", "sans-serif"]
+        );
+    }
+
+    #[test]
+    fn applies_text_transform_before_measurement() {
+        assert_eq!(
+            apply_text_transform("olá den", TextTransform::Uppercase),
+            "OLÁ DEN"
+        );
+        assert_eq!(
+            apply_text_transform("olá den", TextTransform::Capitalize),
+            "Olá Den"
+        );
     }
 }
