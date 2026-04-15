@@ -101,13 +101,13 @@ impl eframe::App for DenApp {
             active_scale = app_config::DEFAULT_SCALE;
         }
 
-        // Dev-only: F2 alterna entre HomePage e NodesPage pra testar o layout das duas
-        // sem clicar em UI. Compilado fora em release pra não vazar pro usuário final.
+        // Dev-only: F2 alterna entre NdnmPage e HomePage pra testar layout sem clicar em UI.
+        // Compilado fora em release pra não vazar pro usuário final.
         // Remover quando o router tiver navegação in-app equivalente (quick-switcher, cmd+k, etc).
         #[cfg(debug_assertions)]
         if ctx.input(|i| i.key_pressed(egui::Key::F2)) {
             let next = match self.router.current() {
-                AppRoute::HomePage => __den_route_NodesPage(),
+                AppRoute::HomePage => __den_route_NdnmPage(),
                 _ => __den_route_HomePage(),
             };
             self.router.goto(next);
