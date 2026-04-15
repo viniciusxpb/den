@@ -481,53 +481,223 @@ fn add_px_to_unitless(line: &str) -> String {
 // ============================================================================
 
 /// Converte o body inteiro de uma página Den em HTML padrão.
-/// Processa `<for>`, `<if>/<else>`, `{{ expr }}`, `<input bind=...>`, `goto=`,
-/// e pula comentários HTML `<!-- ... -->`.
+/// Processa `@if`/`!`, `@for`/`@empty`, `@object`, `{{ expr | pipe }}`, atributos
+/// `@bind`/`@goto`/`@click`/`@with` e pula comentários HTML `<!-- ... -->`.
 fn convert_page_body(html: &str) -> String {
     let chars: Vec<char> = html.chars().collect();
-    let mut out = String::new();
     let mut pos = 0;
-    while pos < chars.len() {
-        if is_html_comment_start(&chars, pos) {
-            pos = skip_html_comment(&chars, pos);
+    convert_until(&chars, &mut pos, None)
+}
+
+/// Parseia sequência de nós até `stop` (`}` dos blocos `@`) ou fim.
+fn convert_until(chars: &[char], pos: &mut usize, stop: Option<char>) -> String {
+    let mut out = String::new();
+    while *pos < chars.len() {
+        if let Some(s) = stop {
+            if chars[*pos] == s {
+                break;
+            }
+        }
+        if is_html_comment_start(chars, *pos) {
+            *pos = skip_html_comment(chars, *pos);
             continue;
         }
-        if chars[pos] == '<' {
-            if pos + 1 < chars.len() && chars[pos + 1] == '/' {
-                pos = skip_until_gt(&chars, pos);
+        if chars[*pos] == '@' {
+            out.push_str(&convert_at_block(chars, pos));
+            continue;
+        }
+        if chars[*pos] == '<' {
+            if *pos + 1 < chars.len() && chars[*pos + 1] == '/' {
+                *pos = skip_until_gt(chars, *pos);
                 continue;
             }
-            let tag = peek_tag(&chars, pos);
-            match tag.as_str() {
-                "for" => {
-                    let (inner, end) = convert_for(&chars, pos);
-                    out.push_str(&inner);
-                    pos = end;
-                }
-                "if" => {
-                    let (inner, end) = convert_if(&chars, pos);
-                    out.push_str(&inner);
-                    pos = end;
-                }
-                "else" => {
-                    pos = skip_tag(&chars, pos);
-                }
-                _ => {
-                    let (el, end) = convert_element(&chars, pos);
-                    out.push_str(&el);
-                    pos = end;
-                }
-            }
-        } else if chars[pos] == '{' && pos + 1 < chars.len() && chars[pos + 1] == '{' {
-            let (ph, end) = convert_interpolation(&chars, pos);
-            out.push_str(&ph);
-            pos = end;
-        } else {
-            out.push(chars[pos]);
-            pos += 1;
+            let (el, end) = convert_element(chars, *pos);
+            out.push_str(&el);
+            *pos = end;
+            continue;
         }
+        if chars[*pos] == '{' && *pos + 1 < chars.len() && chars[*pos + 1] == '{' {
+            let (ph, end) = convert_interpolation(chars, *pos);
+            out.push_str(&ph);
+            *pos = end;
+            continue;
+        }
+        out.push(chars[*pos]);
+        *pos += 1;
     }
     out
+}
+
+/// Despacha `@if`/`@for`/`@object` (e `!` órfão).
+fn convert_at_block(chars: &[char], pos: &mut usize) -> String {
+    *pos += 1; // skip '@'
+    let name = {
+        let mut p = *pos;
+        read_ident_from(chars, &mut p)
+    };
+    // Avança p/ leitura do nome
+    read_ident_from(chars, pos);
+    match name.as_str() {
+        "if" => convert_at_if(chars, pos),
+        "for" => convert_at_for(chars, pos),
+        "object" => convert_at_object(chars, pos),
+        _ => String::new(),
+    }
+}
+
+fn convert_at_if(chars: &[char], pos: &mut usize) -> String {
+    // Consome `(cond)` e descarta — preview sempre renderiza o primeiro branch.
+    skip_ws_at(chars, pos);
+    skip_parens(chars, pos);
+    skip_ws_at(chars, pos);
+    let then_body = read_and_convert_block(chars, pos);
+    // Pula branches `!cond { ... }` / `! { ... }` — preview só mostra o `@if`.
+    loop {
+        let save = *pos;
+        skip_ws_at(chars, pos);
+        if *pos >= chars.len() || chars[*pos] != '!' {
+            *pos = save;
+            break;
+        }
+        *pos += 1; // skip '!'
+        // pula condição (até '{')
+        while *pos < chars.len() && chars[*pos] != '{' {
+            *pos += 1;
+        }
+        if *pos < chars.len() && chars[*pos] == '{' {
+            *pos += 1;
+            // pula conteúdo sem converter (descarta)
+            let _ = convert_until(chars, pos, Some('}'));
+            if *pos < chars.len() && chars[*pos] == '}' {
+                *pos += 1;
+            }
+        }
+    }
+    then_body
+}
+
+fn convert_at_for(chars: &[char], pos: &mut usize) -> String {
+    skip_ws_at(chars, pos);
+    // `(var in expr)`
+    let header = read_parens_content(chars, pos);
+    let each_var = header
+        .split(" in ")
+        .next()
+        .map(str::trim)
+        .unwrap_or("item")
+        .to_string();
+    skip_ws_at(chars, pos);
+    let body_template = read_and_convert_block(chars, pos);
+
+    // Opcional `@empty { ... }` — preview com iterações > 0 ignora.
+    let save = *pos;
+    skip_ws_at(chars, pos);
+    if starts_with_word(chars, *pos, "@empty") {
+        *pos += 6;
+        skip_ws_at(chars, pos);
+        if *pos < chars.len() && chars[*pos] == '{' {
+            *pos += 1;
+            let _ = convert_until(chars, pos, Some('}'));
+            if *pos < chars.len() && chars[*pos] == '}' {
+                *pos += 1;
+            }
+        }
+    } else {
+        *pos = save;
+    }
+
+    let needle = format!("[{each_var}]");
+    let mut out = String::new();
+    for i in 0..FOR_LOOP_ITERATIONS {
+        let replacement = format!("[{each_var} #{}]", i + 1);
+        out.push_str(&body_template.replace(&needle, &replacement));
+    }
+    out
+}
+
+fn convert_at_object(chars: &[char], pos: &mut usize) -> String {
+    skip_ws_at(chars, pos);
+    let _scope = read_parens_content(chars, pos);
+    skip_ws_at(chars, pos);
+    read_and_convert_block(chars, pos)
+}
+
+fn read_and_convert_block(chars: &[char], pos: &mut usize) -> String {
+    if *pos >= chars.len() || chars[*pos] != '{' {
+        return String::new();
+    }
+    *pos += 1;
+    let inner = convert_until(chars, pos, Some('}'));
+    if *pos < chars.len() && chars[*pos] == '}' {
+        *pos += 1;
+    }
+    inner
+}
+
+fn skip_parens(chars: &[char], pos: &mut usize) {
+    if *pos >= chars.len() || chars[*pos] != '(' {
+        return;
+    }
+    *pos += 1;
+    let mut depth: i32 = 1;
+    while *pos < chars.len() && depth > 0 {
+        match chars[*pos] {
+            '(' => depth += 1,
+            ')' => depth -= 1,
+            _ => {}
+        }
+        *pos += 1;
+    }
+}
+
+fn read_parens_content(chars: &[char], pos: &mut usize) -> String {
+    if *pos >= chars.len() || chars[*pos] != '(' {
+        return String::new();
+    }
+    *pos += 1;
+    let start = *pos;
+    let mut depth: i32 = 1;
+    while *pos < chars.len() && depth > 0 {
+        match chars[*pos] {
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if depth == 0 {
+                    break;
+                }
+            }
+            _ => {}
+        }
+        *pos += 1;
+    }
+    let s: String = chars[start..*pos].iter().collect();
+    if *pos < chars.len() {
+        *pos += 1;
+    }
+    s
+}
+
+fn skip_ws_at(chars: &[char], pos: &mut usize) {
+    while *pos < chars.len() && chars[*pos].is_ascii_whitespace() {
+        *pos += 1;
+    }
+}
+
+fn read_ident_from(chars: &[char], pos: &mut usize) -> String {
+    let start = *pos;
+    while *pos < chars.len()
+        && (chars[*pos].is_ascii_alphanumeric() || chars[*pos] == '_' || chars[*pos] == '-')
+    {
+        *pos += 1;
+    }
+    chars[start..*pos].iter().collect()
+}
+
+fn starts_with_word(chars: &[char], pos: usize, word: &str) -> bool {
+    if pos + word.len() > chars.len() {
+        return false;
+    }
+    chars[pos..pos + word.len()].iter().collect::<String>() == word
 }
 
 /// `true` se em `pos` começa `<!--`.
@@ -567,18 +737,21 @@ fn convert_element(chars: &[char], start: usize) -> (String, usize) {
 
     skip_ws(chars, &mut pos);
     while pos < chars.len() && chars[pos] != '>' && chars[pos] != '/' {
-        if chars[pos] == '(' {
-            // (click)="..." — consome e ignora (preview estático).
+        if chars[pos] == '@' {
+            // Atributos Den: @click, @bind, @goto, @with
             pos += 1;
-            read_ident(chars, &mut pos);
-            if pos < chars.len() && chars[pos] == ')' {
-                pos += 1;
-            }
+            let attr = read_ident(chars, &mut pos);
             skip_ws(chars, &mut pos);
             if pos < chars.len() && chars[pos] == '=' {
                 pos += 1;
                 skip_ws(chars, &mut pos);
-                read_quoted(chars, &mut pos);
+                let val = read_quoted(chars, &mut pos);
+                match attr.as_str() {
+                    "bind" => bind_expr = Some(val),
+                    "goto" => goto_page = Some(val),
+                    // click/with: ignorados no preview estático
+                    _ => {}
+                }
             }
         } else {
             let attr = read_ident(chars, &mut pos);
@@ -589,9 +762,7 @@ fn convert_element(chars: &[char], start: usize) -> (String, usize) {
                 let val = read_quoted(chars, &mut pos);
                 match attr.as_str() {
                     "class" => classes = val,
-                    "bind" => bind_expr = Some(val),
                     "placeholder" => placeholder = Some(val),
-                    "goto" => goto_page = Some(val),
                     _ => {}
                 }
             } else if attr == "dev" {
@@ -648,7 +819,7 @@ fn convert_element(chars: &[char], start: usize) -> (String, usize) {
     )
 }
 
-/// Lê conteúdo interno até `</>`. Processa control flow e interpolação aninhados,
+/// Lê conteúdo interno até `</>`. Processa `@` blocks e interpolação aninhados,
 /// e pula comentários HTML `<!-- ... -->` (não leakam como texto).
 fn read_inner(chars: &[char], start: usize) -> (String, usize) {
     let mut pos = start;
@@ -658,32 +829,18 @@ fn read_inner(chars: &[char], start: usize) -> (String, usize) {
             pos = skip_html_comment(chars, pos);
             continue;
         }
+        if chars[pos] == '@' {
+            out.push_str(&convert_at_block(chars, &mut pos));
+            continue;
+        }
         if chars[pos] == '<' {
             if pos + 1 < chars.len() && chars[pos + 1] == '/' {
                 pos = skip_until_gt(chars, pos);
                 return (out, pos);
             }
-            let tag = peek_tag(chars, pos);
-            match tag.as_str() {
-                "for" => {
-                    let (inner, end) = convert_for(chars, pos);
-                    out.push_str(&inner);
-                    pos = end;
-                }
-                "if" => {
-                    let (inner, end) = convert_if(chars, pos);
-                    out.push_str(&inner);
-                    pos = end;
-                }
-                "else" => {
-                    pos = skip_tag(chars, pos);
-                }
-                _ => {
-                    let (el, end) = convert_element(chars, pos);
-                    out.push_str(&el);
-                    pos = end;
-                }
-            }
+            let (el, end) = convert_element(chars, pos);
+            out.push_str(&el);
+            pos = end;
         } else if chars[pos] == '{' && pos + 1 < chars.len() && chars[pos + 1] == '{' {
             let (ph, end) = convert_interpolation(chars, pos);
             out.push_str(&ph);
@@ -696,62 +853,7 @@ fn read_inner(chars: &[char], start: usize) -> (String, usize) {
     (out, pos)
 }
 
-/// `<for each="var" in="expr">...</for>` — renderiza N iterações simuladas.
-/// A cada iteração, substitui as ocorrências de `[each_var]` (saídas do
-/// convert_interpolation aplicado a `{{ each_var }}`) por `[each_var #N]`.
-fn convert_for(chars: &[char], start: usize) -> (String, usize) {
-    let mut pos = start + 1;
-    skip_ws(chars, &mut pos);
-    read_ident(chars, &mut pos); // "for"
-
-    let mut each_var = "item".to_string();
-    skip_ws(chars, &mut pos);
-    while pos < chars.len() && chars[pos] != '>' {
-        let attr = read_ident(chars, &mut pos);
-        skip_ws(chars, &mut pos);
-        if pos < chars.len() && chars[pos] == '=' {
-            pos += 1;
-            skip_ws(chars, &mut pos);
-            let val = read_quoted(chars, &mut pos);
-            if attr == "each" {
-                each_var = val;
-            }
-        }
-        skip_ws(chars, &mut pos);
-    }
-    if pos < chars.len() {
-        pos += 1;
-    } // skip '>'
-
-    let body_start = pos;
-    let (body_template, end) = read_inner(chars, body_start);
-
-    // `convert_interpolation` já transformou `{{ each_var }}` em `[each_var]` dentro
-    // de um span. Aqui trocamos essa string pela versão numerada por iteração.
-    let needle = format!("[{each_var}]");
-    let mut out = String::new();
-    for i in 0..FOR_LOOP_ITERATIONS {
-        let replacement = format!("[{each_var} #{}]", i + 1);
-        out.push_str(&body_template.replace(&needle, &replacement));
-    }
-    (out, end)
-}
-
-/// `<if cond="...">...</if>` — sempre renderiza o branch `then`; `<else>` é pulado.
-fn convert_if(chars: &[char], start: usize) -> (String, usize) {
-    let mut pos = start + 1;
-    skip_ws(chars, &mut pos);
-    read_ident(chars, &mut pos); // "if"
-    while pos < chars.len() && chars[pos] != '>' {
-        pos += 1;
-    }
-    if pos < chars.len() {
-        pos += 1;
-    }
-    read_inner(chars, pos)
-}
-
-/// `{{ expr }}` → `<span class="den-placeholder">[expr_sem_self]</span>`.
+/// `{{ expr | pipe }}` → `<span class="den-placeholder">[expr_sem_self | pipes]</span>`.
 fn convert_interpolation(chars: &[char], start: usize) -> (String, usize) {
     let mut pos = start + 2;
     let expr_start = pos;
@@ -759,8 +861,9 @@ fn convert_interpolation(chars: &[char], start: usize) -> (String, usize) {
         pos += 1;
     }
     let expr: String = chars[expr_start..pos].iter().collect();
-    let label = expr
-        .trim()
+    // Para exibição: pega só a parte antes do primeiro `|` (o resto é label meramente informativo).
+    let before_pipe = expr.split('|').next().unwrap_or("").trim();
+    let label = before_pipe
         .trim_start_matches("self.")
         .trim_start_matches("this.");
     if pos + 1 < chars.len() {
@@ -994,23 +1097,6 @@ fn escape_html(input: &str) -> String {
 // Parser helpers
 // ============================================================================
 
-fn peek_tag(chars: &[char], pos: usize) -> String {
-    let mut p = pos;
-    if p < chars.len() && chars[p] == '<' {
-        p += 1;
-    }
-    while p < chars.len() && chars[p].is_ascii_whitespace() {
-        p += 1;
-    }
-    let start = p;
-    while p < chars.len()
-        && (chars[p].is_ascii_alphanumeric() || chars[p] == '_' || chars[p] == '-')
-    {
-        p += 1;
-    }
-    chars[start..p].iter().collect()
-}
-
 fn skip_ws(chars: &[char], pos: &mut usize) {
     while *pos < chars.len() && chars[*pos].is_ascii_whitespace() {
         *pos += 1;
@@ -1058,14 +1144,3 @@ fn skip_until_gt(chars: &[char], start: usize) -> usize {
     pos
 }
 
-fn skip_tag(chars: &[char], start: usize) -> usize {
-    let mut pos = start;
-    pos = skip_until_gt(chars, pos);
-    while pos < chars.len() {
-        if chars[pos] == '<' && pos + 1 < chars.len() && chars[pos + 1] == '/' {
-            return skip_until_gt(chars, pos);
-        }
-        pos += 1;
-    }
-    pos
-}

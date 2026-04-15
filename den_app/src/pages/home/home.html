@@ -4,7 +4,7 @@
     <div class="hero">
         <div class="hero-title">Den Framework</div>
         <div class="hero-sub">Write templates. Compile to native. Ship fast.</div>
-        <div class="hero-action" goto="UsuarioPage">Abrir usuario</div>
+        <div class="hero-action" @goto="UsuarioPage">Abrir usuario</div>
     </div>
 
     <!-- Stats Row -->
@@ -15,12 +15,11 @@
         </div>
         <div class="stat-card">
             <div class="stat-label">STATUS</div>
-            <if cond="self.active">
+            @if(self.active) {
                 <div class="stat-val-green">Active</div>
-            </if>
-            <else>
+            } ! {
                 <div class="stat-val-red">Inactive</div>
-            </else>
+            }
         </div>
         <div class="stat-card">
             <div class="stat-label">TAGS</div>
@@ -30,9 +29,9 @@
 
     <!-- Controls -->
     <div class="display__flex">
-        <div dev class="btn-blue" (click)="increment_count()">Increment</div>
-        <div dev class="btn-green" (click)="toggle_status()">Toggle</div>
-        <div dev class="btn-dim" (click)="reset()">Reset</div>
+        <div dev class="btn-blue" @click="increment_count()">Increment</div>
+        <div dev class="btn-green" @click="toggle_status()">Toggle</div>
+        <div dev class="btn-dim" @click="reset()">Reset</div>
     </div>
 
     <!-- Input + Live Preview -->
@@ -41,15 +40,15 @@
         <div class="display__flex">
             <div class="input-col">
                 <div class="input-label">Name</div>
-                <input bind="self.name" placeholder="Your name..." class="text-input" />
+                <input @bind="self.name" placeholder="Your name..." class="text-input" />
             </div>
             <div class="input-col">
                 <div class="input-label">Message</div>
-                <input bind="self.message" placeholder="Type here..." class="text-input" />
+                <input @bind="self.message" placeholder="Type here..." class="text-input" />
             </div>
         </div>
         <div class="preview-box">
-            <div class="preview-text">Hello {{ self.name }} — "{{ self.message }}"</div>
+            <div class="preview-text">Hello {{ self.name | upper }} — "{{ self.message | default("...") }}"</div>
         </div>
     </div>
 
@@ -73,9 +72,11 @@
     <div class="tags-box">
         <div class="section-label">Dynamic tags</div>
         <div class="display__flex">
-            <for each="tag" in="self.tags">
+            @for(tag in self.tags) {
                 <div class="tag">{{ tag }}</div>
-            </for>
+            } @empty {
+                <div class="tag-none">Nenhuma tag</div>
+            }
         </div>
         <div class="section-label">Font tags</div>
         <div class="display__flex font-tags-row">

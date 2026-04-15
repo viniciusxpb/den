@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Den is a Rust framework that compiles HTML + SCSS templates into native egui desktop GUI code at compile time via procedural macros. Zero runtime template parsing. The runtime model is **render tree → layout → paint**: the macro generates code that builds a `RenderTree` every frame, the layout engine resolves rects, and a single paint function draws everything via `egui::Painter` — no egui widgets (no `ui.label`, no `Frame::show`, no `TextEdit`).
 
+**Filosofia**: "Angular in Rust" — convention over configuration (DHH), complexidade no compile-time (Svelte), sintaxe que o dev web já sabe sem ler doc (Krug). Prefixo universal `@` pra tudo que é Den; `{{ }}` pra interpolação; resto é HTML/CSS puro.
+
 ## Build & Development Commands
 
 ```bash
@@ -142,35 +144,60 @@ For a template `den_template!("pages/home/home", self)`, the macro expands to ro
 
 ### Template syntax
 
+**Prefixo `@`** — toda sintaxe Den começa com `@` (eventos, bindings, controle de fluxo, escopo). Interpolação usa `{{ }}`. Três conceitos, zero surpresa.
+
+| Sintaxe | Significado |
+|---------|-------------|
+| `{{ }}` | Mostrar valor (interpolação, com pipes opcionais) |
+| `@` | Den faz algo (controle, binding, evento, navegação, escopo) |
+| resto | HTML/CSS puro |
+
 **Macro invocation**:
 - `den_template!("pages/home/home")` — without self, no interpolation or events
-- `den_template!("pages/home/home", self)` — enables `{{ self.field }}` and `(click)` events
+- `den_template!("pages/home/home", self)` — enables `{{ self.field }}` and `@click` events
 
-**Interpolation**: `{{ self.field }}` — generates `self.field` directly. Fields must implement `Display`.
+**Interpolação + pipes**: `{{ self.field }}` — gera `self.field` direto. Campos devem implementar `Display`.
+- Com pipes: `{{ self.name | upper }}`, `{{ self.bio | truncate(80) | upper }}`, `{{ self.price | currency(br) }}`
+- Pipes são unidirecionais (pipeline, não árvore). Valor entra, valor sai, próximo pipe recebe.
+- Built-in (vêm com `den_layout::pipes`): `upper`, `lower`, `trim`, `truncate(n)`, `currency(locale)`/`money(locale)`, `number(casas)`, `join(sep)`, `default(val)`, `date(format)`.
+- Pipe custom: implementa `Pipe<T>` (den_layout) e exporta sob `crate::pipes::NomePipe`. Type-safe em compile-time.
 
-**Event binding**:
-- `(click)="handler()"` — registered in the template's click handler table, dispatched via `PaintEvent::Click { handler: slot }`
-- `(click)="handler(arg1, arg2)"` — **not yet supported in the renderer**; the codegen returns a compile error. See PENDING.md.
+**Event binding** (`@click`):
+- `@click="handler()"` — registered in the template's click handler table, dispatched via `PaintEvent::Click { handler: slot }`
+- `@click="handler(arg1, arg2)"` — **not yet supported in the renderer**; the codegen returns a compile error. See PENDING.md.
 
-**Input binding**: `<input bind="self.field" placeholder="..." class="style" />` — the framework owns the input (no egui `TextEdit`):
+**Input binding** (`@bind`): `<input @bind="self.field" placeholder="..." class="style" />` — the framework owns the input (no egui `TextEdit`):
 - First render: hydrates `DenRouteState.inputs` from `self.field`
 - Subsequent frames: `self.field` reads from route state
 - Paint function handles focus, cursor movement, keyboard events (`Text`, `Backspace`, `Delete`, `ArrowLeft/Right`, `Home`, `End`, `Escape`/`Enter` to blur)
 - Caret is a painted `line_segment` with blink on `ctx.input().time % 1.0 < 0.5`
 - On change: emits `PaintEvent::InputChanged` → macro dispatch writes to both route state and `self.field`
 
-**Navigation**:
-- `goto="PageName"` — registered in goto slots table, dispatched via `PaintEvent::Goto { slot }` → `__den_router.goto(crate::__den_route_PageName(...))`
-- `with="expr1, expr2"` — passes cloned arguments to the target page constructor
-- `goto` and `(click)` cannot coexist on the same element
+**Navigation** (`@goto` / `@with`):
+- `@goto="PageName"` — registered in goto slots table, dispatched via `PaintEvent::Goto { slot }` → `__den_router.goto(crate::__den_route_PageName(...))`
+- `@with="expr1, expr2"` — passes cloned arguments to the target page constructor
+- `@goto` and `@click` cannot coexist on the same element
+
+**Escopo de binding** (`@object`): `@object(self.pessoa) { <input @bind="nome" /> }` — dentro do bloco, `@bind` sem prefixo `self.` é resolvido contra o scope. Elimina repetição de `self.pessoa.` em cada input.
+- Scope é aplicado no resolve; `@bind="self.x"` explícito (com prefix) escapa do escopo.
+- Scope não afeta `{{ }}` nem `@click`/`@goto` (expressões Rust completas são esperadas).
 
 **SCSS variables**: `$var: value;` at top of file, referenced as `color: $var;`.
 
 **Style inheritance**: inheritable text CSS propagates parent → child (`color`, font family/size/weight/style, line-height, letter-spacing, text-transform, text-align). `text-decoration` is transported to `PaintStyle`, but not inherited as a resolved child property. Hover and layout rules do not inherit.
 
-**Control flow**:
-- `<for each="item" in="self.items">...</for>` — generates `for (idx, item) in self.items.iter().enumerate() { /* push children */ }`. The loop index salts `node_id` hashes so hover/focus state is stable per item.
-- `<if cond="self.flag">...</if>` with optional `<else>...</else>` — generates plain Rust `if { push } else { push }`.
+**Control flow** (`@if`/`!`/`@for`/`@empty`):
+- `@if(self.cond) { ... } ! { ... }` — se/senão. `!` sem condição = catch-all (else).
+- Cadeia: `@if(self.status == "active") { ... } !status == "pending" { ... } !status == "error" { ... } ! { ... }`. Em `!COND`, identificadores bare são prefixados com `self.` automaticamente.
+- `@for(item in self.items) { ... }` — gera `for (idx, item) in self.items.iter().enumerate() { /* push children */ }`. Loop index sala o `node_id` pra hover/focus estáveis por item.
+- `@for(...) { ... } @empty { ... }` — ramo `@empty` renderizado quando a iterável está vazia.
+- Zero `@else`/`@else if`/`@switch`/`@case`. Só `@if` e `!`.
+
+**GhostService™** — async sem async:
+- `#[derive(DenGhost)]` em structs: gera `DenGhost::ghost()` com mocks por campo.
+- `#[ghost("valor")]` por campo customiza o mock (tipos numéricos parseados, String copiada, expressão Rust em fallback).
+- `DenGhostService<T>` (den_layout) wrap o valor: começa `loading: true` com ghost, roda fetch em thread, vira real no próximo `tick()`.
+- No template: `@if(self.user.loading) { <skeleton /> } ! { <div>{{ self.user.nome }}</div> }`. Zero `await`, `spawn`, `subscribe`.
 
 ### Router and page macros
 

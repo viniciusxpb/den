@@ -1,4 +1,5 @@
 mod codegen;
+mod ghost_derive;
 mod input;
 mod page;
 mod parse;
@@ -52,7 +53,14 @@ pub fn den_template(input: TokenStream) -> TokenStream {
     };
 
     // Fase 1: Parse
-    let raw_nodes = parse::parse_html(&html);
+    let raw_nodes = match parse::parse_html(&html) {
+        Ok(n) => n,
+        Err(msg) => {
+            return syn::Error::new(parsed.path.span(), msg)
+                .to_compile_error()
+                .into();
+        }
+    };
     let style_map = parse::parse_scss(&scss);
 
     // Fase 2: Resolve (styles → DenVisual em cada nó, extrai body separado)
@@ -80,4 +88,25 @@ pub fn den_page(attr: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn den_router(input: TokenStream) -> TokenStream {
     router::expand(input)
+}
+
+/// `#[derive(DenGhost)]` — implementa `DenGhost::ghost()` com mocks por campo.
+///
+/// Use `#[ghost("valor")]` pra customizar o mock de cada campo. Campos sem o
+/// attr usam `Default::default()`.
+///
+/// ```rust,ignore
+/// #[derive(DenGhost, Clone)]
+/// struct Usuario {
+///     #[ghost("João")]
+///     nome: String,
+///     #[ghost("DasIdeia")]
+///     sobrenome: String,
+///     #[ghost(42)]
+///     idade: u8,
+/// }
+/// ```
+#[proc_macro_derive(DenGhost, attributes(ghost))]
+pub fn ghost_derive(input: TokenStream) -> TokenStream {
+    ghost_derive::expand(input)
 }

@@ -201,7 +201,7 @@ pub(super) fn intrinsic_width_for(el: &DenElement) -> f32 {
         .iter()
         .map(|segment| match segment {
             TextSegment::Literal(text) => estimate_text_width(text, font_size, letter_spacing),
-            TextSegment::Expr(_) => DEFAULT_EXPR_TEXT_WIDTH,
+            TextSegment::Expr { .. } => DEFAULT_EXPR_TEXT_WIDTH,
         })
         .sum()
 }

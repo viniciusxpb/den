@@ -100,6 +100,18 @@ impl eframe::App for DenApp {
         if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(egui::Key::Num0)) {
             active_scale = app_config::DEFAULT_SCALE;
         }
+
+        // Dev-only: F2 alterna entre HomePage e NodesPage pra testar o layout das duas
+        // sem clicar em UI. Compilado fora em release pra não vazar pro usuário final.
+        // Remover quando o router tiver navegação in-app equivalente (quick-switcher, cmd+k, etc).
+        #[cfg(debug_assertions)]
+        if ctx.input(|i| i.key_pressed(egui::Key::F2)) {
+            let next = match self.router.current() {
+                AppRoute::HomePage => __den_route_NodesPage(),
+                _ => __den_route_HomePage(),
+            };
+            self.router.goto(next);
+        }
         // Ctrl+scroll = zoom. Consumimos o delta aqui ANTES de `CentralPanel` renderizar,
         // pra que o `ScrollArea` interno não receba esse scroll e role a página junto.
         let scroll_delta = ctx.input(|i| {

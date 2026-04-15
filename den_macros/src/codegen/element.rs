@@ -18,6 +18,18 @@ pub(super) fn emit_element(
     el: &DenElement,
     ctx: &mut BuildCtx,
 ) -> Result<proc_macro2::TokenStream, String> {
+    // `__den_object` é um wrapper sintético do `@object(scope) { ... }`:
+    // não vira RenderNode, só emite os filhos transparentemente.
+    if el.tag == "__den_object" {
+        let mut stmts = Vec::new();
+        for (i, child) in el.children.iter().enumerate() {
+            ctx.tree_path.push(i);
+            stmts.push(emit_build_node(child, ctx)?);
+            ctx.tree_path.pop();
+        }
+        return Ok(quote! { #( #stmts )* });
+    }
+
     validate_element_shape(el, ctx)?;
 
     let style_tokens = paint_style_tokens(&el.visual);
@@ -72,13 +84,13 @@ pub(super) fn emit_element(
 fn validate_element_shape(el: &DenElement, ctx: &BuildCtx) -> Result<(), String> {
     if el.tag == "input" && el.bind_expr.is_none() {
         return Err(
-            "Den: <input> requires a bind attribute. Use: <input bind=\"self.field\" />"
+            "Den: <input> requer um atributo @bind. Use: <input @bind=\"self.field\" />"
                 .to_string(),
         );
     }
     if el.on_click.is_some() && !ctx.has_self {
         return Err(
-            "Template uses (click) event but `self` was not passed to den_template!. \
+            "Template usa @click mas `self` não foi passado pro den_template!. \
              Use: den_template!(\"path\", self);"
                 .to_string(),
         );

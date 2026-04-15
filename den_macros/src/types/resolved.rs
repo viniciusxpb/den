@@ -216,13 +216,14 @@ pub struct DenElement {
     pub children: Vec<DenNode>,
     pub visual: DenVisual,
     /// Expressão de binding bidirecional (e.g. "self.name").
-    /// Presente só em `<input bind="...">`.
+    /// Presente só em `<input @bind="...">`.
+    /// Já resolvida com escopo de `@object` aplicado.
     pub bind_expr: Option<String>,
     /// Texto placeholder para inputs.
     pub placeholder: Option<String>,
-    /// Nome da página alvo em `goto="PageName"`.
+    /// Nome da página alvo em `@goto="PageName"`.
     pub goto_page: Option<String>,
-    /// Expressão opcional de dados para navegação em `with="expr"`.
+    /// Expressão opcional de dados para navegação em `@with="expr"`.
     pub goto_with: Option<String>,
 }
 
@@ -232,12 +233,19 @@ pub struct DenForLoop {
     pub each_var: String,
     pub iterable_expr: String,
     pub children: Vec<DenNode>,
+    /// `@empty { ... }` — nós renderizados quando a iterável é vazia.
+    pub empty_children: Vec<DenNode>,
 }
 
 /// IfChain resolvido. Transparente visualmente.
 #[derive(Debug)]
 pub struct DenIfChain {
-    pub condition: String,
-    pub then_children: Vec<DenNode>,
+    pub branches: Vec<DenIfBranch>,
     pub else_children: Vec<DenNode>,
+}
+
+#[derive(Debug)]
+pub struct DenIfBranch {
+    pub condition: String,
+    pub children: Vec<DenNode>,
 }

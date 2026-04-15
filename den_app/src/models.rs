@@ -1,8 +1,15 @@
 //! Modelos usados pelo app demo.
 
+use den_macros::DenGhost;
+
 /// Usuário de exemplo usado nas rotas tipadas.
-#[derive(Debug, Clone)]
+///
+/// `DenGhost` permite que o GhostService mostre valores "João DasIdeia, 30 anos"
+/// enquanto a resposta real não chega, zerando a fricção de desenvolvimento
+/// front sem backend.
+#[derive(Debug, Clone, DenGhost)]
 pub struct Usuario {
+    #[ghost("João")]
     pub nome: String,
 }
 

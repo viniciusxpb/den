@@ -1,7 +1,7 @@
 //! Fase 1 do pipeline: parsers de HTML e SCSS.
 
 pub mod color;
-mod html;
+pub mod html;
 mod scss;
 pub mod text;
 
