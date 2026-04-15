@@ -41,7 +41,21 @@
 //! }
 //! ```
 
+use std::any::Any;
 use std::sync::mpsc::{Receiver, TryRecvError, channel};
+
+/// Extrai a mensagem de panic do payload do `catch_unwind`. Cobre os dois casos
+/// padrão (`panic!("msg")` vira `&'static str`; `panic!("{x}")` vira `String`)
+/// e cai num placeholder genérico pra payloads exóticos.
+fn panic_msg(payload: Box<dyn Any + Send>) -> String {
+    if let Some(s) = payload.downcast_ref::<String>() {
+        return s.clone();
+    }
+    if let Some(s) = payload.downcast_ref::<&'static str>() {
+        return (*s).to_string();
+    }
+    "unknown panic payload".to_string()
+}
 
 /// Contrato do tipo que vira um ghost: fornece um valor default "mockado" pra
 /// renderização inicial enquanto a resposta real não chega.
@@ -57,9 +71,11 @@ pub trait DenGhost {
 #[derive(Debug, Clone)]
 pub enum GhostError {
     /// A closure do fetch entrou em panic. `tick()` setou `loading=false` e salvou
-    /// a mensagem aqui. O template pode inspecionar via `.error()`.
+    /// a mensagem original do panic aqui (downcast de `&str`/`String`). Quando o
+    /// downcast falha, vira `"unknown panic payload"`.
     FetchPanicked(String),
-    /// O channel desconectou antes de enviar um valor (thread morreu silenciosamente).
+    /// O channel desconectou antes de enviar um valor — thread morreu sem completar
+    /// o `catch_unwind` (raro, mas possível em casos de OOM ou abort externo).
     Disconnected,
 }
 
@@ -74,7 +90,7 @@ pub enum GhostError {
 pub struct DenGhostService<T: DenGhost + Send + 'static> {
     value: T,
     pub loading: bool,
-    rx: Option<Receiver<T>>,
+    rx: Option<Receiver<Result<T, String>>>,
     error: Option<GhostError>,
 }
 
@@ -93,23 +109,20 @@ impl<T: DenGhost + Send + 'static> DenGhostService<T> {
     /// vira o novo valor no próximo `tick()` que detectar a resposta.
     ///
     /// Chamar `fetch` de novo antes de completar cancela efetivamente o anterior
-    /// (descarta o receiver). Se a closure entrar em panic, o próximo `tick()`
-    /// detecta via `TryRecvError::Disconnected` e seta `error = Some(FetchPanicked(..))`.
+    /// (descarta o receiver). Se a closure entrar em panic, o `catch_unwind`
+    /// captura o payload, extrai a mensagem original (`&str`/`String`) e envia
+    /// como `Err(msg)`; o próximo `tick()` vira isso em `FetchPanicked(msg)`.
     pub fn fetch<F>(&mut self, f: F)
     where
         F: FnOnce() -> T + Send + 'static,
     {
-        let (tx, rx) = channel();
+        let (tx, rx) = channel::<Result<T, String>>();
         std::thread::spawn(move || {
-            // Captura panic pra não silenciar: mandamos a mensagem num segundo channel?
-            // Seria complexo. Em vez disso, não enviamos nada quando panic; o receiver
-            // detecta via Disconnected no tick. A mensagem exata do panic é perdida,
-            // mas pelo menos o estado fica consistente (loading=false, error=Disconnected).
-            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
-            if let Ok(val) = result {
-                let _ = tx.send(val);
-            }
-            // Em Err(_): thread sai, tx drop, receiver vê Disconnected.
+            let payload = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)) {
+                Ok(val) => Ok(val),
+                Err(panic) => Err(panic_msg(panic)),
+            };
+            let _ = tx.send(payload);
         });
         self.rx = Some(rx);
         self.loading = true;
@@ -123,10 +136,16 @@ impl<T: DenGhost + Send + 'static> DenGhostService<T> {
             return false;
         };
         match rx.try_recv() {
-            Ok(val) => {
+            Ok(Ok(val)) => {
                 self.value = val;
                 self.loading = false;
                 self.error = None;
+                self.rx = None;
+                true
+            }
+            Ok(Err(msg)) => {
+                self.loading = false;
+                self.error = Some(GhostError::FetchPanicked(msg));
                 self.rx = None;
                 true
             }
@@ -134,12 +153,10 @@ impl<T: DenGhost + Send + 'static> DenGhostService<T> {
             Err(TryRecvError::Disconnected) => {
                 eprintln!(
                     "DenGhostService: channel desconectado sem resposta \
-                     (provável panic na closure do fetch)"
+                     (thread morreu antes de catch_unwind retornar)"
                 );
                 self.loading = false;
-                self.error = Some(GhostError::FetchPanicked(
-                    "fetch closure panicked or dropped without sending".to_string(),
-                ));
+                self.error = Some(GhostError::Disconnected);
                 self.rx = None;
                 true
             }
@@ -251,10 +268,29 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(5));
         }
         assert!(!svc.loading, "panic deve zerar loading em vez de girar pra sempre");
-        assert!(
-            matches!(svc.error(), Some(GhostError::FetchPanicked(_))),
-            "erro deve ser FetchPanicked, got {:?}",
-            svc.error()
-        );
+        match svc.error() {
+            Some(GhostError::FetchPanicked(msg)) => {
+                assert_eq!(msg, "fake panic", "mensagem original do panic deve ser preservada");
+            }
+            other => panic!("esperado FetchPanicked, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn fetch_panic_with_formatted_message_preserves_full_string() {
+        let mut svc: DenGhostService<Fake> = DenGhostService::new();
+        svc.fetch(|| -> Fake { panic!("erro {}: {}", 42, "boom") });
+        for _ in 0..400 {
+            if svc.tick() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        match svc.error() {
+            Some(GhostError::FetchPanicked(msg)) => {
+                assert_eq!(msg, "erro 42: boom");
+            }
+            other => panic!("esperado FetchPanicked com mensagem formatada, got {other:?}"),
+        }
     }
 }

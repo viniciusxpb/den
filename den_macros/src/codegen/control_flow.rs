@@ -1,17 +1,9 @@
 //! Emissão de `@for`/`@empty` e `@if`/`!`/`!` como controle de fluxo Rust em volta
 //! dos pushes de `RenderNode` na tree.
 
-use super::render_tree::{BuildCtx, emit_build_node};
+use super::render_tree::{BuildCtx, TreeSegment, emit_build_node};
 use crate::types::{DenForLoop, DenIfChain};
 use quote::quote;
-
-/// Sais no tree_path pra garantir que os hashes de `node_id` não colidam entre
-/// branches distintos do mesmo nó pai. Os valores são arbitrários — o importante
-/// é que sejam diferentes o suficiente pra serem únicos mesmo com um `for` de
-/// milhares de items.
-const EMPTY_BRANCH_SALT: usize = 10_000;
-const ELSE_BRANCH_SALT: usize = 9_000_000;
-const IF_BRANCH_SALT_STRIDE: usize = 1_000;
 
 /// `@for(var in expr) { children } @empty { empty_children }`
 /// →
@@ -47,7 +39,7 @@ pub(super) fn emit_for_loop(
     ctx.loop_depth += 1;
     let mut children_stmts = Vec::new();
     for (i, child) in fl.children.iter().enumerate() {
-        ctx.tree_path.push(i);
+        ctx.tree_path.push(TreeSegment::Child(i));
         children_stmts.push(emit_build_node(child, ctx)?);
         ctx.tree_path.pop();
     }
@@ -62,11 +54,13 @@ pub(super) fn emit_for_loop(
     }
 
     let mut empty_stmts = Vec::new();
+    ctx.tree_path.push(TreeSegment::EmptyBranch);
     for (i, child) in fl.empty_children.iter().enumerate() {
-        ctx.tree_path.push(EMPTY_BRANCH_SALT + i);
+        ctx.tree_path.push(TreeSegment::Child(i));
         empty_stmts.push(emit_build_node(child, ctx)?);
         ctx.tree_path.pop();
     }
+    ctx.tree_path.pop();
 
     Ok(quote! {
         {
@@ -104,11 +98,13 @@ pub(super) fn emit_if_chain(
             .parse()
             .map_err(|e| format!("Invalid condition '{}': {e}", branch.condition))?;
         let mut stmts = Vec::new();
+        ctx.tree_path.push(TreeSegment::IfBranch(branch_idx));
         for (i, child) in branch.children.iter().enumerate() {
-            ctx.tree_path.push(branch_idx * IF_BRANCH_SALT_STRIDE + i);
+            ctx.tree_path.push(TreeSegment::Child(i));
             stmts.push(emit_build_node(child, ctx)?);
             ctx.tree_path.pop();
         }
+        ctx.tree_path.pop();
         let keyword = if branch_idx == 0 {
             quote! { if }
         } else {
@@ -128,11 +124,13 @@ pub(super) fn emit_if_chain(
     }
 
     let mut else_stmts = Vec::new();
+    ctx.tree_path.push(TreeSegment::ElseBranch);
     for (i, child) in ic.else_children.iter().enumerate() {
-        ctx.tree_path.push(ELSE_BRANCH_SALT + i);
+        ctx.tree_path.push(TreeSegment::Child(i));
         else_stmts.push(emit_build_node(child, ctx)?);
         ctx.tree_path.pop();
     }
+    ctx.tree_path.pop();
 
     Ok(quote! {
         #( #branch_tokens )*

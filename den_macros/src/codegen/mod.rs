@@ -19,7 +19,7 @@ mod text;
 
 use crate::types::{DenNode, DenVisual};
 use quote::quote;
-use render_tree::{BuildCtx, emit_build_node};
+use render_tree::{BuildCtx, TreeSegment, emit_build_node};
 use style::paint_style_tokens;
 
 /// Gera TokenStream a partir da árvore resolvida.
@@ -37,7 +37,7 @@ pub fn generate(
 
     let mut build_stmts = Vec::new();
     for (i, node) in nodes.iter().enumerate() {
-        ctx.tree_path.push(i);
+        ctx.tree_path.push(TreeSegment::Child(i));
         build_stmts.push(emit_build_node(node, &mut ctx)?);
         ctx.tree_path.pop();
     }

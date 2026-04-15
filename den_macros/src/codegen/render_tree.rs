@@ -11,11 +11,28 @@ use super::control_flow::{emit_for_loop, emit_if_chain};
 use super::element::emit_element;
 use crate::types::DenNode;
 
+/// Posição de um nó dentro da árvore de templates, segmentada por tipo de
+/// caminho (filho posicional, branch de `@if`, branch `else`, branch `@empty`).
+/// Substitui o antigo `Vec<usize>` com salts mágicos (`EMPTY_BRANCH_SALT`, etc.).
+/// O hash de `node_id` consome `&[TreeSegment]`; basta `derive(Hash)` aqui pra
+/// que branches diferentes nunca colidam.
+#[derive(Debug, Clone, Hash)]
+pub(crate) enum TreeSegment {
+    /// Filho posicional `i` dentro de um pai (elemento, loop, branch).
+    Child(usize),
+    /// Filho dentro do branch número `i` de um `@if` chain (`@if`/`!cond`).
+    IfBranch(usize),
+    /// Filho dentro do branch `else` (`!` sem condição).
+    ElseBranch,
+    /// Filho dentro do branch `@empty` de um `@for`.
+    EmptyBranch,
+}
+
 /// Estado acumulado durante o codegen da RenderTree.
 pub(crate) struct BuildCtx<'a> {
     pub has_self: bool,
     pub template_path: &'a str,
-    pub tree_path: Vec<usize>,
+    pub tree_path: Vec<TreeSegment>,
     pub loop_depth: usize,
 
     /// Chamadas Rust registradas pra `(click)`; índice == slot.

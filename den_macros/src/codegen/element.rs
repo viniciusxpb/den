@@ -5,7 +5,7 @@
 use super::click::build_click_slot;
 use super::input::{emit_kind_tokens as emit_input_kind, emit_sync_pre as emit_input_sync};
 use super::navigation::build_goto_slot;
-use super::render_tree::{BuildCtx, emit_build_node};
+use super::render_tree::{BuildCtx, TreeSegment, emit_build_node};
 use super::style::{hover_style_tokens, layout_intent_tokens, paint_style_tokens};
 use super::text::build_text_token_stream;
 use crate::types::DenElement;
@@ -23,7 +23,7 @@ pub(super) fn emit_element(
     if el.tag == "__den_object" {
         let mut stmts = Vec::new();
         for (i, child) in el.children.iter().enumerate() {
-            ctx.tree_path.push(i);
+            ctx.tree_path.push(TreeSegment::Child(i));
             stmts.push(emit_build_node(child, ctx)?);
             ctx.tree_path.pop();
         }
@@ -46,7 +46,7 @@ pub(super) fn emit_element(
 
     let mut children_stmts = Vec::new();
     for (i, child) in el.children.iter().enumerate() {
-        ctx.tree_path.push(i);
+        ctx.tree_path.push(TreeSegment::Child(i));
         children_stmts.push(emit_build_node(child, ctx)?);
         ctx.tree_path.pop();
     }
@@ -141,7 +141,12 @@ fn emit_interact(el: &DenElement, ctx: &mut BuildCtx) -> Result<proc_macro2::Tok
 }
 
 /// Hash estável dentro de uma compilação (template + caminho + tag + classes).
-fn element_id_hash(template_path: &str, tree_path: &[usize], tag: &str, classes: &[String]) -> u64 {
+fn element_id_hash(
+    template_path: &str,
+    tree_path: &[TreeSegment],
+    tag: &str,
+    classes: &[String],
+) -> u64 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     template_path.hash(&mut hasher);
     tree_path.hash(&mut hasher);
