@@ -5,7 +5,7 @@
 //! Funções `apply_*` mutam o `StyleRule` direto pra shorthands com múltiplas
 //! propriedades (`font`, `inset`).
 
-use crate::parse::color::parse_hex_color;
+use crate::parse::color::parse_color;
 use crate::types::{
     BorderStyle, LineHeightValue, PositionKind, StyleRule, TextAlign, TextTransform, WidthValue,
 };
@@ -347,7 +347,7 @@ pub(super) fn parse_border_shorthand_parts(value: &str) -> Option<(f32, crate::t
     if style != "solid" {
         eprintln!("Den: border style '{style}' is not supported, rendering as solid");
     }
-    let color = parse_hex_color(parts[2])?;
+    let color = parse_color(parts[2])?;
     Some((width, color))
 }
 
@@ -375,7 +375,7 @@ pub(super) fn apply_border_side_width(side_index: usize, value: &str, rule: &mut
 /// Aplica `border-<side>-color: <color>` na rule existente.
 /// Como o MVP usa cor única compartilhada, o último `border-*-color` vence.
 pub(super) fn apply_border_side_color(value: &str, rule: &mut StyleRule) {
-    let Some(c) = parse_hex_color(value) else {
+    let Some(c) = parse_color(value) else {
         return;
     };
     let border = rule.border.get_or_insert_with(BorderStyle::default_zero);

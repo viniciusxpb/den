@@ -6,7 +6,7 @@
 //! - [`mod@values`] — parsers individuais (font, border, position, width, etc).
 //! - este `mod.rs` — loop principal: itera regras, dispatcha por property name.
 
-use crate::parse::color::parse_hex_color;
+use crate::parse::color::parse_color;
 use crate::types::{DisplayMode, StyleMap, StyleRule};
 
 mod lexer;
@@ -165,7 +165,7 @@ pub fn parse_scss(input: &str) -> StyleMap {
 /// virar uma busca de uma linha só.
 fn apply_property(rule: &mut StyleRule, prop_name: &str, value: &str) {
     match prop_name {
-        "color" => rule.color = parse_hex_color(value),
+        "color" => rule.color = parse_color(value),
         "font-size" => rule.font_size = parse_size_value(value),
         "font-family" => rule.font_family = parse_font_family(value),
         "font-weight" => rule.font_weight = parse_font_weight(value),
@@ -184,7 +184,7 @@ fn apply_property(rule: &mut StyleRule, prop_name: &str, value: &str) {
                 rule.strikethrough = strikethrough;
             }
         }
-        "background" => rule.background = parse_hex_color(value),
+        "background" => rule.background = parse_color(value),
         "padding" => rule.padding = parse_size_value(value),
         "margin" => rule.margin = parse_size_value(value),
         "display" if value == "flex" => rule.display = DisplayMode::Flex,
