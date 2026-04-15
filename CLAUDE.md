@@ -21,6 +21,7 @@ cargo clippy --workspace --all-targets -- -W clippy::all
 cargo fmt --check              # Verify formatting
 make dev                       # Hot reload dev mode (requires cargo-watch)
 make preview                   # Generate preview/preview.html with all pages
+make test                      # cargo test --all-targets + cargo clippy -D warnings (workspace)
 make help                      # List all makefile commands
 ```
 

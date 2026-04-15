@@ -493,10 +493,10 @@ fn convert_page_body(html: &str) -> String {
 fn convert_until(chars: &[char], pos: &mut usize, stop: Option<char>) -> String {
     let mut out = String::new();
     while *pos < chars.len() {
-        if let Some(s) = stop {
-            if chars[*pos] == s {
-                break;
-            }
+        if let Some(s) = stop
+            && chars[*pos] == s
+        {
+            break;
         }
         if is_html_comment_start(chars, *pos) {
             *pos = skip_html_comment(chars, *pos);

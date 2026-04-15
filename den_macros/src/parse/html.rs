@@ -68,10 +68,10 @@ fn parse_nodes_until(
         if *pos >= chars.len() {
             break;
         }
-        if let Some(stop) = stop_char {
-            if chars[*pos] == stop {
-                break;
-            }
+        if let Some(stop) = stop_char
+            && chars[*pos] == stop
+        {
+            break;
         }
         if *pos + 1 < chars.len() && chars[*pos] == '<' && chars[*pos + 1] == '/' {
             break;

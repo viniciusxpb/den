@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: dev preview review yoink commit push help
+.PHONY: dev preview test review yoink commit push help
 
 dev: ## Hot reload (requires cargo-watch)
 	cargo watch -w den_app/src -w den_macros/src -i den_macros/src/lib.rs \
@@ -7,6 +7,10 @@ dev: ## Hot reload (requires cargo-watch)
 
 preview: ## Gera preview/preview.html com todas as páginas
 	cargo run --bin preview
+
+test: ## Roda cargo test + clippy (deny warnings) em todo o workspace
+	cargo test --workspace --all-targets
+	cargo clippy --workspace --all-targets -- -D warnings
 
 review: ## Copia REVIEW_PROMPT.md + diff para o clipboard
 	@{ cat REVIEW_PROMPT.md; printf '\n'; git diff HEAD; } | xclip -selection clipboard

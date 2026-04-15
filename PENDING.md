@@ -28,7 +28,7 @@ Com o mesmo cruzamento HTML × SCSS da pendência acima, sai de graça a detecç
 
 ## Spans de erro apontando pro `.html` original
 
-Hoje quando um `bind="self.naem"` falha, o rustc aponta pro token dentro da expansão do `den_template!`, não pra linha:coluna do `.html`. O erro aparece, mas o dev não vê sublinhado dentro do arquivo que ele editou.
+Hoje quando um `@bind="self.naem"` falha, o rustc aponta pro token dentro da expansão do `den_template!`, não pra linha:coluna do `.html`. O erro aparece, mas o dev não vê sublinhado dentro do arquivo que ele editou.
 
 **Fix futuro**: parser HTML carrega `(line, col)` de cada atributo/texto. Codegen usa `proc_macro2::Span` customizado (ou `syn::spanned::Spanned` com mapeamento) pra que `compile_error!` aponte pro `.html`. Isso fecha o loop: IDE sublinha dentro do HTML o campo inexistente, a classe inexistente, o método inexistente.
 
@@ -39,10 +39,11 @@ Hoje quando um `bind="self.naem"` falha, o rustc aponta pro token dentro da expa
 ## Language Server / autocomplete em `.html`
 
 Extensão natural do item acima: quando o HTML tá válido e a struct da page tá acessível, o IDE pode sugerir:
-- campos da struct ao digitar `{{ self.` ou `bind="self.`
+- campos da struct ao digitar `{{ self.` ou `@bind="self.`
 - classes declaradas no `.scss` correspondente ao digitar `class="`
-- nomes de handlers disponíveis ao digitar `(click)="`
-- rotas declaradas no router ao digitar `goto="`
+- nomes de handlers disponíveis ao digitar `@click="`
+- rotas declaradas no router ao digitar `@goto="`
+- pipes built-in e custom ao digitar `| ` dentro de `{{ }}`
 
 **Decisão pendente**: implementar como LSP custom em Rust, ou começar com extensão VS Code que lê metadados emitidos pelo macro (tipo um `.den-meta.json` gerado no build com lista de classes/campos/rotas por página)? O segundo é 10× mais simples e entrega 80% do valor.
 
@@ -50,7 +51,7 @@ Extensão natural do item acima: quando o HTML tá válido e a struct da page t�
 
 ## Componentes reutilizáveis sub-página (com props)
 
-Hoje a unidade reutilizável é a **page**: `with="self.usuario"` + `goto="..."` funciona como `@Input` na fronteira de navegação. Mas dentro de uma mesma page, não dá pra ter `<StatCard label="CLICKS" value="{{ self.count }}" color="blue" />` — precisa copy-paste. [home.html:12-28](den_app/src/pages/home/home.html) tem três `stat-card` quase idênticos, é o cheiro clássico.
+Hoje a unidade reutilizável é a **page**: `@with="self.usuario"` + `@goto="..."` funciona como `@Input` na fronteira de navegação. Mas dentro de uma mesma page, não dá pra ter `<StatCard label="CLICKS" value="{{ self.count }}" color="blue" />` — precisa copy-paste. [home.html:12-28](den_app/src/pages/home/home.html) tem três `stat-card` quase idênticos, é o cheiro clássico.
 
 **Fix futuro**: mecanismo tipo `den_template!` mas sem precisar de rota — um `den_component!("components/stat_card/stat_card")` que aceita struct de props, ou macro `#[den_component]` aplicada a uma struct que ganha `.render_inline(ui, scale, props)`. Resolve por tag customizada (`<StatCard />`) ou por atributo (`<div component="StatCard" label="..." />`).
 
@@ -58,13 +59,43 @@ Hoje a unidade reutilizável é a **page**: `with="self.usuario"` + `goto="..."`
 
 ---
 
-## Click handlers com argumentos dentro de `<for>`
+## Click handlers com argumentos dentro de `@for`
 
-O renderer genérico usa tabela de slots por template: cada `(click)="f()"` vira um `Interact::click_handler: Some(slot)`, e o match de dispatch roteia `PaintEvent::Click{handler:slot} → self.f()`. Funciona pra handlers SEM args.
+O renderer genérico usa tabela de slots por template: cada `@click="f()"` vira um `Interact::click_handler: Some(slot)`, e o match de dispatch roteia `PaintEvent::Click{handler:slot} → self.f()`. Funciona pra handlers SEM args.
 
-Com args, hoje o codegen retorna erro explícito. O bloqueio: args dentro de `<for>` referenciam variáveis do escopo do loop (`user.id`, `idx`), que não existem no ponto de dispatch (fora da closure de build). O atributo `den-bind` já tá reservado no parser ([resolved.rs:214](den_macros/src/types/resolved.rs#L214), [html.rs:310](den_macros/src/parse/html.rs#L310)) justamente pra isso — auto-clone de vars do loop pro dispatch.
+Com args, hoje o codegen retorna erro explícito. O bloqueio: args dentro de `@for(...)` referenciam variáveis do escopo do loop (`user.id`, `idx`), que não existem no ponto de dispatch (fora da closure de build). O atributo `den-bind` já tá reservado no parser justamente pra isso — auto-clone de vars do loop pro dispatch.
 
 **Fix futuro**: dispatch via node_id em vez de slot. Cada nó clicável guarda sua ação como closure clonada em runtime. Alternativa: gerar uma tabela `HashMap<DenNodeId, Box<dyn FnOnce(&mut Self)>>` preenchida no build; o dispatch lê do map por node_id, e `den-bind` declara explicitamente quais vars do escopo precisam ser capturadas/clonadas.
+
+---
+
+## `tree_path: Vec<usize>` → `Vec<TreeSegment>` tipado
+
+O `tree_path` acumulado no codegen ([render_tree.rs:36](den_macros/src/codegen/render_tree.rs#L36)) entra no hash do `node_id`. Hoje é `Vec<usize>` e branches de `@if`/`@empty` dependem de salts numéricos mágicos (`EMPTY_BRANCH_SALT=10_000`, `ELSE_BRANCH_SALT=9_000_000`, `IF_BRANCH_SALT_STRIDE=1_000` em [control_flow.rs:12-14](den_macros/src/codegen/control_flow.rs#L12-L14)) pra evitar colisão entre nós em branches diferentes.
+
+**Fix futuro**: trocar por `enum TreeSegment { Child(usize), IfBranch(usize), ElseBranch, EmptyBranch, LoopIter }`. Elimina os salts mágicos, o hash fica auto-explicativo, e abre caminho pra um `DEN_DEBUG_NODE_IDS=1` que imprime `Child(0) → IfBranch(1) → Child(2)` legível.
+
+**Impacto**: só mexe no codegen (não vaza pra runtime). Constantes de salt saem; parser não muda.
+
+---
+
+## `date` pipe com formatação real
+
+`den_layout::pipes::Date` ([pipes.rs](den_layout/src/pipes.rs)) é um stub: recebe qualquer `ToString`, retorna o valor bruto, loga `eprintln!` uma vez avisando "não implementado". Doc lista `| date("dd/MM/yyyy")` como built-in, mas nada acontece de fato.
+
+**Fix futuro**: integrar com `chrono` ou `time`. Aceitar `i64` (unix timestamp), `chrono::DateTime<_>`, ou `time::OffsetDateTime`. Formato `"dd/MM/yyyy HH:mm"` via strftime-like.
+
+**Decisão pendente**: adicionar `chrono` como dep opcional (`features = ["chrono"]`) ou sempre embutir? `chrono` é pesado; `time` é mais leve. Provavelmente `time` atrás de feature.
+
+---
+
+## Preservar mensagem de panic em `DenGhostService::fetch`
+
+Quando a closure do `fetch` entra em panic, a thread captura via `catch_unwind` ([ghost.rs](den_layout/src/ghost.rs)) mas NÃO envia nada pelo channel. O receiver detecta via `Disconnected` e seta `error = FetchPanicked("fetch closure panicked or dropped without sending")`. A mensagem real do panic é perdida.
+
+**Fix futuro**: trocar o tipo do channel de `Sender<T>` pra `Sender<Result<T, String>>`. Na thread, extrair `panic_info` do `catch_unwind` Err (via downcast) e enviar `Err(msg)`. Custo: toda `tick()` precisa desempacotar `Result` (barato) e todo fetch path aceita tipo ligeiramente mais complexo.
+
+**Impacto**: melhora DX de dev sem backend. Hoje um panic no mock silencia com mensagem genérica; o fix mostra o stack real do bug.
 
 ---
 
