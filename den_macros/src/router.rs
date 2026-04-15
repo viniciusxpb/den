@@ -83,6 +83,7 @@ pub fn expand(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     };
 
     let app_pages = build_app_pages(&parsed.routes);
+    let cycle_fn = build_argless_cycle(&parsed.routes);
 
     quote! {
         #[derive(Debug, Clone)]
@@ -97,9 +98,44 @@ pub fn expand(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
             AppRoute::#initial_route
         }
 
+        #cycle_fn
+
         #app_pages
     }
     .into()
+}
+
+/// Gera `next_argless_route(current)` quando há ao menos uma rota sem args.
+/// A função cicla pelas rotas arg-less em ordem de declaração — última volta
+/// pra primeira. Rotas com args (`HelloPage { usuario }`) caem no fallback que
+/// retorna a primeira arg-less, então um F2 numa página com args "reseta" o ciclo.
+///
+/// Quando NÃO existe nenhuma rota arg-less, a função não é emitida — chamar dá
+/// erro de compilação, sinalizando que F2/quick-switcher não tem o que ciclar.
+fn build_argless_cycle(routes: &[RouteDecl]) -> TokenStream {
+    let argless: Vec<&syn::Ident> = routes
+        .iter()
+        .filter(|r| r.fields.is_empty())
+        .map(|r| &r.name)
+        .collect();
+    if argless.is_empty() {
+        return quote! {};
+    }
+    let first = argless[0];
+    let arms = argless.iter().enumerate().map(|(i, name)| {
+        let next = argless[(i + 1) % argless.len()];
+        quote! { AppRoute::#name => AppRoute::#next, }
+    });
+    quote! {
+        /// Próxima rota sem argumentos no ciclo de declaração.
+        /// Usado pelo handler de F2 (dev tool) pra alternar telas sem hardcode.
+        pub fn next_argless_route(current: &AppRoute) -> AppRoute {
+            match current {
+                #( #arms )*
+                _ => AppRoute::#first,
+            }
+        }
+    }
 }
 
 /// Gera o construtor auxiliar usado por atributos `goto`.

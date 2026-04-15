@@ -101,15 +101,14 @@ impl eframe::App for DenApp {
             active_scale = app_config::DEFAULT_SCALE;
         }
 
-        // Dev-only: F2 alterna entre NdnmPage e HomePage pra testar layout sem clicar em UI.
-        // Compilado fora em release pra não vazar pro usuário final.
-        // Remover quando o router tiver navegação in-app equivalente (quick-switcher, cmd+k, etc).
+        // Dev-only: F2 cicla entre todas as rotas sem argumentos, em ordem de
+        // declaração no `den_router!`. Boot começa em HomePage (primeira da lista),
+        // F2 vai pra próxima arg-less, e assim por diante até voltar pra Home.
+        // Rotas com args (HelloPage) ficam fora do ciclo. Compilado fora em release.
+        // Remover quando o router tiver navegação in-app equivalente (quick-switcher).
         #[cfg(debug_assertions)]
         if ctx.input(|i| i.key_pressed(egui::Key::F2)) {
-            let next = match self.router.current() {
-                AppRoute::HomePage => __den_route_NdnmPage(),
-                _ => __den_route_HomePage(),
-            };
+            let next = routes::next_argless_route(self.router.current());
             self.router.goto(next);
         }
         // Ctrl+scroll = zoom. Consumimos o delta aqui ANTES de `CentralPanel` renderizar,
