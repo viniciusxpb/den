@@ -3,13 +3,19 @@ name = "den_app"
 version = "0.1.0"
 edition = "2024"
 
+# Lib mínima que expõe configs compartilhadas entre os bins (`den_app`,
+# `preview`, `style_editor`). Todo o resto continua dentro de cada bin.
+[lib]
+name = "den_app"
+path = "src/lib.rs"
+
 [[bin]]
 name = "den_app"
 path = "src/main.rs"
 
 [[bin]]
 name = "preview"
-path = "src/bin/preview.rs"
+path = "src/bin/preview/main.rs"
 
 [[bin]]
 name = "style_editor"
@@ -23,3 +29,6 @@ env_logger = "0.11"
 # Bytes das fontes default do egui — usado pelo binário `preview` pra servir
 # `Ubuntu-Light.ttf` via @font-face e casar a renderização do browser com egui.
 epaint_default_fonts = "0.33"
+# HTTP sync usado pelo demo do GhostService no home (catfact.ninja).
+# Sync casa direto com a thread do `DenGhostService::fetch` — sem tokio/async.
+ureq = "2"

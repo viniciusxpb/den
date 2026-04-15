@@ -5,9 +5,10 @@
 //! rewrite cirúrgico no .scss. O cargo-watch detecta e recompila o app.
 //! Delay total: ~300ms debounce + ~1-2s recompilação.
 
+use den_app::app_config::MANIFEST_DIR;
 use eframe::egui;
 use std::time::Instant;
-use style_editor_config::{MANIFEST_DIR, SCAN_INTERVAL, WRITE_DELAY};
+use style_editor_config::{SCAN_INTERVAL, WRITE_DELAY};
 
 mod style_editor_config;
 

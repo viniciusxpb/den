@@ -466,6 +466,43 @@ body {
     gap: 10px;
 }
 
+// -- Async cat fact (GhostService demo) ------------------------
+
+.cat-section {
+    background: $bg-card;
+    border-radius: 10px;
+    padding: 14px;
+    border: 1px solid $border;
+    width: 100%;
+    gap: 10px;
+}
+
+.cat-card {
+    background: $bg-deep;
+    border-radius: 6px;
+    padding: 12px;
+    border: 1px solid $border-sub;
+    width: 100%;
+    gap: 8px;
+}
+
+.cat-skeleton {
+    color: $text-faint;
+    font-size: 13px;
+    font-style: italic;
+}
+
+.cat-fact {
+    color: $text-main;
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.cat-meta {
+    color: $text-faint;
+    font-size: 11px;
+}
+
 // -- Footer ----------------------------------------------------
 
 .footer {

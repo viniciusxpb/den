@@ -1,10 +1,8 @@
 //! Configuração do gerador HTML de preview.
-
-/// Largura da janela egui em pixels.
-///
-/// Deve coincidir com `app_config::WINDOW_WIDTH = 1200`; o preview é um binário
-/// separado e ainda não compartilha config de app sem um crate comum.
-pub(crate) const EGUI_WINDOW_WIDTH: u32 = 1200;
+//!
+//! Constantes aqui são EXCLUSIVAS do preview. Largura do viewport (`WINDOW_WIDTH`)
+//! e `MANIFEST_DIR` vêm de `den_app::app_config` pra evitar duplicação com o
+//! main app.
 
 /// Nome do único arquivo HTML gerado pelo preview.
 pub(crate) const PREVIEW_FILE_NAME: &str = "preview.html";

@@ -1,9 +1,9 @@
 //! Configuração do editor visual de SCSS.
+//!
+//! `MANIFEST_DIR` (path do crate) vem de `den_app::app_config` — compartilhado
+//! com o preview pra evitar duplicar `env!("CARGO_MANIFEST_DIR")`.
 
 use std::time::Duration;
-
-/// Path do pacote `den_app` em compile time.
-pub(crate) const MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
 
 /// Delay de debounce antes de escrever alterações em disco.
 pub(crate) const WRITE_DELAY: Duration = Duration::from_millis(300);

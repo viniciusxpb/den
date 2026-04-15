@@ -52,6 +52,20 @@
         </div>
     </div>
 
+    <!-- Async Cat Fact (GhostService demo) -->
+    <div class="cat-section">
+        <div class="section-label">Async cat fact (GhostService → catfact.ninja)</div>
+        <div class="cat-card">
+            @if(self.cat.loading) {
+                <div class="cat-skeleton">Carregando…</div>
+            } ! {
+                <div class="cat-fact">"{{ self.cat.fact }}"</div>
+                <div class="cat-meta">{{ self.cat.length }} chars</div>
+            }
+            <div class="btn-blue" @click="fetch_cat()">Buscar novo fato</div>
+        </div>
+    </div>
+
     <!-- Feature Cards -->
     <div class="display__flex">
         <div class="feat-card">

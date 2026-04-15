@@ -1,9 +1,23 @@
 //! Tabela flat que calcula retângulos de layout para a árvore Den.
+//!
+//! Estrutura:
+//! - este `mod.rs` — struct `LayoutTable`, entry points (`new`, `resolve`,
+//!   `resolve_in_viewport`), dispatcher `layout_children`, debug, e o helper
+//!   `layout_debug_enabled`.
+//! - [`mod@block`] — pass de layout vertical (display: block).
+//! - [`mod@flex`] — pass de layout horizontal (display: flex).
+//! - [`mod@positioned`] — segunda pass pra `position: absolute|fixed`,
+//!   com lookup de containing block.
+//!
+//! Cada submódulo adiciona métodos a `impl LayoutTable` via blocos `impl`
+//! distribuídos — Rust permite. A ordem de execução por parent é sempre:
+//! "in-flow children primeiro (block ou flex) → positioned children depois".
 
-use crate::{
-    BODY_INDEX, DimensionRule, DisplayMode, LayoutEntry, LayoutRect, PositionKind, config, flex,
-    height, margin, width,
-};
+mod block;
+mod flex;
+mod positioned;
+
+use crate::{BODY_INDEX, DimensionRule, DisplayMode, LayoutEntry, LayoutRect, config};
 use std::sync::OnceLock;
 
 /// Tabela de layout que resolve retângulos em CSS pixels.
@@ -69,7 +83,7 @@ impl LayoutTable {
     ///
     /// Positioned não afetam `auto-height` do pai nem tomam espaço dos siblings in-flow
     /// (comportamento CSS spec).
-    fn layout_children(&mut self, parent_idx: usize) {
+    pub(super) fn layout_children(&mut self, parent_idx: usize) {
         let display = self.entries[parent_idx].display;
         match display {
             // PENDING: `Grid` existe no tipo público, mas ainda usa fluxo block.
@@ -87,263 +101,11 @@ impl LayoutTable {
         }
     }
 
-    /// Encontra o containing block (CB) pra um elemento `position: absolute|fixed`.
-    ///
-    /// - `Fixed` → body (index 0), sempre.
-    /// - `Absolute` → walk up pro primeiro ancestor com `position != Static`. Se
-    ///   ninguém for positioned no caminho, cai no body (que é Relative por padrão —
-    ///   ver `RenderTree::to_layout_entries`).
-    fn containing_block_index(&self, idx: usize) -> usize {
-        if matches!(self.entries[idx].position, PositionKind::Fixed) {
-            return BODY_INDEX;
-        }
-        let mut cursor = self.entries[idx].parent;
-        while let Some(p) = cursor {
-            if self.entries[p].position.is_positioned() {
-                return p;
-            }
-            cursor = self.entries[p].parent;
-        }
-        BODY_INDEX
-    }
-
-    /// Layout de um elemento out-of-flow (absolute/fixed) contra seu containing block.
-    ///
-    /// Seguindo a spec CSS: CB pra absolute = padding box do ancestor positioned; pra
-    /// fixed = viewport (body). Offsets `top/left/right/bottom` são resolvidos contra
-    /// as dimensões do CB; percent offsets usam width (left/right) ou height (top/bottom)
-    /// do CB.
-    ///
-    /// Regras de width/height com offsets:
-    /// - `left` + `right` ambos setados e `width: auto` → stretch entre as duas bordas.
-    /// - Caso contrário: usa `width_rule` normal e ancora pela borda fornecida.
-    /// - `right` sem `left` ancora pela direita: `x = cb_right - right - width`.
-    ///
-    /// **TODO (MVP)**: `margin` é ignorado em positioned elements. Spec CSS aplica
-    /// margin entre o offset e a borda do elemento (`left: 10` + `margin-left: 5`
-    /// → content x = 15). Pra adicionar: somar margin no `x`/`y` finais e subtrair
-    /// margin total do width quando em modo stretch.
-    fn layout_positioned(&mut self, idx: usize) {
-        let cb_idx = self.containing_block_index(idx);
-        let cb_rect = self.rects[cb_idx];
-        let cb_border = self.entries[cb_idx].border_width;
-        // Padding box do CB (spec CSS): rect menos border (padding fica DENTRO).
-        let cb_x = cb_rect.x + cb_border;
-        let cb_y = cb_rect.y + cb_border;
-        let cb_w = (cb_rect.width - cb_border * 2.0).max(0.0);
-        let cb_h = (cb_rect.height - cb_border * 2.0).max(0.0);
-
-        let top = self.entries[idx].top.map(|r| resolve_offset(r, cb_h));
-        let left = self.entries[idx].left.map(|r| resolve_offset(r, cb_w));
-        let right = self.entries[idx].right.map(|r| resolve_offset(r, cb_w));
-        let bottom = self.entries[idx].bottom.map(|r| resolve_offset(r, cb_h));
-
-        // Width: left+right ambos setados e width é Auto → stretch. Caso contrário resolve normal.
-        let resolved_width = match (left, right, self.entries[idx].width_rule) {
-            (Some(l), Some(r), DimensionRule::Auto) => (cb_w - l - r).max(0.0),
-            _ => {
-                let entry = &self.entries[idx];
-                if entry.width_rule == DimensionRule::Auto {
-                    // auto sem stretch → shrink-to-fit (MVP: intrinsic ou cb_w)
-                    width::resolve_auto_leaf(entry).min(cb_w)
-                } else {
-                    width::resolve(entry, cb_w)
-                }
-            }
-        };
-        let resolved_height = match (top, bottom, self.entries[idx].height_rule) {
-            (Some(t), Some(b), DimensionRule::Auto) => (cb_h - t - b).max(0.0),
-            _ => height::resolve(&self.entries[idx], cb_h),
-        };
-
-        // Posição final com base nos anchors disponíveis.
-        let x = match (left, right) {
-            (Some(l), _) => cb_x + l,
-            (None, Some(r)) => cb_x + cb_w - r - resolved_width,
-            // Sem left nem right: CSS usa "static position" (onde o elemento estaria
-            // no flow). Simplificação: encosta no topo-esquerda do CB.
-            (None, None) => cb_x,
-        };
-        let y = match (top, bottom) {
-            (Some(t), _) => cb_y + t,
-            (None, Some(b)) => cb_y + cb_h - b - resolved_height,
-            (None, None) => cb_y,
-        };
-
-        self.sizes[idx] = Some(resolved_width);
-        self.rects[idx] = LayoutRect {
-            x,
-            y,
-            width: resolved_width,
-            height: resolved_height,
-        };
-        // Recursão: filhos do positioned (podem ser positioned eles mesmos).
-        self.layout_children(idx);
-    }
-
-    /// Resolve filhos em fluxo vertical de bloco.
-    ///
-    /// Margens uniformes são sempre reservadas; o motor ainda não implementa
-    /// colapso de margin entre blocos como browsers fazem.
-    fn layout_block_children(&mut self, parent_idx: usize) {
-        let parent_rect = self.rects[parent_idx];
-        let padding = self.entries[parent_idx].padding;
-        let border = self.entries[parent_idx].border_width;
-        let gap = self.entries[parent_idx].gap;
-        // Conteúdo começa DEPOIS do padding + border (por lado).
-        let edge = padding + border;
-        let content_x = parent_rect.x + edge;
-        let content_width = content_axis(parent_rect.width, edge);
-        let parent_content_height = height::parent_content_height_for(
-            self.entries[parent_idx].height_rule,
-            parent_idx == BODY_INDEX,
-            parent_rect.height,
-            padding,
-            border,
-        );
-        let mut cursor_y = parent_rect.y + edge;
-        let all_children = self.entries[parent_idx].children.clone();
-        // Filtra positioned do flow normal — eles são tratados em layout_positioned.
-        let in_flow: Vec<usize> = all_children
-            .iter()
-            .copied()
-            .filter(|&c| !self.entries[c].position.is_out_of_flow())
-            .collect();
-
-        if in_flow.is_empty() {
-            if self.entries[parent_idx].height_rule == DimensionRule::Auto
-                && parent_idx != BODY_INDEX
-            {
-                self.rects[parent_idx].height = self.rects[parent_idx]
-                    .height
-                    .max(height::resolve_auto_leaf(&self.entries[parent_idx]));
-            }
-            return;
-        }
-
-        for (pos, child_idx) in in_flow.iter().copied().enumerate() {
-            let margin = self.entries[child_idx].margin;
-            let child_width_context = margin::child_content_width(content_width, margin);
-            let resolved_width = width::resolve(&self.entries[child_idx], child_width_context);
-            let resolved_height = height::resolve(&self.entries[child_idx], parent_content_height);
-            self.sizes[child_idx] = Some(resolved_width);
-            self.rects[child_idx] = LayoutRect {
-                x: content_x + margin,
-                y: cursor_y + margin,
-                width: resolved_width,
-                height: resolved_height,
-            };
-            self.layout_children(child_idx);
-            cursor_y += margin::uniform_extent(margin) + self.rects[child_idx].height;
-            if pos + 1 < in_flow.len() {
-                cursor_y += gap;
-            }
-        }
-
-        if self.entries[parent_idx].height_rule == DimensionRule::Auto {
-            // Altura natural do container = children + padding*2 + border*2.
-            let content_height = cursor_y - parent_rect.y + edge;
-            if parent_idx == BODY_INDEX {
-                // Body cresce com o conteúdo mas nunca encolhe abaixo do viewport.
-                self.rects[parent_idx].height = parent_rect.height.max(content_height);
-            } else {
-                self.rects[parent_idx].height = content_height;
-            }
-        }
-    }
-
-    /// Resolve filhos em fluxo horizontal flex.
-    fn layout_flex_children(&mut self, parent_idx: usize) {
-        let parent_rect = self.rects[parent_idx];
-        let padding = self.entries[parent_idx].padding;
-        let border = self.entries[parent_idx].border_width;
-        let edge = padding + border;
-        let gap = self.entries[parent_idx].gap;
-        let content_x = parent_rect.x + edge;
-        let content_width = content_axis(parent_rect.width, edge);
-        let parent_content_height = height::parent_content_height_for(
-            self.entries[parent_idx].height_rule,
-            parent_idx == BODY_INDEX,
-            parent_rect.height,
-            padding,
-            border,
-        );
-        let all_children = self.entries[parent_idx].children.clone();
-        let in_flow: Vec<usize> = all_children
-            .iter()
-            .copied()
-            .filter(|&c| !self.entries[c].position.is_out_of_flow())
-            .collect();
-        if in_flow.is_empty() {
-            return;
-        }
-
-        let gap_total = flex::gap_total(gap, in_flow.len());
-        let margin_total: f32 = in_flow
-            .iter()
-            .map(|&child_idx| margin::uniform_extent(self.entries[child_idx].margin))
-            .sum();
-        let mut fixed_total = 0.0;
-        let mut grow_total = 0.0;
-
-        for &child_idx in &in_flow {
-            let grow = self.entries[child_idx].flex_grow;
-            let child = &self.entries[child_idx];
-            if grow > 0.0 && child.width_rule == DimensionRule::Auto {
-                grow_total += grow;
-            } else if child.width_rule == DimensionRule::Auto {
-                // Auto sem flex-grow empacota no tamanho da border-box: content + padding + border.
-                fixed_total += width::resolve_auto_leaf(child);
-            } else {
-                fixed_total += width::resolve(child, content_width);
-            }
-        }
-
-        let remaining = (content_width - fixed_total - margin_total - gap_total).max(0.0);
-        let mut cursor_x = content_x;
-        let content_y = parent_rect.y + edge;
-        let mut max_height = 0.0f32;
-
-        for (pos, child_idx) in in_flow.iter().copied().enumerate() {
-            let margin = self.entries[child_idx].margin;
-            let grow = self.entries[child_idx].flex_grow;
-            let child = &self.entries[child_idx];
-            let fixed_width = if child.width_rule == DimensionRule::Auto && grow == 0.0 {
-                width::resolve_auto_leaf(child)
-            } else {
-                width::resolve(child, content_width)
-            };
-            let resolved_width = flex::distribute_flex_width(
-                child.width_rule,
-                grow,
-                fixed_width,
-                remaining,
-                grow_total,
-            );
-            let resolved_height = height::resolve(child, parent_content_height);
-            self.sizes[child_idx] = Some(resolved_width);
-            self.rects[child_idx] = LayoutRect {
-                x: cursor_x + margin,
-                y: content_y + margin,
-                width: resolved_width,
-                height: resolved_height,
-            };
-            self.layout_children(child_idx);
-            max_height =
-                max_height.max(self.rects[child_idx].height + margin::uniform_extent(margin));
-            cursor_x += margin::uniform_extent(margin) + resolved_width;
-            if pos + 1 < in_flow.len() {
-                cursor_x += gap;
-            }
-        }
-
-        if self.entries[parent_idx].height_rule == DimensionRule::Auto && parent_idx != BODY_INDEX {
-            // Altura natural = max child height + padding*2 + border*2.
-            self.rects[parent_idx].height = max_height + edge * 2.0;
-        }
-    }
-
     /// Emite no stderr um snapshot da tabela resolvida.
+    ///
+    /// Inclui propriedades de positioning (`position`/`top`/`left`/`right`/`bottom`/`z_index`)
+    /// pra que `DEN_DEBUG_LAYOUT=1` permita verificar se elementos absolute/fixed
+    /// foram colocados no rect correto pelo CB lookup.
     pub fn debug_dump(&self, template_path: &str, labels: &[&str]) {
         eprintln!(
             "DenLayout[{template_path}]: entries={} labels={}",
@@ -354,8 +116,23 @@ impl LayoutTable {
             let label = labels.get(idx).copied().unwrap_or("<missing-label>");
             let rect = self.rects.get(idx).copied().unwrap_or_default();
             let size = self.sizes.get(idx).copied().flatten();
+            // Só imprime campos de positioning quando RELEVANTES (não-default),
+            // pra dump não virar barulho em elementos comuns (a maioria é Static).
+            let pos_str = if entry.position != crate::PositionKind::Static {
+                format!(
+                    " position={:?} top={:?} left={:?} right={:?} bottom={:?} z={:?}",
+                    entry.position,
+                    entry.top,
+                    entry.left,
+                    entry.right,
+                    entry.bottom,
+                    entry.z_index,
+                )
+            } else {
+                String::new()
+            };
             eprintln!(
-                "  [{idx}] {label} parent={:?} children={:?} display={:?} width={:?} height={:?} min_w={:?} max_w={:?} min_h={:?} max_h={:?} padding={} border={} margin={} gap={} flex_grow={} intrinsic_width={} intrinsic_height={} size={:?} rect=({}, {}, {}, {})",
+                "  [{idx}] {label} parent={:?} children={:?} display={:?} width={:?} height={:?} min_w={:?} max_w={:?} min_h={:?} max_h={:?} padding={} border={} margin={} gap={} flex_grow={} intrinsic_width={} intrinsic_height={} size={:?} rect=({}, {}, {}, {}){pos_str}",
                 entry.parent,
                 entry.children,
                 entry.display,
@@ -382,9 +159,8 @@ impl LayoutTable {
     }
 }
 
-/// Retorna se o dump de layout está habilitado no ambiente.
 /// Largura/altura de conteúdo disponível dentro de um rect: tira padding + border (2 lados).
-fn content_axis(outer: f32, edge: f32) -> f32 {
+pub(super) fn content_axis(outer: f32, edge: f32) -> f32 {
     (outer - edge * 2.0).max(0.0)
 }
 
@@ -392,7 +168,7 @@ fn content_axis(outer: f32, edge: f32) -> f32 {
 /// do containing block. `Auto` aqui é fallback defensivo — o parser converte `auto`
 /// pra `None` no `Option<DimensionRule>`, então não deveria chegar até aqui. Caso
 /// algum codegen futuro emita `Auto`, tratamos como 0 pra não falhar.
-fn resolve_offset(rule: DimensionRule, cb_extent: f32) -> f32 {
+pub(super) fn resolve_offset(rule: DimensionRule, cb_extent: f32) -> f32 {
     match rule {
         DimensionRule::Px(v) => v,
         DimensionRule::Percent(p) => p * cb_extent,
@@ -400,6 +176,7 @@ fn resolve_offset(rule: DimensionRule, cb_extent: f32) -> f32 {
     }
 }
 
+/// Retorna se o dump de layout está habilitado no ambiente.
 pub fn layout_debug_enabled() -> bool {
     static CACHED: OnceLock<bool> = OnceLock::new();
 

@@ -1,0 +1,342 @@
+//! Parsers de valores CSS individuais usados pelo `parse_scss`.
+//!
+//! Cada função aqui parseia UM tipo de valor (font-weight, line-height, width,
+//! border, position, etc) e retorna a representação tipada do `den_macros::types`.
+//! Funções `apply_*` mutam o `StyleRule` direto pra shorthands com múltiplas
+//! propriedades (`font`, `inset`).
+
+use crate::parse::color::parse_hex_color;
+use crate::types::{
+    BorderStyle, LineHeightValue, PositionKind, StyleRule, TextAlign, TextTransform, WidthValue,
+};
+
+/// Parseia tamanho Den/CSS em pixels, aceitando valor sem unidade ou `px`.
+pub(super) fn parse_size_value(value: &str) -> Option<f32> {
+    strip_important(value)
+        .trim_end_matches("px")
+        .parse::<f32>()
+        .ok()
+}
+
+/// Remove sufixo `!important` sem alocar quando presente.
+pub(super) fn strip_important(value: &str) -> &str {
+    let trimmed = value.trim();
+    const IMPORTANT: &str = "!important";
+    if trimmed.len() >= IMPORTANT.len()
+        && trimmed[trimmed.len() - IMPORTANT.len()..].eq_ignore_ascii_case(IMPORTANT)
+    {
+        trimmed[..trimmed.len() - IMPORTANT.len()].trim_end()
+    } else {
+        trimmed
+    }
+}
+
+/// Mantém a pilha de fontes exatamente como declarada em `font-family`.
+pub(super) fn parse_font_family(value: &str) -> Option<String> {
+    let value = strip_important(value).trim();
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_string())
+    }
+}
+
+/// Parseia pesos CSS convencionais para valor numérico.
+pub(super) fn parse_font_weight(value: &str) -> Option<u16> {
+    let value = strip_important(value).trim().to_ascii_lowercase();
+    match value.as_str() {
+        "normal" => Some(400),
+        "bold" | "bolder" => Some(700),
+        "lighter" => Some(300),
+        _ => value
+            .parse::<u16>()
+            .ok()
+            .map(|weight| weight.clamp(1, 1000)),
+    }
+}
+
+/// Parseia `font-style`, mapeando itálico/oblíquo para o flag usado no painter.
+pub(super) fn parse_font_style(value: &str) -> Option<bool> {
+    let value = strip_important(value).trim().to_ascii_lowercase();
+    match value.as_str() {
+        "normal" => Some(false),
+        "italic" | "oblique" => Some(true),
+        _ => None,
+    }
+}
+
+/// Parseia `line-height` como pixels absolutos ou fator multiplicador.
+pub(super) fn parse_line_height(value: &str) -> Option<LineHeightValue> {
+    let value = strip_important(value).trim();
+    if value.eq_ignore_ascii_case("normal") {
+        return None;
+    }
+    if let Some(px) = value.strip_suffix("px")
+        && let Ok(v) = px.trim().parse::<f32>()
+    {
+        return Some(LineHeightValue::Px(v));
+    }
+    if let Some(percent) = value.strip_suffix('%')
+        && let Ok(v) = percent.trim().parse::<f32>()
+    {
+        return Some(LineHeightValue::Factor(v / 100.0));
+    }
+    value.parse::<f32>().ok().map(LineHeightValue::Factor)
+}
+
+/// Parseia `letter-spacing`, tratando `normal` como zero.
+pub(super) fn parse_letter_spacing(value: &str) -> Option<f32> {
+    if strip_important(value).eq_ignore_ascii_case("normal") {
+        Some(0.0)
+    } else {
+        parse_size_value(value)
+    }
+}
+
+/// Parseia a propriedade CSS `text-transform`.
+pub(super) fn parse_text_transform(value: &str) -> Option<TextTransform> {
+    let value = strip_important(value).trim().to_ascii_lowercase();
+    match value.as_str() {
+        "none" => Some(TextTransform::None),
+        "uppercase" => Some(TextTransform::Uppercase),
+        "lowercase" => Some(TextTransform::Lowercase),
+        "capitalize" => Some(TextTransform::Capitalize),
+        _ => None,
+    }
+}
+
+/// Parseia alinhamento textual horizontal.
+pub(super) fn parse_text_align(value: &str) -> Option<TextAlign> {
+    let value = strip_important(value).trim().to_ascii_lowercase();
+    match value.as_str() {
+        "left" | "start" => Some(TextAlign::Left),
+        "center" => Some(TextAlign::Center),
+        "right" | "end" => Some(TextAlign::Right),
+        _ => None,
+    }
+}
+
+/// Parseia as linhas de decoração que o painter consegue representar.
+pub(super) fn parse_text_decoration(value: &str) -> (Option<bool>, Option<bool>) {
+    let value = strip_important(value).trim().to_ascii_lowercase();
+    if value == "none" {
+        return (Some(false), Some(false));
+    }
+    let underline = value
+        .split_whitespace()
+        .any(|part| part == "underline")
+        .then_some(true);
+    let strikethrough = value
+        .split_whitespace()
+        .any(|part| part == "line-through")
+        .then_some(true);
+    (underline, strikethrough)
+}
+
+/// Token lexical simples usado para o shorthand `font`.
+#[derive(Debug)]
+struct CssToken<'a> {
+    text: &'a str,
+    start: usize,
+}
+
+/// Aplica o shorthand `font` no subconjunto suportado pelo Den.
+pub(super) fn apply_font_shorthand(value: &str, rule: &mut StyleRule) {
+    let value = strip_important(value);
+    let tokens = css_tokens(value);
+    let Some((size_idx, size_part, inline_line_height)) = find_font_shorthand_size(&tokens) else {
+        return;
+    };
+
+    for token in &tokens[..size_idx] {
+        if let Some(italic) = parse_font_style(token.text) {
+            rule.font_italic = Some(italic);
+        } else if let Some(weight) = parse_font_weight(token.text) {
+            rule.font_weight = Some(weight);
+        }
+    }
+
+    rule.font_size = parse_size_value(size_part);
+
+    let mut family_start_idx = size_idx + 1;
+    if let Some(line_height) = inline_line_height {
+        rule.line_height = parse_line_height(line_height);
+    } else if tokens
+        .get(family_start_idx)
+        .is_some_and(|token| token.text == "/")
+        && let Some(line_height_token) = tokens.get(family_start_idx + 1)
+    {
+        rule.line_height = parse_line_height(line_height_token.text);
+        family_start_idx += 2;
+    }
+
+    if let Some(family_token) = tokens.get(family_start_idx) {
+        let family = value[family_token.start..].trim();
+        if !family.is_empty() {
+            rule.font_family = Some(family.to_string());
+        }
+    }
+}
+
+/// Encontra o token de tamanho em `font`; por segurança exige unidade `px`.
+fn find_font_shorthand_size<'a>(
+    tokens: &'a [CssToken<'a>],
+) -> Option<(usize, &'a str, Option<&'a str>)> {
+    tokens.iter().enumerate().find_map(|(idx, token)| {
+        parse_font_size_token(token.text).map(|(size, line_height)| (idx, size, line_height))
+    })
+}
+
+/// Divide `font-size` e `line-height` de tokens como `16px/1.4`.
+fn parse_font_size_token(token: &str) -> Option<(&str, Option<&str>)> {
+    let (size, line_height) = token.split_once('/').unwrap_or((token, ""));
+    if !size.trim().ends_with("px") {
+        return None;
+    }
+    parse_size_value(size)?;
+    Some((
+        size,
+        if line_height.is_empty() {
+            None
+        } else {
+            Some(line_height)
+        },
+    ))
+}
+
+/// Divide uma declaração CSS em tokens preservando strings e parênteses.
+fn css_tokens(value: &str) -> Vec<CssToken<'_>> {
+    let mut tokens = Vec::new();
+    let mut start: Option<usize> = None;
+    let mut quote: Option<char> = None;
+    let mut paren_depth = 0usize;
+
+    for (idx, ch) in value.char_indices() {
+        match quote {
+            Some(q) => {
+                if ch == q {
+                    quote = None;
+                }
+            }
+            None => match ch {
+                '"' | '\'' => quote = Some(ch),
+                '(' => paren_depth += 1,
+                ')' => paren_depth = paren_depth.saturating_sub(1),
+                _ if ch.is_ascii_whitespace() && paren_depth == 0 => {
+                    if let Some(s) = start.take() {
+                        tokens.push(CssToken {
+                            text: &value[s..idx],
+                            start: s,
+                        });
+                    }
+                    continue;
+                }
+                _ => {}
+            },
+        }
+        if start.is_none() {
+            start = Some(idx);
+        }
+    }
+
+    if let Some(s) = start {
+        tokens.push(CssToken {
+            text: &value[s..],
+            start: s,
+        });
+    }
+
+    tokens
+}
+
+/// Parseia dimensões CSS usadas em width/height e min/max.
+pub(super) fn parse_width_value(value: &str) -> WidthValue {
+    let value = strip_important(value);
+    if value == "auto" {
+        return WidthValue::Auto;
+    }
+    if let Some(pct) = value.strip_suffix('%')
+        && let Ok(v) = pct.trim().parse::<f32>()
+    {
+        return WidthValue::Percent(v / 100.0);
+    }
+    if let Some(v) = parse_size_value(value) {
+        return WidthValue::Px(v);
+    }
+    eprintln!("Den: unsupported width value '{value}', falling back to auto");
+    WidthValue::Auto
+}
+
+/// Parseia `position: static|relative|absolute|fixed|sticky`.
+/// `sticky` vira `Static` com warning (ainda não implementado).
+pub(super) fn parse_position(value: &str) -> Option<PositionKind> {
+    match strip_important(value) {
+        "static" => Some(PositionKind::Static),
+        "relative" => Some(PositionKind::Relative),
+        "absolute" => Some(PositionKind::Absolute),
+        "fixed" => Some(PositionKind::Fixed),
+        "sticky" => {
+            eprintln!("Den: `position: sticky` não é suportado ainda, caindo pra `static`");
+            Some(PositionKind::Static)
+        }
+        other => {
+            eprintln!("Den: `position: {other}` desconhecido, ignorando");
+            None
+        }
+    }
+}
+
+/// Shorthand `inset: VAL` → top/right/bottom/left = VAL.
+/// 2 valores = vertical horizontal. 3 = top horizontal bottom. 4 = top right bottom left.
+pub(super) fn apply_inset_shorthand(value: &str, rule: &mut StyleRule) {
+    let value = strip_important(value);
+    let parts: Vec<&str> = value.split_whitespace().collect();
+    let (t, r, b, l) = match parts.len() {
+        1 => (parts[0], parts[0], parts[0], parts[0]),
+        2 => (parts[0], parts[1], parts[0], parts[1]),
+        3 => (parts[0], parts[1], parts[2], parts[1]),
+        4 => (parts[0], parts[1], parts[2], parts[3]),
+        _ => {
+            eprintln!("Den: `inset: {value}` com número inválido de valores, ignorando");
+            return;
+        }
+    };
+    rule.top = parse_offset_value(t);
+    rule.right = parse_offset_value(r);
+    rule.bottom = parse_offset_value(b);
+    rule.left = parse_offset_value(l);
+}
+
+/// Parseia um offset (`top`/`left`/`right`/`bottom`).
+///
+/// Diferente de `parse_width_value`: `auto` (explícito) e valores não reconhecidos
+/// retornam `None`, não `Some(WidthValue::Auto)`. Isso impede que `auto` mascare
+/// como "0" no layout — `None` significa "anchor não fornecido", deixando o engine
+/// decidir pelo lado oposto se setado.
+pub(super) fn parse_offset_value(value: &str) -> Option<WidthValue> {
+    let trimmed = strip_important(value).trim();
+    if trimmed == "auto" {
+        return None;
+    }
+    if let Some(pct) = trimmed.strip_suffix('%')
+        && let Ok(v) = pct.trim().parse::<f32>()
+    {
+        return Some(WidthValue::Percent(v / 100.0));
+    }
+    parse_size_value(trimmed).map(WidthValue::Px)
+}
+
+/// Parseia o shorthand `border`, renderizando estilos não sólidos como sólido.
+pub(super) fn parse_border_value(value: &str) -> Option<BorderStyle> {
+    let parts: Vec<&str> = value.split_whitespace().collect();
+    if parts.len() < 3 {
+        return None;
+    }
+    let width = parse_size_value(parts[0])?;
+    let style = parts[1];
+    if style != "solid" {
+        eprintln!("Den: border style '{style}' is not supported, rendering as solid");
+    }
+    let color = parse_hex_color(parts[2])?;
+    Some(BorderStyle { width, color })
+}

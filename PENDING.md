@@ -6,6 +6,37 @@ Itens intencionalmente deixados pra depois. Apaga quando resolver.
 
 ---
 
+## `DenGhostService::tick()` automático nas pages
+
+Hoje cada page com `DenGhostService<T>` precisa chamar `self.field.tick()` manualmente em `render` ([home.rs:46](den_app/src/pages/home/home.rs#L46)) — se o dev esquece, o ghost fica `loading: true` pra sempre, sem aviso. Falha silenciosa clássica.
+
+**Fix futuro**: trait `DenPage` com `fn tick(&mut self) {}` default vazio, ou (melhor) macro `#[den_page]` que escaneia campos `DenGhostService<_>` da struct e gera o tick automático no início do `render`. Combina com a filosofia "convention over configuration".
+
+**Impacto**: zero boilerplate por page; impossível esquecer.
+
+---
+
+## `DenGhostService::fetch` deveria aceitar `Result<T, E>` em vez de `T`
+
+Hoje a closure de `fetch` retorna `T`. Pra surgir um erro de HTTP/parse, o demo do home grava a mensagem DENTRO do field do model ([home.rs:73-78](den_app/src/pages/home/home.rs#L73-L78)) — `CatFact { fact: "(falha no fetch: …)" }`. Funciona porque `loading` vira `false` e a UI mostra o texto, mas é semanticamente errado: erro de fetch deveria ser separado do dado bem-sucedido.
+
+`GhostError::FetchPanicked` JÁ existe pro caso de panic, mas erros de aplicação (HTTP 500, JSON inválido) hoje só conseguem ser surfaceados injetando a mensagem no próprio `T`.
+
+**Fix futuro**: `fetch<F: FnOnce() -> Result<T, String>>` em vez de `FnOnce() -> T`. `tick()` distingue `Ok` (vira valor real) de `Err` (vira `GhostError::FetchFailed(msg)`). Template pode então fazer `@if(self.cat.error()) { ... } !if(self.cat.loading) { ... } ! { ... }`.
+
+---
+
+## JSON parsing manual no demo de cat fact
+
+[home.rs](den_app/src/pages/home/home.rs) tem `extract_string_field`/`extract_number_field` baseado em `find()`. Funciona pro schema `{"fact":"...","length":N}` mas é frágil:
+- Não decoda escapes (`\"`, `\n`, `\u00e1`).
+- Se o JSON tiver `"fact"` numa key aninhada antes do top-level, pega o errado.
+- Não trata float, exponential, null.
+
+Fiz manual pra evitar dep de `serde_json` só por dois campos. **Fix futuro**: adicionar `serde_json` quando aparecer a segunda API que precise parse JSON.
+
+---
+
 ## Validação compile-time de classes CSS
 
 Hoje, `class="naem-errado"` em HTML simplesmente não aplica estilo nenhum em runtime — falha silenciosa, o bug #1 de todo dev front. O parser já tem acesso ao HTML e ao SCSS na mesma fase de macro ([resolve.rs:48-50](den_macros/src/resolve.rs)), só que o match por classe hoje ignora sem erro quando a classe não existe no StyleMap.

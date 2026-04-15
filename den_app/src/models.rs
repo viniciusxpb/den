@@ -28,3 +28,18 @@ impl Usuario {
         }
     }
 }
+
+/// Cat fact da API pública `https://catfact.ninja/fact` — primeiro consumer
+/// real do `GhostService`.
+///
+/// O `#[ghost("...")]` injeta um fato fake no boot pra que a UI tenha
+/// conteúdo no primeiro frame, antes do request HTTP completar. Quando o
+/// `fetch` retorna, o ghost é substituído pelo fato real. Ver
+/// `HomePage::fetch_cat` pro lado HTTP.
+#[derive(Debug, Clone, DenGhost)]
+pub struct CatFact {
+    #[ghost("Cats sleep 70% of their lives.")]
+    pub fact: String,
+    #[ghost(40)]
+    pub length: u32,
+}

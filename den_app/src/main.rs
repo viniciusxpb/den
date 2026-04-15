@@ -1,12 +1,12 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod app_config;
 pub mod den_paint;
 mod models;
 mod pages;
 mod paint_config;
 mod routes;
 
+use den_app::app_config;
 use den_layout::DenRouter;
 use eframe::egui;
 
