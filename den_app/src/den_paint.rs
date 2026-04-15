@@ -226,7 +226,12 @@ fn paint_node(
 
     // Filhos primeiro, depois eventos — garante que o clique no pai vença ordem
     // visual de desenho (filhos por cima), mas eventos de filho já estão na lista.
-    for &child_idx in &node.children {
+    //
+    // Ordem CSS-spec simplificada: in-flow primeiro (tree order), depois positioned
+    // ordenados por z-index ascendente (default 0; ties por tree order). Cobre os
+    // casos comuns de overlay (ports sobre node, modal sobre canvas) sem implementar
+    // stacking contexts completos.
+    for child_idx in paint_order(tree, &node.children) {
         paint_node(ui, scale, origin, tree, layout, state, child_idx, events);
     }
 
@@ -245,6 +250,28 @@ fn scaled_rect(r: LayoutRect, origin: Pos2, scale: f32) -> Rect {
         origin + Vec2::new(r.x * scale, r.y * scale),
         Vec2::new(r.width * scale, r.height * scale),
     )
+}
+
+/// Devolve os índices de filhos na ordem de paint:
+/// 1. In-flow (não-positioned + relative) na ordem da tree.
+/// 2. Positioned (`absolute`/`fixed`) ordenados por `z-index` ascendente; ties por tree order.
+///
+/// Mantém ordem da tree como tiebreak pra paint determinístico.
+fn paint_order(tree: &RenderTree, children: &[usize]) -> Vec<usize> {
+    let mut in_flow: Vec<usize> = Vec::with_capacity(children.len());
+    let mut positioned: Vec<(i32, usize, usize)> = Vec::new(); // (z, tree_pos, idx)
+    for (tree_pos, &child_idx) in children.iter().enumerate() {
+        let pos = tree.nodes[child_idx].layout.position;
+        if pos.is_out_of_flow() {
+            let z = tree.nodes[child_idx].layout.z_index.unwrap_or(0);
+            positioned.push((z, tree_pos, child_idx));
+        } else {
+            in_flow.push(child_idx);
+        }
+    }
+    positioned.sort_by_key(|&(z, tree_pos, _)| (z, tree_pos));
+    in_flow.extend(positioned.into_iter().map(|(_, _, idx)| idx));
+    in_flow
 }
 
 /// Pinta o fundo do nó, respeitando border_radius.
@@ -720,7 +747,7 @@ fn rgb_to_color(rgb: Rgb) -> Color32 {
 mod tests {
     use super::{
         apply_text_transform, clamp_char_boundary, css_font_family_stack, next_char_boundary,
-        prev_char_boundary,
+        paint_order, prev_char_boundary,
     };
     use den_layout::TextTransform;
 
@@ -758,5 +785,105 @@ mod tests {
             apply_text_transform("olá den", TextTransform::Capitalize),
             "Olá Den"
         );
+    }
+
+    // ---- paint_order: in-flow first, then positioned by z-index ----
+
+    use den_layout::{
+        DenNodeId, Interact, LayoutIntent, PaintStyle, PositionKind, RenderKind, RenderNode,
+        RenderTree,
+    };
+
+    fn child(idx: u64, position: PositionKind, z_index: Option<i32>) -> RenderNode {
+        let mut node = RenderNode::new(DenNodeId::new(idx), idx as usize, RenderKind::Container);
+        node.layout = LayoutIntent {
+            position,
+            z_index,
+            ..LayoutIntent::default()
+        };
+        node.style = PaintStyle::default();
+        node.interact = Interact::default();
+        node
+    }
+
+    fn tree_with_children(children: Vec<RenderNode>) -> RenderTree {
+        let mut tree = RenderTree::new();
+        for c in children {
+            tree.push(c);
+        }
+        tree
+    }
+
+    #[test]
+    fn paint_order_keeps_inflow_before_positioned() {
+        // tree-order: [absolute, static, absolute, static]
+        // expected:    [static, static, absolute, absolute] (preservando ordem da tree em cada grupo)
+        let tree = tree_with_children(vec![
+            child(1, PositionKind::Absolute, None),
+            child(2, PositionKind::Static, None),
+            child(3, PositionKind::Absolute, None),
+            child(4, PositionKind::Static, None),
+        ]);
+        let order = paint_order(&tree, &[0, 1, 2, 3]);
+        assert_eq!(order, vec![1, 3, 0, 2]);
+    }
+
+    #[test]
+    fn paint_order_sorts_positioned_by_z_index_ascending() {
+        // tree-order: z=5, z=1, z=3 → expected paint: z=1, z=3, z=5
+        let tree = tree_with_children(vec![
+            child(1, PositionKind::Absolute, Some(5)),
+            child(2, PositionKind::Absolute, Some(1)),
+            child(3, PositionKind::Absolute, Some(3)),
+        ]);
+        let order = paint_order(&tree, &[0, 1, 2]);
+        assert_eq!(order, vec![1, 2, 0]);
+    }
+
+    #[test]
+    fn paint_order_default_z_index_is_zero() {
+        // z=None equivale a z=0; ties por tree order.
+        let tree = tree_with_children(vec![
+            child(1, PositionKind::Absolute, Some(-1)),
+            child(2, PositionKind::Absolute, None), // z=0
+            child(3, PositionKind::Absolute, Some(1)),
+        ]);
+        let order = paint_order(&tree, &[0, 1, 2]);
+        assert_eq!(order, vec![0, 1, 2]);
+    }
+
+    #[test]
+    fn paint_order_z_index_ties_break_by_tree_order() {
+        // dois com z=2: ordem da tree (idx 0, idx 2) vence.
+        let tree = tree_with_children(vec![
+            child(1, PositionKind::Absolute, Some(2)),
+            child(2, PositionKind::Absolute, Some(5)),
+            child(3, PositionKind::Absolute, Some(2)),
+        ]);
+        let order = paint_order(&tree, &[0, 1, 2]);
+        assert_eq!(order, vec![0, 2, 1]);
+    }
+
+    #[test]
+    fn paint_order_relative_treats_as_inflow() {
+        // Relative NÃO é out_of_flow — pinta junto com static, antes de absolute/fixed.
+        let tree = tree_with_children(vec![
+            child(1, PositionKind::Relative, None),
+            child(2, PositionKind::Absolute, None),
+            child(3, PositionKind::Static, None),
+        ]);
+        let order = paint_order(&tree, &[0, 1, 2]);
+        assert_eq!(order, vec![0, 2, 1]);
+    }
+
+    #[test]
+    fn paint_order_fixed_orders_with_absolute() {
+        // Fixed e absolute compartilham a mesma camada de paint (ambos out_of_flow).
+        let tree = tree_with_children(vec![
+            child(1, PositionKind::Fixed, Some(10)),
+            child(2, PositionKind::Absolute, Some(1)),
+        ]);
+        let order = paint_order(&tree, &[0, 1]);
+        assert_eq!(order, vec![1, 0]);
     }
 }

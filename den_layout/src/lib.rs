@@ -21,7 +21,7 @@ mod state;
 mod table;
 mod width;
 
-pub use dimension::DimensionRule;
+pub use dimension::{DimensionRule, PositionKind};
 pub use ghost::{DenGhost, DenGhostService};
 pub use pipes::Pipe;
 pub use display::DisplayMode;

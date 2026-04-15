@@ -35,6 +35,31 @@ pub enum WidthValue {
     Px(f32),
 }
 
+/// Esquema de posicionamento CSS `position: ...`.
+///
+/// - `Static` (default): flow normal, ignora `top/left/right/bottom`.
+/// - `Relative`: flow normal, mas vira containing block pros filhos absolute.
+/// - `Absolute`: fora de flow, posicionado contra o nearest positioned ancestor (ou body).
+/// - `Fixed`: fora de flow, posicionado contra o viewport (body root).
+///
+/// `sticky` ainda não é suportado; é aceito pelo parser mas cai em `Static` com warning.
+///
+/// **ESPELHO**: este enum é gêmeo de [`den_layout::PositionKind`]. Adicionar/remover
+/// variante aqui exige atualizar o do `den_layout` E o `position_tokens` em
+/// `codegen/style.rs` que faz a tradução. Ao contrário, usar uma variante do
+/// macro que não existe no runtime compila mas quebra silenciosamente. Os crates
+/// não compartilham types porque `den_macros` é proc-macro (não pode depender
+/// de um crate runtime) — extrair `den_common` resolveria, mas é trabalho separado
+/// (ver PENDING.md "Extração pra `den_core`").
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum PositionKind {
+    #[default]
+    Static,
+    Relative,
+    Absolute,
+    Fixed,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum LineHeightValue {
     Px(f32),
@@ -90,6 +115,23 @@ pub struct StyleRule {
     pub cursor_pointer: bool,
     /// `flex: 1` / `flex-grow: 1` — elemento cresce pra preencher o share do flex pai.
     pub flex_grow: bool,
+    /// Esquema de posicionamento. `None` = não declarado em nenhuma regra que
+    /// se aplica; o codegen colapsa pra `Static` na hora de emitir o `LayoutIntent`.
+    /// Manter como `Option` permite que `position: static` explícito num seletor
+    /// mais específico cancele um `position: absolute` herdado de classe anterior
+    /// — coisa que `PositionKind::Static` direto não distingue do default.
+    pub position: Option<PositionKind>,
+    /// Offset do top do containing block (só aplicado se positioned).
+    pub top: Option<WidthValue>,
+    /// Offset do left do containing block.
+    pub left: Option<WidthValue>,
+    /// Offset do right do containing block.
+    pub right: Option<WidthValue>,
+    /// Offset do bottom do containing block.
+    pub bottom: Option<WidthValue>,
+    /// `z-index` — ordenação de pintura entre elementos positioned do mesmo pai.
+    /// Só tem efeito em positioned; ignorado em static.
+    pub z_index: Option<i32>,
     pub hover: Option<Box<StyleRule>>,
 }
 
@@ -173,6 +215,24 @@ impl StyleRule {
         }
         if other.flex_grow {
             self.flex_grow = true;
+        }
+        if other.position.is_some() {
+            self.position = other.position;
+        }
+        if other.top.is_some() {
+            self.top = other.top;
+        }
+        if other.left.is_some() {
+            self.left = other.left;
+        }
+        if other.right.is_some() {
+            self.right = other.right;
+        }
+        if other.bottom.is_some() {
+            self.bottom = other.bottom;
+        }
+        if other.z_index.is_some() {
+            self.z_index = other.z_index;
         }
         if other.hover.is_some() {
             self.hover = other.hover.clone();

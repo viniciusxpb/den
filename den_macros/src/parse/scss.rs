@@ -2,8 +2,8 @@
 
 use super::color::parse_hex_color;
 use crate::types::{
-    BorderStyle, DisplayMode, LineHeightValue, StyleMap, StyleRule, TextAlign, TextTransform,
-    WidthValue,
+    BorderStyle, DisplayMode, LineHeightValue, PositionKind, StyleMap, StyleRule, TextAlign,
+    TextTransform, WidthValue,
 };
 use std::collections::HashMap;
 
@@ -155,6 +155,21 @@ pub fn parse_scss(input: &str) -> StyleMap {
                 "cursor" if value == "pointer" => rule.cursor_pointer = true,
                 "flex" if value == "1" => rule.flex_grow = true,
                 "flex-grow" if value == "1" => rule.flex_grow = true,
+                "position" => {
+                    if let Some(pos) = parse_position(value) {
+                        rule.position = Some(pos);
+                    }
+                }
+                "top" => rule.top = parse_offset_value(value),
+                "left" => rule.left = parse_offset_value(value),
+                "right" => rule.right = parse_offset_value(value),
+                "bottom" => rule.bottom = parse_offset_value(value),
+                "z-index" => {
+                    if let Ok(n) = value.trim().parse::<i32>() {
+                        rule.z_index = Some(n);
+                    }
+                }
+                "inset" => apply_inset_shorthand(value, &mut rule),
                 _ => {}
             }
         }
@@ -493,6 +508,65 @@ fn parse_width_value(value: &str) -> WidthValue {
     WidthValue::Auto
 }
 
+/// Parseia `position: static|relative|absolute|fixed|sticky`.
+/// `sticky` vira `Static` com warning (ainda não implementado).
+fn parse_position(value: &str) -> Option<PositionKind> {
+    match strip_important(value) {
+        "static" => Some(PositionKind::Static),
+        "relative" => Some(PositionKind::Relative),
+        "absolute" => Some(PositionKind::Absolute),
+        "fixed" => Some(PositionKind::Fixed),
+        "sticky" => {
+            eprintln!("Den: `position: sticky` não é suportado ainda, caindo pra `static`");
+            Some(PositionKind::Static)
+        }
+        other => {
+            eprintln!("Den: `position: {other}` desconhecido, ignorando");
+            None
+        }
+    }
+}
+
+/// Shorthand `inset: VAL` → top/right/bottom/left = VAL.
+/// 2 valores = vertical horizontal. 3 = top horizontal bottom. 4 = top right bottom left.
+fn apply_inset_shorthand(value: &str, rule: &mut StyleRule) {
+    let value = strip_important(value);
+    let parts: Vec<&str> = value.split_whitespace().collect();
+    let (t, r, b, l) = match parts.len() {
+        1 => (parts[0], parts[0], parts[0], parts[0]),
+        2 => (parts[0], parts[1], parts[0], parts[1]),
+        3 => (parts[0], parts[1], parts[2], parts[1]),
+        4 => (parts[0], parts[1], parts[2], parts[3]),
+        _ => {
+            eprintln!("Den: `inset: {value}` com número inválido de valores, ignorando");
+            return;
+        }
+    };
+    rule.top = parse_offset_value(t);
+    rule.right = parse_offset_value(r);
+    rule.bottom = parse_offset_value(b);
+    rule.left = parse_offset_value(l);
+}
+
+/// Parseia um offset (`top`/`left`/`right`/`bottom`).
+///
+/// Diferente de `parse_width_value`: `auto` (explícito) e valores não reconhecidos
+/// retornam `None`, não `Some(WidthValue::Auto)`. Isso impede que `auto` mascare
+/// como "0" no layout — `None` significa "anchor não fornecido", deixando o engine
+/// decidir pelo lado oposto se setado.
+fn parse_offset_value(value: &str) -> Option<WidthValue> {
+    let trimmed = strip_important(value).trim();
+    if trimmed == "auto" {
+        return None;
+    }
+    if let Some(pct) = trimmed.strip_suffix('%')
+        && let Ok(v) = pct.trim().parse::<f32>()
+    {
+        return Some(WidthValue::Percent(v / 100.0));
+    }
+    parse_size_value(trimmed).map(WidthValue::Px)
+}
+
 /// Parseia o shorthand `border`, renderizando estilos não sólidos como sólido.
 fn parse_border_value(value: &str) -> Option<BorderStyle> {
     let parts: Vec<&str> = value.split_whitespace().collect();
@@ -580,7 +654,9 @@ fn read_css_identifier(bytes: &[u8], pos: &mut usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::parse_scss;
-    use crate::types::{LineHeightValue, TextAlign, TextTransform};
+    use crate::types::{
+        LineHeightValue, PositionKind, StyleRule, TextAlign, TextTransform, WidthValue,
+    };
 
     #[test]
     fn line_comment_inside_rule_is_ignored() {
@@ -728,5 +804,157 @@ mod tests {
         let label = styles.get("label").expect("label style");
         assert_eq!(label.font_size, None);
         assert_eq!(label.font_family, None);
+    }
+
+    // ---- position / inset / z-index ----
+
+    #[test]
+    fn parses_position_absolute() {
+        let s = parse_scss(".n { position: absolute; }");
+        assert_eq!(s.get("n").unwrap().position, Some(PositionKind::Absolute));
+    }
+
+    #[test]
+    fn parses_position_relative_fixed_static() {
+        let s = parse_scss(
+            r#"
+            .a { position: relative; }
+            .b { position: fixed; }
+            .c { position: static; }
+            "#,
+        );
+        assert_eq!(s.get("a").unwrap().position, Some(PositionKind::Relative));
+        assert_eq!(s.get("b").unwrap().position, Some(PositionKind::Fixed));
+        assert_eq!(s.get("c").unwrap().position, Some(PositionKind::Static));
+    }
+
+    #[test]
+    fn unknown_position_value_is_ignored() {
+        let s = parse_scss(".n { position: banana; }");
+        // Valor inválido → propriedade fica None (não decisiva).
+        assert_eq!(s.get("n").unwrap().position, None);
+    }
+
+    #[test]
+    fn position_sticky_fallback_to_static() {
+        let s = parse_scss(".n { position: sticky; }");
+        // Sticky cai pra Static com warning (printado no eprintln).
+        assert_eq!(s.get("n").unwrap().position, Some(PositionKind::Static));
+    }
+
+    #[test]
+    fn parses_individual_offsets() {
+        let s = parse_scss(
+            r#".n {
+                top: 10px;
+                left: 50%;
+                right: -6px;
+                bottom: 0;
+            }"#,
+        );
+        let n = s.get("n").unwrap();
+        assert_eq!(n.top, Some(WidthValue::Px(10.0)));
+        assert_eq!(n.left, Some(WidthValue::Percent(0.5)));
+        assert_eq!(n.right, Some(WidthValue::Px(-6.0)));
+        assert_eq!(n.bottom, Some(WidthValue::Px(0.0)));
+    }
+
+    #[test]
+    fn offset_auto_resolves_to_none() {
+        // Per spec, `top: auto` num positioned não-anchor — engine deve ignorar
+        // (e ancorar pelo `bottom`). Parser converte pra None pra impedir que
+        // chegue como `Some(Auto)` no layout (que trataria como 0).
+        let s = parse_scss(".n { top: auto; left: 10px; }");
+        let n = s.get("n").unwrap();
+        assert_eq!(n.top, None);
+        assert_eq!(n.left, Some(WidthValue::Px(10.0)));
+    }
+
+    #[test]
+    fn parses_z_index() {
+        let s = parse_scss(".n { z-index: 5; }");
+        assert_eq!(s.get("n").unwrap().z_index, Some(5));
+    }
+
+    #[test]
+    fn parses_negative_z_index() {
+        let s = parse_scss(".n { z-index: -1; }");
+        assert_eq!(s.get("n").unwrap().z_index, Some(-1));
+    }
+
+    #[test]
+    fn invalid_z_index_is_ignored() {
+        let s = parse_scss(".n { z-index: auto; }");
+        assert_eq!(s.get("n").unwrap().z_index, None);
+    }
+
+    #[test]
+    fn inset_shorthand_one_value() {
+        let s = parse_scss(".n { inset: 10px; }");
+        let n = s.get("n").unwrap();
+        assert_eq!(n.top, Some(WidthValue::Px(10.0)));
+        assert_eq!(n.right, Some(WidthValue::Px(10.0)));
+        assert_eq!(n.bottom, Some(WidthValue::Px(10.0)));
+        assert_eq!(n.left, Some(WidthValue::Px(10.0)));
+    }
+
+    #[test]
+    fn inset_shorthand_two_values() {
+        // `inset: V H` → top=bottom=V, right=left=H
+        let s = parse_scss(".n { inset: 5px 20px; }");
+        let n = s.get("n").unwrap();
+        assert_eq!(n.top, Some(WidthValue::Px(5.0)));
+        assert_eq!(n.bottom, Some(WidthValue::Px(5.0)));
+        assert_eq!(n.right, Some(WidthValue::Px(20.0)));
+        assert_eq!(n.left, Some(WidthValue::Px(20.0)));
+    }
+
+    #[test]
+    fn inset_shorthand_four_values_clockwise() {
+        // `inset: T R B L` (TRBL clockwise)
+        let s = parse_scss(".n { inset: 1px 2px 3px 4px; }");
+        let n = s.get("n").unwrap();
+        assert_eq!(n.top, Some(WidthValue::Px(1.0)));
+        assert_eq!(n.right, Some(WidthValue::Px(2.0)));
+        assert_eq!(n.bottom, Some(WidthValue::Px(3.0)));
+        assert_eq!(n.left, Some(WidthValue::Px(4.0)));
+    }
+
+    #[test]
+    fn inset_zero_works() {
+        // Caso comum: overlay full-screen via `inset: 0`.
+        let s = parse_scss(".overlay { position: fixed; inset: 0; }");
+        let n = s.get("overlay").unwrap();
+        assert_eq!(n.top, Some(WidthValue::Px(0.0)));
+        assert_eq!(n.left, Some(WidthValue::Px(0.0)));
+    }
+
+    #[test]
+    fn merge_position_static_overrides_absolute() {
+        // Cenário do code review item 9: classe mais específica seta `static`
+        // pra cancelar `absolute` herdado de classe anterior. `Option`-based
+        // merge respeita isso; antes (com `if != Static`) silenciava o reset.
+        let mut a = StyleRule {
+            position: Some(PositionKind::Absolute),
+            ..Default::default()
+        };
+        let b = StyleRule {
+            position: Some(PositionKind::Static),
+            ..Default::default()
+        };
+        a.merge_from(&b);
+        assert_eq!(a.position, Some(PositionKind::Static));
+    }
+
+    #[test]
+    fn merge_position_none_does_not_overwrite() {
+        // Classe sem position declarada não pode anular um absolute herdado.
+        let mut a = StyleRule {
+            position: Some(PositionKind::Absolute),
+            ..Default::default()
+        };
+        let b = StyleRule::default(); // position = None
+        a.merge_from(&b);
+        assert_eq!(a.position, Some(PositionKind::Absolute));
     }
 }

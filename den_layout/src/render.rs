@@ -150,6 +150,18 @@ pub struct LayoutIntent {
     pub intrinsic_width: f32,
     /// Altura do CONTEÚDO próprio, sem padding e sem border.
     pub intrinsic_height: f32,
+    /// Esquema de posicionamento — afeta se o elemento entra no flow normal.
+    pub position: crate::PositionKind,
+    /// Offset vertical do topo do containing block (só aplicado se positioned).
+    pub top: Option<DimensionRule>,
+    /// Offset horizontal da borda esquerda do containing block.
+    pub left: Option<DimensionRule>,
+    /// Offset horizontal da borda direita do containing block.
+    pub right: Option<DimensionRule>,
+    /// Offset vertical do bottom do containing block.
+    pub bottom: Option<DimensionRule>,
+    /// Ordem de paint entre positioned siblings. `None` = 0 (default CSS `auto`).
+    pub z_index: Option<i32>,
 }
 
 impl Default for LayoutIntent {
@@ -169,6 +181,12 @@ impl Default for LayoutIntent {
             flex_grow: 0.0,
             intrinsic_width: 0.0,
             intrinsic_height: 0.0,
+            position: crate::PositionKind::Static,
+            top: None,
+            left: None,
+            right: None,
+            bottom: None,
+            z_index: None,
         }
     }
 }
@@ -266,7 +284,8 @@ impl RenderTree {
     pub fn to_layout_entries(&self) -> Vec<LayoutEntry> {
         let mut entries = Vec::with_capacity(self.nodes.len() + 1);
 
-        // Body em 0. Seus children são os layout_index dos roots.
+        // Body em 0. Body é sempre `position: relative` implicitamente pra servir de
+        // containing block default pros `position: absolute` sem positioned ancestor.
         entries.push(LayoutEntry {
             parent: None,
             children: self
@@ -288,6 +307,12 @@ impl RenderTree {
             flex_grow: 0.0,
             intrinsic_width: 0.0,
             intrinsic_height: 0.0,
+            position: crate::PositionKind::Relative,
+            top: None,
+            left: None,
+            right: None,
+            bottom: None,
+            z_index: None,
         });
 
         // Prepara entradas por nó (sem parent ainda).
@@ -314,6 +339,12 @@ impl RenderTree {
                 flex_grow: l.flex_grow,
                 intrinsic_width: l.intrinsic_width,
                 intrinsic_height: l.intrinsic_height,
+                position: l.position,
+                top: l.top,
+                left: l.left,
+                right: l.right,
+                bottom: l.bottom,
+                z_index: l.z_index,
             });
         }
 

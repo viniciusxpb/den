@@ -101,6 +101,15 @@ pub(super) fn layout_intent_tokens(el: &DenElement) -> proc_macro2::TokenStream 
     let flex_grow: f32 = if has_flex_grow(el) { 1.0 } else { 0.0 };
     let intrinsic_width = intrinsic_width_for(el);
     let intrinsic_height = intrinsic_height_for(el);
+    let position = position_tokens(visual.position);
+    let top = optional_dimension_tokens(visual.top);
+    let left = optional_dimension_tokens(visual.left);
+    let right = optional_dimension_tokens(visual.right);
+    let bottom = optional_dimension_tokens(visual.bottom);
+    let z_index = match visual.z_index {
+        Some(z) => quote! { Some(#z) },
+        None => quote! { None },
+    };
 
     quote! {
         den_layout::LayoutIntent {
@@ -118,7 +127,23 @@ pub(super) fn layout_intent_tokens(el: &DenElement) -> proc_macro2::TokenStream 
             flex_grow: #flex_grow as f32,
             intrinsic_width: #intrinsic_width as f32,
             intrinsic_height: #intrinsic_height as f32,
+            position: #position,
+            top: #top,
+            left: #left,
+            right: #right,
+            bottom: #bottom,
+            z_index: #z_index,
         }
+    }
+}
+
+fn position_tokens(p: crate::types::PositionKind) -> proc_macro2::TokenStream {
+    use crate::types::PositionKind;
+    match p {
+        PositionKind::Static => quote! { den_layout::PositionKind::Static },
+        PositionKind::Relative => quote! { den_layout::PositionKind::Relative },
+        PositionKind::Absolute => quote! { den_layout::PositionKind::Absolute },
+        PositionKind::Fixed => quote! { den_layout::PositionKind::Fixed },
     }
 }
 

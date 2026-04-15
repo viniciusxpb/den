@@ -5,7 +5,7 @@
 //! que as funções de regra (`width::resolve`, `height::resolve`, etc.)
 //! saibam tudo que precisam só olhando pra entry e pro pai.
 
-use crate::{DimensionRule, DisplayMode};
+use crate::{DimensionRule, DisplayMode, PositionKind};
 
 /// Uma entrada na flat list de layout.
 #[derive(Debug, Clone, Default)]
@@ -44,4 +44,17 @@ pub struct LayoutEntry {
     pub intrinsic_width: f32,
     /// Altura do CONTEÚDO próprio em CSS pixels. Sem padding, sem border.
     pub intrinsic_height: f32,
+    /// Esquema de posicionamento CSS — afeta se o elemento entra no flow normal.
+    pub position: PositionKind,
+    /// Offset vertical do topo do containing block. `None` = não declarado (deixa
+    /// o engine decidir, normalmente ancorando pelo `bottom` se setado).
+    pub top: Option<DimensionRule>,
+    /// Offset horizontal da borda esquerda do containing block. `None` = não declarado.
+    pub left: Option<DimensionRule>,
+    /// Offset horizontal da borda direita do containing block. `None` = não declarado.
+    pub right: Option<DimensionRule>,
+    /// Offset vertical do bottom do containing block. `None` = não declarado.
+    pub bottom: Option<DimensionRule>,
+    /// Ordem de paint entre positioned siblings. `None` = 0 (default CSS `auto`).
+    pub z_index: Option<i32>,
 }

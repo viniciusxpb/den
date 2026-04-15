@@ -36,6 +36,15 @@ pub struct DenVisual {
     pub cursor_pointer: bool,
     /// `flex: 1` — cresce pra preencher o share do flex pai igualmente.
     pub flex_grow: bool,
+    /// Esquema de posicionamento CSS.
+    pub position: PositionKind,
+    /// Offsets do containing block (só aplicados se `position != Static`).
+    pub top: Option<WidthValue>,
+    pub left: Option<WidthValue>,
+    pub right: Option<WidthValue>,
+    pub bottom: Option<WidthValue>,
+    /// `z-index` — ordena paint entre positioned siblings. `None` = auto (= 0).
+    pub z_index: Option<i32>,
     /// Visual override quando hover. None = sem hover behavior.
     pub hover_override: Option<Box<DenVisual>>,
 }
@@ -70,6 +79,12 @@ impl DenVisual {
             gap: rule.gap,
             cursor_pointer: rule.cursor_pointer,
             flex_grow: rule.flex_grow,
+            position: rule.position.unwrap_or_default(),
+            top: rule.top,
+            left: rule.left,
+            right: rule.right,
+            bottom: rule.bottom,
+            z_index: rule.z_index,
             hover_override: rule
                 .hover
                 .as_ref()
@@ -160,6 +175,24 @@ impl DenVisual {
         }
         if other.flex_grow {
             self.flex_grow = true;
+        }
+        if other.position != PositionKind::Static {
+            self.position = other.position;
+        }
+        if other.top.is_some() {
+            self.top = other.top;
+        }
+        if other.left.is_some() {
+            self.left = other.left;
+        }
+        if other.right.is_some() {
+            self.right = other.right;
+        }
+        if other.bottom.is_some() {
+            self.bottom = other.bottom;
+        }
+        if other.z_index.is_some() {
+            self.z_index = other.z_index;
         }
     }
 
