@@ -17,7 +17,7 @@ use crate::{DimensionRule, LayoutEntry};
 /// Soma vertical ocupada por padding + border (topo + base).
 /// É o overhead que a altura da border-box tem em cima do conteúdo.
 fn edge_extent(entry: &LayoutEntry) -> f32 {
-    (entry.padding + entry.border_width) * 2.0
+    entry.padding * 2.0 + entry.border_y_extent()
 }
 
 /// Resolve a altura efetiva (border box) em CSS pixels.
@@ -45,15 +45,15 @@ pub(crate) fn resolve_auto_leaf(entry: &LayoutEntry) -> f32 {
 }
 
 /// Altura de CONTEÚDO do pai disponível pros filhos (pra resolver `height: N%`).
-/// Equivale à rect.height do pai menos padding + border (duas bordas).
+/// Equivale à rect.height do pai menos padding (top+bottom) + border (top+bottom).
 pub(crate) fn parent_content_height_for(
     parent_rule: DimensionRule,
     is_body: bool,
     parent_rect_height: f32,
     parent_padding: f32,
-    parent_border_width: f32,
+    parent_border_y: f32,
 ) -> f32 {
-    let overhead = (parent_padding + parent_border_width) * 2.0;
+    let overhead = parent_padding * 2.0 + parent_border_y;
     let available = (parent_rect_height - overhead).max(0.0);
     if is_body {
         return available;

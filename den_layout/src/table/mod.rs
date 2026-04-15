@@ -131,8 +131,9 @@ impl LayoutTable {
             } else {
                 String::new()
             };
+            let bw = entry.border_widths;
             eprintln!(
-                "  [{idx}] {label} parent={:?} children={:?} display={:?} width={:?} height={:?} min_w={:?} max_w={:?} min_h={:?} max_h={:?} padding={} border={} margin={} gap={} flex_grow={} intrinsic_width={} intrinsic_height={} size={:?} rect=({}, {}, {}, {}){pos_str}",
+                "  [{idx}] {label} parent={:?} children={:?} display={:?} width={:?} height={:?} min_w={:?} max_w={:?} min_h={:?} max_h={:?} padding={} border=[{}, {}, {}, {}] margin={} gap={} flex_grow={} intrinsic_width={} intrinsic_height={} size={:?} rect=({}, {}, {}, {}){pos_str}",
                 entry.parent,
                 entry.children,
                 entry.display,
@@ -143,7 +144,10 @@ impl LayoutTable {
                 entry.min_height,
                 entry.max_height,
                 entry.padding,
-                entry.border_width,
+                bw[0],
+                bw[1],
+                bw[2],
+                bw[3],
                 entry.margin,
                 entry.gap,
                 entry.flex_grow,
@@ -157,11 +161,6 @@ impl LayoutTable {
             );
         }
     }
-}
-
-/// Largura/altura de conteúdo disponível dentro de um rect: tira padding + border (2 lados).
-pub(super) fn content_axis(outer: f32, edge: f32) -> f32 {
-    (outer - edge * 2.0).max(0.0)
 }
 
 /// Resolve um offset (`top`/`left`/`right`/`bottom`) contra a extensão (width ou height)

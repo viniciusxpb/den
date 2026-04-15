@@ -2,7 +2,15 @@
 
 use std::collections::HashMap;
 
-pub type RgbColor = (u8, u8, u8);
+/// Cor RGBA em u8 (`(r, g, b, a)`). Alpha 255 = opaco total, 0 = transparente.
+///
+/// Parseres que não declaram alpha (`#RGB`, `#RRGGBB`, `rgb(...)`, `$var` hex sem
+/// alpha) geram tuplas com `a = 255`. Alpha declarado explícito (`#RRGGBBAA`,
+/// `rgba(...)`) preserva o canal.
+///
+/// A multiplicação com `opacity` acontece em paint-time, não aqui — essa tupla
+/// guarda exatamente o que a folha CSS declarou.
+pub type RgbColor = (u8, u8, u8, u8);
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub enum DisplayMode {
@@ -12,17 +20,36 @@ pub enum DisplayMode {
     Grid,
 }
 
+/// Borda CSS resolvida com largura por lado e cor única.
+///
+/// Layout `widths`: `[top, right, bottom, left]` — ordem CSS clockwise.
+/// O parser preenche todos os 4 com o mesmo valor pra `border: shorthand` (caminho
+/// uniforme) e atualiza só o slot afetado pra `border-<side>-width` /
+/// `border-<side>: shorthand`.
+///
+/// Cor única por enquanto (MVP). Per-side color é incremento futuro: a struct
+/// já está pronta, falta só `colors: [RgbColor; 4]`.
 #[derive(Debug, Clone, Copy)]
 pub struct BorderStyle {
-    pub width: f32,
+    pub widths: [f32; 4],
     pub color: RgbColor,
+}
+
+impl BorderStyle {
+    /// Cria com largura e cor uniformes nos 4 lados.
+    pub fn uniform(width: f32, color: RgbColor) -> Self {
+        Self {
+            widths: [width; 4],
+            color,
+        }
+    }
 }
 
 impl Default for BorderStyle {
     fn default() -> Self {
         Self {
-            width: 1.0,
-            color: (0, 0, 0),
+            widths: [1.0; 4],
+            color: (0, 0, 0, 255),
         }
     }
 }
@@ -132,6 +159,16 @@ pub struct StyleRule {
     /// `z-index` — ordenação de pintura entre elementos positioned do mesmo pai.
     /// Só tem efeito em positioned; ignorado em static.
     pub z_index: Option<i32>,
+    /// `opacity: 0..1` — multiplicador aplicado ao alpha de TODAS as cores
+    /// (color, background, border) no paint. `None` = não declarado (= 1.0 opaco).
+    /// Compõe com o alpha da própria cor: se `background: #80808080` (alpha 128)
+    /// e `opacity: 0.5`, o alpha final = 128 * 0.5 = 64.
+    pub opacity: Option<f32>,
+    /// `white-space: nowrap` declarado. `None` = não declarado, `Some(true)` = nowrap,
+    /// `Some(false)` = `normal` (default; relevante quando wrap for implementado).
+    pub white_space_nowrap: Option<bool>,
+    /// `text-overflow: ellipsis` declarado.
+    pub text_overflow_ellipsis: Option<bool>,
     pub hover: Option<Box<StyleRule>>,
 }
 
@@ -233,6 +270,15 @@ impl StyleRule {
         }
         if other.z_index.is_some() {
             self.z_index = other.z_index;
+        }
+        if other.opacity.is_some() {
+            self.opacity = other.opacity;
+        }
+        if other.white_space_nowrap.is_some() {
+            self.white_space_nowrap = other.white_space_nowrap;
+        }
+        if other.text_overflow_ellipsis.is_some() {
+            self.text_overflow_ellipsis = other.text_overflow_ellipsis;
         }
         if other.hover.is_some() {
             self.hover = other.hover.clone();

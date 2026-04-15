@@ -7,7 +7,7 @@
 //! Note: importamos `crate::flex` (helpers de cálculo) com path absoluto pra
 //! evitar ambiguidade com o nome desta submódulo.
 
-use super::{LayoutTable, content_axis};
+use super::LayoutTable;
 use crate::{BODY_INDEX, DimensionRule, LayoutRect, height, margin, width};
 
 impl LayoutTable {
@@ -15,17 +15,20 @@ impl LayoutTable {
     pub(super) fn layout_flex_children(&mut self, parent_idx: usize) {
         let parent_rect = self.rects[parent_idx];
         let padding = self.entries[parent_idx].padding;
-        let border = self.entries[parent_idx].border_width;
-        let edge = padding + border;
+        let border_top = self.entries[parent_idx].border_top();
+        let border_left = self.entries[parent_idx].border_left();
+        let border_x = self.entries[parent_idx].border_x_extent();
+        let border_y = self.entries[parent_idx].border_y_extent();
+        let edge_y = padding + border_y; // overhead vertical pra altura auto
         let gap = self.entries[parent_idx].gap;
-        let content_x = parent_rect.x + edge;
-        let content_width = content_axis(parent_rect.width, edge);
+        let content_x = parent_rect.x + padding + border_left;
+        let content_width = (parent_rect.width - padding * 2.0 - border_x).max(0.0);
         let parent_content_height = height::parent_content_height_for(
             self.entries[parent_idx].height_rule,
             parent_idx == BODY_INDEX,
             parent_rect.height,
             padding,
-            border,
+            border_y,
         );
         let all_children = self.entries[parent_idx].children.clone();
         let in_flow: Vec<usize> = all_children
@@ -60,7 +63,7 @@ impl LayoutTable {
 
         let remaining = (content_width - fixed_total - margin_total - gap_total).max(0.0);
         let mut cursor_x = content_x;
-        let content_y = parent_rect.y + edge;
+        let content_y = parent_rect.y + padding + border_top;
         let mut max_height = 0.0f32;
 
         for (pos, child_idx) in in_flow.iter().copied().enumerate() {
@@ -97,8 +100,8 @@ impl LayoutTable {
         }
 
         if self.entries[parent_idx].height_rule == DimensionRule::Auto && parent_idx != BODY_INDEX {
-            // Altura natural = max child height + padding*2 + border*2.
-            self.rects[parent_idx].height = max_height + edge * 2.0;
+            // Altura natural = max child height + padding(top+bottom) + border(top+bottom).
+            self.rects[parent_idx].height = max_height + edge_y;
         }
     }
 }

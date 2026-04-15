@@ -223,7 +223,7 @@ mod tests {
             FontTagExpectation {
                 family: r#"Georgia, "Times New Roman", serif"#,
                 font_size: 15.0,
-                color: Some((192, 192, 216)),
+                color: Some((192, 192, 216, 255)),
                 line_height: Some(LineHeightValue::Factor(1.2)),
                 text_align: Some(TextAlign::Center),
                 ..Default::default()
@@ -235,7 +235,7 @@ mod tests {
             FontTagExpectation {
                 family: r#""Courier New", monospace"#,
                 font_size: 13.0,
-                color: Some((92, 219, 149)),
+                color: Some((92, 219, 149, 255)),
                 letter_spacing: Some(1.0),
                 line_height: Some(LineHeightValue::Factor(1.2)),
                 text_align: Some(TextAlign::Center),
@@ -248,7 +248,7 @@ mod tests {
             FontTagExpectation {
                 family: r#""Comic Sans MS", "Brush Script MT", cursive"#,
                 font_size: 15.0,
-                color: Some((240, 160, 80)),
+                color: Some((240, 160, 80, 255)),
                 font_italic: Some(true),
                 line_height: Some(LineHeightValue::Factor(1.2)),
                 text_align: Some(TextAlign::Center),
@@ -261,7 +261,7 @@ mod tests {
             FontTagExpectation {
                 family: r#"Impact, "Arial Black", fantasy"#,
                 font_size: 15.0,
-                color: Some((233, 69, 96)),
+                color: Some((233, 69, 96, 255)),
                 line_height: Some(LineHeightValue::Factor(1.2)),
                 text_align: Some(TextAlign::Center),
                 text_transform: Some(TextTransform::Uppercase),
@@ -274,7 +274,7 @@ mod tests {
             FontTagExpectation {
                 family: r#""Trebuchet MS", Verdana, sans-serif"#,
                 font_size: 14.0,
-                color: Some((126, 184, 247)),
+                color: Some((126, 184, 247, 255)),
                 font_weight: Some(700),
                 line_height: Some(LineHeightValue::Factor(1.2)),
                 text_align: Some(TextAlign::Center),
@@ -386,7 +386,7 @@ mod tests {
     struct FontTagExpectation {
         family: &'static str,
         font_size: f32,
-        color: Option<(u8, u8, u8)>,
+        color: Option<(u8, u8, u8, u8)>,
         font_weight: Option<u16>,
         font_italic: Option<bool>,
         line_height: Option<LineHeightValue>,

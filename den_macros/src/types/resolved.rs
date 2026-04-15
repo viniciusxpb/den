@@ -45,6 +45,13 @@ pub struct DenVisual {
     pub bottom: Option<WidthValue>,
     /// `z-index` — ordena paint entre positioned siblings. `None` = auto (= 0).
     pub z_index: Option<i32>,
+    /// `opacity: 0..1` — multiplicador aplicado ao alpha de todas as cores no paint.
+    /// `None` = não declarado (= 1.0 opaco).
+    pub opacity: Option<f32>,
+    /// `white-space: nowrap` declarado. Default Den é single-line.
+    pub white_space_nowrap: Option<bool>,
+    /// `text-overflow: ellipsis` — trunca com `…` quando texto não cabe no rect.
+    pub text_overflow_ellipsis: Option<bool>,
     /// Visual override quando hover. None = sem hover behavior.
     pub hover_override: Option<Box<DenVisual>>,
 }
@@ -85,6 +92,9 @@ impl DenVisual {
             right: rule.right,
             bottom: rule.bottom,
             z_index: rule.z_index,
+            opacity: rule.opacity,
+            white_space_nowrap: rule.white_space_nowrap,
+            text_overflow_ellipsis: rule.text_overflow_ellipsis,
             hover_override: rule
                 .hover
                 .as_ref()
@@ -193,6 +203,15 @@ impl DenVisual {
         }
         if other.z_index.is_some() {
             self.z_index = other.z_index;
+        }
+        if other.opacity.is_some() {
+            self.opacity = other.opacity;
+        }
+        if other.white_space_nowrap.is_some() {
+            self.white_space_nowrap = other.white_space_nowrap;
+        }
+        if other.text_overflow_ellipsis.is_some() {
+            self.text_overflow_ellipsis = other.text_overflow_ellipsis;
         }
     }
 

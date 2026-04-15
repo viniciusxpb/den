@@ -280,24 +280,74 @@ fn paint_background(painter: &egui::Painter, rect: Rect, style: &PaintStyle, sca
         return;
     };
     let radius = style.border_radius * scale;
-    painter.rect_filled(rect, radius, rgb_to_color(bg));
+    painter.rect_filled(rect, radius, rgb_to_color(bg, style.opacity));
 }
 
 /// Pinta a borda do nó por cima do conteúdo.
+///
+/// Se as 4 sides têm a mesma largura, usa `rect_stroke` (preserva
+/// `border_radius` corretamente). Se assimétricas, desenha 4 line_segments
+/// independentes — sides com largura `0` viram no-op.
 fn paint_border(painter: &egui::Painter, rect: Rect, style: &PaintStyle, scale: f32) {
-    if style.border_width <= 0.0 {
+    let widths = style.border_widths;
+    if widths.iter().all(|w| *w <= 0.0) {
         return;
     }
     let Some(color) = style.border_color else {
         return;
     };
-    let width = (style.border_width * scale).max(MIN_BORDER_WIDTH_PX);
-    let radius = style.border_radius * scale;
-    painter.rect_stroke(
-        rect,
-        radius,
-        Stroke::new(width, rgb_to_color(color)),
-        StrokeKind::Inside,
+    let stroke_color = rgb_to_color(color, style.opacity);
+
+    // Caso uniforme: preserva o radius via rect_stroke.
+    if widths[0] == widths[1] && widths[1] == widths[2] && widths[2] == widths[3] {
+        let width = (widths[0] * scale).max(MIN_BORDER_WIDTH_PX);
+        let radius = style.border_radius * scale;
+        painter.rect_stroke(
+            rect,
+            radius,
+            Stroke::new(width, stroke_color),
+            StrokeKind::Inside,
+        );
+        return;
+    }
+
+    // Caso assimétrico: 4 line_segments. Border-radius é ignorado aqui
+    // (cantos arredondados com per-side widths exigem mesh rendering).
+    let scaled = [
+        widths[0] * scale, // top
+        widths[1] * scale, // right
+        widths[2] * scale, // bottom
+        widths[3] * scale, // left
+    ];
+    let min_w = MIN_BORDER_WIDTH_PX;
+    let paint_side = |a: Pos2, b: Pos2, w: f32| {
+        if w > 0.0 {
+            painter.line_segment([a, b], Stroke::new(w.max(min_w), stroke_color));
+        }
+    };
+    let top_y = rect.min.y + scaled[0] * 0.5;
+    let bot_y = rect.max.y - scaled[2] * 0.5;
+    let left_x = rect.min.x + scaled[3] * 0.5;
+    let right_x = rect.max.x - scaled[1] * 0.5;
+    paint_side(
+        Pos2::new(rect.min.x, top_y),
+        Pos2::new(rect.max.x, top_y),
+        scaled[0],
+    );
+    paint_side(
+        Pos2::new(right_x, rect.min.y),
+        Pos2::new(right_x, rect.max.y),
+        scaled[1],
+    );
+    paint_side(
+        Pos2::new(rect.min.x, bot_y),
+        Pos2::new(rect.max.x, bot_y),
+        scaled[2],
+    );
+    paint_side(
+        Pos2::new(left_x, rect.min.y),
+        Pos2::new(left_x, rect.max.y),
+        scaled[3],
     );
 }
 
@@ -316,12 +366,41 @@ fn paint_text(
     }
     let color = style
         .color
-        .map(rgb_to_color)
+        .map(|c| rgb_to_color(c, style.opacity))
         .unwrap_or(Color32::from_gray(220));
     let content = apply_text_transform(content, style.text_transform);
-    let text_box = layout_text_box(ui, &content, heading, style, scale, color);
+    let mut text_box = layout_text_box(ui, &content, heading, style, scale, color);
+    // text-overflow: ellipsis — trunca e adiciona "…" quando não cabe no rect.
+    if style.text_overflow_ellipsis && text_box.width > rect.width() {
+        let truncated = fit_with_ellipsis(&content, rect.width(), |s| {
+            layout_text_box(ui, s, heading, style, scale, color).width
+        });
+        text_box = layout_text_box(ui, &truncated, heading, style, scale, color);
+    }
     let x = aligned_text_x(rect, text_box.width, style.text_align);
     painter.galley(Pos2::new(x, rect.min.y), text_box.galley, color);
+}
+
+/// Trunca `text` por chars (do fim) até `text + "…"` caber em `max_width`.
+/// `measure(s)` retorna a largura pintada de `s` no contexto atual.
+/// Returns "…" se nem um único char cabe junto da elipse, ou se o input já é vazio.
+fn fit_with_ellipsis(text: &str, max_width: f32, mut measure: impl FnMut(&str) -> f32) -> String {
+    const ELLIPSIS: char = '…';
+    if measure(text) <= max_width {
+        return text.to_string();
+    }
+    let chars: Vec<char> = text.chars().collect();
+    let mut buf = String::with_capacity(text.len() + ELLIPSIS.len_utf8());
+    // Busca o maior prefixo que cabe quando "…" é apendado.
+    for cut in (0..chars.len()).rev() {
+        buf.clear();
+        buf.extend(chars[..cut].iter());
+        buf.push(ELLIPSIS);
+        if measure(&buf) <= max_width {
+            return buf;
+        }
+    }
+    ELLIPSIS.to_string()
 }
 
 /// Pinta um input: fundo (desenhado pelo caller), texto ou placeholder, e caret piscante
@@ -478,7 +557,7 @@ fn paint_input(
     } else {
         style
             .color
-            .map(rgb_to_color)
+            .map(|c| rgb_to_color(c, style.opacity))
             .unwrap_or(Color32::from_gray(220))
     };
     let text_pos = rect.min + Vec2::new(INPUT_TEXT_PADDING_X * scale, INPUT_TEXT_PADDING_Y * scale);
@@ -495,7 +574,7 @@ fn paint_input(
         if show_caret {
             let caret_color = style
                 .color
-                .map(rgb_to_color)
+                .map(|c| rgb_to_color(c, style.opacity))
                 .unwrap_or(Color32::from_gray(220));
             let display_cursor =
                 clamp_char_boundary(&display_value, cursor.min(display_value.len()));
@@ -738,18 +817,58 @@ fn next_char_boundary(s: &str, offset: usize) -> usize {
     i
 }
 
-/// Conversão RGB → Color32 opaco.
-fn rgb_to_color(rgb: Rgb) -> Color32 {
-    Color32::from_rgb(rgb.0, rgb.1, rgb.2)
+/// Conversão RGBA → Color32 respeitando `opacity` do `PaintStyle`.
+///
+/// Alpha final = `rgb.a * opacity` (clamped 0..=255). `opacity = 1.0` preserva
+/// o alpha original da cor; `opacity = 0.0` zera tudo (invisível).
+fn rgb_to_color(rgb: Rgb, opacity: f32) -> Color32 {
+    let (r, g, b, a) = rgb;
+    let effective_a = (a as f32 * opacity.clamp(0.0, 1.0)).round().clamp(0.0, 255.0) as u8;
+    Color32::from_rgba_unmultiplied(r, g, b, effective_a)
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_text_transform, clamp_char_boundary, css_font_family_stack, next_char_boundary,
-        paint_order, prev_char_boundary,
+        apply_text_transform, clamp_char_boundary, css_font_family_stack, fit_with_ellipsis,
+        next_char_boundary, paint_order, prev_char_boundary, rgb_to_color,
     };
     use den_layout::TextTransform;
+    use eframe::egui::Color32;
+
+    #[test]
+    fn rgb_to_color_multiplies_alpha_by_opacity() {
+        // Cor opaca a 50% opacity → alpha 128.
+        let c = rgb_to_color((255, 0, 0, 255), 0.5);
+        assert_eq!(c, Color32::from_rgba_unmultiplied(255, 0, 0, 128));
+        // Cor já translúcida (alpha 100) a 50% → 50.
+        let c = rgb_to_color((0, 0, 0, 100), 0.5);
+        assert_eq!(c, Color32::from_rgba_unmultiplied(0, 0, 0, 50));
+        // opacity = 1.0 preserva alpha original.
+        let c = rgb_to_color((10, 20, 30, 200), 1.0);
+        assert_eq!(c, Color32::from_rgba_unmultiplied(10, 20, 30, 200));
+        // opacity > 1 é clampado em 1.
+        let c = rgb_to_color((10, 20, 30, 255), 5.0);
+        assert_eq!(c.a(), 255);
+    }
+
+    #[test]
+    fn fit_with_ellipsis_returns_input_when_already_fits() {
+        // Fake measure: 1 unit per char.
+        let measure = |s: &str| s.chars().count() as f32;
+        assert_eq!(fit_with_ellipsis("abc", 10.0, measure), "abc");
+        assert_eq!(fit_with_ellipsis("abc", 3.0, measure), "abc");
+    }
+
+    #[test]
+    fn fit_with_ellipsis_truncates_when_needed() {
+        // 1 unit per char. "…" também conta como 1.
+        let measure = |s: &str| s.chars().count() as f32;
+        // "abcdef" tem 6 chars; max_width=4 → "abc…" (3 + 1 elipse = 4).
+        assert_eq!(fit_with_ellipsis("abcdef", 4.0, measure), "abc…");
+        // max_width=1 → só a elipse.
+        assert_eq!(fit_with_ellipsis("abcdef", 1.0, measure), "…");
+    }
 
     #[test]
     fn clamps_cursor_to_previous_utf8_boundary() {

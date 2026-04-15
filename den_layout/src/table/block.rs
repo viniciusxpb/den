@@ -5,7 +5,7 @@
 //! `position: absolute|fixed` são excluídos do flow normal e tratados
 //! depois pela [`super::positioned`] pass.
 
-use super::{LayoutTable, content_axis};
+use super::LayoutTable;
 use crate::{BODY_INDEX, DimensionRule, LayoutRect, height, margin, width};
 
 impl LayoutTable {
@@ -13,20 +13,23 @@ impl LayoutTable {
     pub(super) fn layout_block_children(&mut self, parent_idx: usize) {
         let parent_rect = self.rects[parent_idx];
         let padding = self.entries[parent_idx].padding;
-        let border = self.entries[parent_idx].border_width;
+        let border_top = self.entries[parent_idx].border_top();
+        let border_bottom = self.entries[parent_idx].border_bottom();
+        let border_left = self.entries[parent_idx].border_left();
+        let border_x = self.entries[parent_idx].border_x_extent();
+        let border_y = self.entries[parent_idx].border_y_extent();
         let gap = self.entries[parent_idx].gap;
-        // Conteúdo começa DEPOIS do padding + border (por lado).
-        let edge = padding + border;
-        let content_x = parent_rect.x + edge;
-        let content_width = content_axis(parent_rect.width, edge);
+        // Conteúdo começa depois do padding + border do lado relevante.
+        let content_x = parent_rect.x + padding + border_left;
+        let content_width = (parent_rect.width - padding * 2.0 - border_x).max(0.0);
         let parent_content_height = height::parent_content_height_for(
             self.entries[parent_idx].height_rule,
             parent_idx == BODY_INDEX,
             parent_rect.height,
             padding,
-            border,
+            border_y,
         );
-        let mut cursor_y = parent_rect.y + edge;
+        let mut cursor_y = parent_rect.y + padding + border_top;
         let all_children = self.entries[parent_idx].children.clone();
         // Filtra positioned do flow normal — eles são tratados em layout_positioned.
         let in_flow: Vec<usize> = all_children
@@ -66,8 +69,9 @@ impl LayoutTable {
         }
 
         if self.entries[parent_idx].height_rule == DimensionRule::Auto {
-            // Altura natural do container = children + padding*2 + border*2.
-            let content_height = cursor_y - parent_rect.y + edge;
+            // Altura natural do container = children + padding(top+bottom) + border(top+bottom).
+            // cursor_y já passou pelo border_top + padding inicial.
+            let content_height = (cursor_y - parent_rect.y) + padding + border_bottom;
             if parent_idx == BODY_INDEX {
                 // Body cresce com o conteúdo mas nunca encolhe abaixo do viewport.
                 self.rects[parent_idx].height = parent_rect.height.max(content_height);

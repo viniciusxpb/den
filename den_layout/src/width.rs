@@ -13,8 +13,9 @@
 use crate::{DimensionRule, LayoutEntry};
 
 /// Soma horizontal ocupada por padding + border (esquerda + direita).
+/// Padding ainda é uniforme; border consome `border_left + border_right` específicos.
 fn edge_extent(entry: &LayoutEntry) -> f32 {
-    (entry.padding + entry.border_width) * 2.0
+    entry.padding * 2.0 + entry.border_x_extent()
 }
 
 /// Resolve a largura efetiva (border box) em CSS pixels.

@@ -6,8 +6,14 @@
 
 use crate::{DenNodeId, DimensionRule, DisplayMode, LayoutEntry};
 
-/// RGB sem canal alpha — formato canônico do Den pra cores.
-pub type Rgb = (u8, u8, u8);
+/// RGBA u8 — formato canônico do Den pra cores. Alpha 255 = opaco total.
+///
+/// Cores sem alpha declarado (`#RRGGBB`, `rgb(...)`, `$var` sem alpha) chegam
+/// aqui com `a = 255`. O alpha da cor compõe com `PaintStyle::opacity` no paint
+/// (effective_alpha = color.a * opacity).
+///
+/// Mantém o nome `Rgb` pra evitar churn — o 4º canal existe e é respeitado.
+pub type Rgb = (u8, u8, u8, u8);
 
 /// Transformação textual declarada via `text-transform`.
 ///
@@ -46,10 +52,12 @@ pub struct PaintStyle {
     pub color: Option<Rgb>,
     /// Cor de fundo (preenchimento).
     pub background: Option<Rgb>,
-    /// Cor da borda.
+    /// Cor da borda (compartilhada pelos 4 lados no MVP).
     pub border_color: Option<Rgb>,
-    /// Largura da borda em CSS pixels. 0 = sem borda.
-    pub border_width: f32,
+    /// Larguras de borda por lado em CSS pixels: `[top, right, bottom, left]`
+    /// (ordem CSS clockwise). Cada slot independente — `[1, 1, 1, 0]` desenha
+    /// borda só nos 3 primeiros lados.
+    pub border_widths: [f32; 4],
     /// Raio dos cantos em CSS pixels.
     pub border_radius: f32,
     /// Tamanho da fonte em CSS pixels (quando o nó renderizar texto).
@@ -80,6 +88,18 @@ pub struct PaintStyle {
     pub strikethrough: bool,
     /// Trocar o cursor pra pointer quando o mouse tá em cima.
     pub cursor_pointer: bool,
+    /// Multiplicador de alpha global (0..=1). `1.0` = sem efeito. Compõe com o
+    /// alpha de cada cor: alpha final = color.a * opacity. Declarado via
+    /// `opacity: 0.5` no SCSS.
+    pub opacity: f32,
+    /// `white-space: nowrap` — texto numa linha só. Default Den é "single-line"
+    /// (text wrap não implementado), então este flag hoje é apenas declarativo;
+    /// vira load-bearing quando wrap real existir.
+    pub white_space_nowrap: bool,
+    /// `text-overflow: ellipsis` — quando o texto não cabe no rect, trunca e
+    /// adiciona `…` no final. Combina com `white-space: nowrap` na spec CSS,
+    /// mas Den aplica sempre que `ellipsis` está setado (texto é single-line).
+    pub text_overflow_ellipsis: bool,
 }
 
 impl Default for PaintStyle {
@@ -88,7 +108,7 @@ impl Default for PaintStyle {
             color: None,
             background: None,
             border_color: None,
-            border_width: 0.0,
+            border_widths: [0.0; 4],
             border_radius: 0.0,
             font_size: 0.0,
             font_family: None,
@@ -102,6 +122,9 @@ impl Default for PaintStyle {
             underline: false,
             strikethrough: false,
             cursor_pointer: false,
+            opacity: 1.0,
+            white_space_nowrap: false,
+            text_overflow_ellipsis: false,
         }
     }
 }
@@ -142,7 +165,8 @@ pub struct LayoutIntent {
     pub max_height: Option<DimensionRule>,
     pub display: DisplayMode,
     pub padding: f32,
-    pub border_width: f32,
+    /// Larguras de borda por lado: `[top, right, bottom, left]` (ordem CSS clockwise).
+    pub border_widths: [f32; 4],
     pub margin: f32,
     pub gap: f32,
     pub flex_grow: f32,
@@ -175,7 +199,7 @@ impl Default for LayoutIntent {
             max_height: None,
             display: DisplayMode::Block,
             padding: 0.0,
-            border_width: 0.0,
+            border_widths: [0.0; 4],
             margin: 0.0,
             gap: 0.0,
             flex_grow: 0.0,
@@ -301,7 +325,7 @@ impl RenderTree {
             max_height: None,
             display: DisplayMode::Block,
             padding: 0.0,
-            border_width: 0.0,
+            border_widths: [0.0; 4],
             margin: 0.0,
             gap: 0.0,
             flex_grow: 0.0,
@@ -333,7 +357,7 @@ impl RenderTree {
                 max_height: l.max_height,
                 display: l.display,
                 padding: l.padding,
-                border_width: l.border_width,
+                border_widths: l.border_widths,
                 margin: l.margin,
                 gap: l.gap,
                 flex_grow: l.flex_grow,

@@ -31,8 +31,10 @@ pub struct LayoutEntry {
     pub display: DisplayMode,
     /// Padding uniforme em CSS pixels (entre conteúdo e border).
     pub padding: f32,
-    /// Largura da border uniforme em CSS pixels.
-    pub border_width: f32,
+    /// Larguras de borda por lado em CSS pixels: `[top, right, bottom, left]`.
+    /// `[0; 4]` = sem borda. Cada slot independente — `border-left-width: 0`
+    /// zera só o slot 3 sem afetar os outros.
+    pub border_widths: [f32; 4],
     /// Margin uniforme em CSS pixels (fora da border).
     pub margin: f32,
     /// Gap entre filhos diretos em CSS pixels.
@@ -57,4 +59,31 @@ pub struct LayoutEntry {
     pub bottom: Option<DimensionRule>,
     /// Ordem de paint entre positioned siblings. `None` = 0 (default CSS `auto`).
     pub z_index: Option<i32>,
+}
+
+impl LayoutEntry {
+    /// Borda do topo (`border-top-width`).
+    pub fn border_top(&self) -> f32 {
+        self.border_widths[0]
+    }
+    /// Borda da direita.
+    pub fn border_right(&self) -> f32 {
+        self.border_widths[1]
+    }
+    /// Borda de baixo.
+    pub fn border_bottom(&self) -> f32 {
+        self.border_widths[2]
+    }
+    /// Borda da esquerda.
+    pub fn border_left(&self) -> f32 {
+        self.border_widths[3]
+    }
+    /// Soma das bordas horizontais (left + right) — overhead horizontal do box model.
+    pub fn border_x_extent(&self) -> f32 {
+        self.border_widths[3] + self.border_widths[1]
+    }
+    /// Soma das bordas verticais (top + bottom) — overhead vertical.
+    pub fn border_y_extent(&self) -> f32 {
+        self.border_widths[0] + self.border_widths[2]
+    }
 }

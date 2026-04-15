@@ -48,12 +48,15 @@ impl LayoutTable {
     pub(super) fn layout_positioned(&mut self, idx: usize) {
         let cb_idx = self.containing_block_index(idx);
         let cb_rect = self.rects[cb_idx];
-        let cb_border = self.entries[cb_idx].border_width;
+        let cb_border_top = self.entries[cb_idx].border_top();
+        let cb_border_left = self.entries[cb_idx].border_left();
+        let cb_border_x = self.entries[cb_idx].border_x_extent();
+        let cb_border_y = self.entries[cb_idx].border_y_extent();
         // Padding box do CB (spec CSS): rect menos border (padding fica DENTRO).
-        let cb_x = cb_rect.x + cb_border;
-        let cb_y = cb_rect.y + cb_border;
-        let cb_w = (cb_rect.width - cb_border * 2.0).max(0.0);
-        let cb_h = (cb_rect.height - cb_border * 2.0).max(0.0);
+        let cb_x = cb_rect.x + cb_border_left;
+        let cb_y = cb_rect.y + cb_border_top;
+        let cb_w = (cb_rect.width - cb_border_x).max(0.0);
+        let cb_h = (cb_rect.height - cb_border_y).max(0.0);
 
         let top = self.entries[idx].top.map(|r| resolve_offset(r, cb_h));
         let left = self.entries[idx].left.map(|r| resolve_offset(r, cb_w));

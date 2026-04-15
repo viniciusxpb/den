@@ -326,8 +326,18 @@ pub(super) fn parse_offset_value(value: &str) -> Option<WidthValue> {
     parse_size_value(trimmed).map(WidthValue::Px)
 }
 
-/// Parseia o shorthand `border`, renderizando estilos não sólidos como sólido.
+/// Parseia o shorthand `border: <width> <style> <color>`.
+/// Estilo não sólido cai pra `solid` com warning.
+/// Resulta em borda uniforme nos 4 lados.
 pub(super) fn parse_border_value(value: &str) -> Option<BorderStyle> {
+    let (width, color) = parse_border_shorthand_parts(value)?;
+    Some(BorderStyle::uniform(width, color))
+}
+
+/// Parseia os 3 tokens de `<width> <style> <color>` e retorna `(width, color)`.
+/// Compartilhado entre o shorthand uniforme e os shorthands per-side
+/// (`border-left: 1px solid #...`).
+pub(super) fn parse_border_shorthand_parts(value: &str) -> Option<(f32, crate::types::RgbColor)> {
     let parts: Vec<&str> = value.split_whitespace().collect();
     if parts.len() < 3 {
         return None;
@@ -338,5 +348,63 @@ pub(super) fn parse_border_value(value: &str) -> Option<BorderStyle> {
         eprintln!("Den: border style '{style}' is not supported, rendering as solid");
     }
     let color = parse_hex_color(parts[2])?;
-    Some(BorderStyle { width, color })
+    Some((width, color))
+}
+
+/// Aplica `border-<side>: <width> <style> <color>` na rule existente.
+/// Atualiza só o slot do lado afetado em `widths` e a cor (compartilhada).
+/// Se ainda não há `border` nesta rule, inicializa zerada antes de setar o slot.
+pub(super) fn apply_border_side_shorthand(side_index: usize, value: &str, rule: &mut StyleRule) {
+    let Some((width, color)) = parse_border_shorthand_parts(value) else {
+        return;
+    };
+    let border = rule.border.get_or_insert_with(BorderStyle::default_zero);
+    border.widths[side_index] = width;
+    border.color = color;
+}
+
+/// Aplica `border-<side>-width: <width>` na rule existente. Inicializa zerado se necessário.
+pub(super) fn apply_border_side_width(side_index: usize, value: &str, rule: &mut StyleRule) {
+    let Some(w) = parse_size_value(value) else {
+        return;
+    };
+    let border = rule.border.get_or_insert_with(BorderStyle::default_zero);
+    border.widths[side_index] = w;
+}
+
+/// Aplica `border-<side>-color: <color>` na rule existente.
+/// Como o MVP usa cor única compartilhada, o último `border-*-color` vence.
+pub(super) fn apply_border_side_color(value: &str, rule: &mut StyleRule) {
+    let Some(c) = parse_hex_color(value) else {
+        return;
+    };
+    let border = rule.border.get_or_insert_with(BorderStyle::default_zero);
+    border.color = c;
+}
+
+/// Aplica `border-color: <color>` (forma uniforme).
+pub(super) fn apply_border_color(value: &str, rule: &mut StyleRule) {
+    apply_border_side_color(value, rule);
+}
+
+/// Aplica `border-width: <w>` (forma uniforme).
+pub(super) fn apply_border_width(value: &str, rule: &mut StyleRule) {
+    let Some(w) = parse_size_value(value) else {
+        return;
+    };
+    let border = rule.border.get_or_insert_with(BorderStyle::default_zero);
+    border.widths = [w; 4];
+}
+
+impl BorderStyle {
+    /// Construtor de default zerado pra uso em `get_or_insert_with` quando o
+    /// usuário declara só um per-side antes de qualquer `border:` shorthand.
+    /// Diferente de `Default::default()`, começa com widths `[0; 4]` (não `[1; 4]`)
+    /// pra evitar materializar borda em lados que o usuário não declarou.
+    pub fn default_zero() -> Self {
+        Self {
+            widths: [0.0; 4],
+            color: (0, 0, 0, 255),
+        }
+    }
 }

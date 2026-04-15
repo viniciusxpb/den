@@ -20,13 +20,16 @@ use syn::LitStr;
 pub(crate) fn paint_style_tokens(visual: &DenVisual) -> proc_macro2::TokenStream {
     let color = quote_opt_rgb(visual.color);
     let background = quote_opt_rgb(visual.background);
-    let (border_color, border_width) = match visual.border {
+    let (border_color, border_widths) = match visual.border {
         Some(b) => {
-            let (r, g, b_) = b.color;
-            let w = b.width;
-            (quote! { Some((#r, #g, #b_)) }, quote! { #w as f32 })
+            let (r, g, b_, a) = b.color;
+            let [t, ri, bo, le] = b.widths;
+            (
+                quote! { Some((#r, #g, #b_, #a)) },
+                quote! { [#t as f32, #ri as f32, #bo as f32, #le as f32] },
+            )
         }
-        None => (quote! { None }, quote! { 0.0f32 }),
+        None => (quote! { None }, quote! { [0.0f32; 4] }),
     };
     let border_radius = visual.border_radius.unwrap_or(0.0);
     let font_size = visual.font_size.unwrap_or(0.0);
@@ -44,13 +47,16 @@ pub(crate) fn paint_style_tokens(visual: &DenVisual) -> proc_macro2::TokenStream
     let underline = visual.underline.unwrap_or(false);
     let strikethrough = visual.strikethrough.unwrap_or(false);
     let cursor_pointer = visual.cursor_pointer;
+    let opacity = visual.opacity.unwrap_or(1.0);
+    let white_space_nowrap = visual.white_space_nowrap.unwrap_or(false);
+    let text_overflow_ellipsis = visual.text_overflow_ellipsis.unwrap_or(false);
 
     quote! {
         den_layout::PaintStyle {
             color: #color,
             background: #background,
             border_color: #border_color,
-            border_width: #border_width,
+            border_widths: #border_widths,
             border_radius: #border_radius as f32,
             font_size: #font_size as f32,
             font_family: #font_family,
@@ -64,6 +70,9 @@ pub(crate) fn paint_style_tokens(visual: &DenVisual) -> proc_macro2::TokenStream
             underline: #underline,
             strikethrough: #strikethrough,
             cursor_pointer: #cursor_pointer,
+            opacity: #opacity as f32,
+            white_space_nowrap: #white_space_nowrap,
+            text_overflow_ellipsis: #text_overflow_ellipsis,
         }
     }
 }
@@ -97,7 +106,7 @@ pub(super) fn layout_intent_tokens(el: &DenElement) -> proc_macro2::TokenStream 
     let padding = visual.padding.unwrap_or(0.0);
     let margin = visual.margin.unwrap_or(0.0);
     let gap = visual.gap.unwrap_or(0.0);
-    let border_width = visual.border.map(|b| b.width).unwrap_or(0.0);
+    let [bw_t, bw_r, bw_b, bw_l] = visual.border.map(|b| b.widths).unwrap_or([0.0; 4]);
     let flex_grow: f32 = if has_flex_grow(el) { 1.0 } else { 0.0 };
     let intrinsic_width = intrinsic_width_for(el);
     let intrinsic_height = intrinsic_height_for(el);
@@ -121,7 +130,7 @@ pub(super) fn layout_intent_tokens(el: &DenElement) -> proc_macro2::TokenStream 
             max_height: #max_height,
             display: #display,
             padding: #padding as f32,
-            border_width: #border_width as f32,
+            border_widths: [#bw_t as f32, #bw_r as f32, #bw_b as f32, #bw_l as f32],
             margin: #margin as f32,
             gap: #gap as f32,
             flex_grow: #flex_grow as f32,
@@ -174,9 +183,9 @@ pub(super) fn display_mode_tokens(d: DisplayMode) -> proc_macro2::TokenStream {
     }
 }
 
-pub(super) fn quote_opt_rgb(opt: Option<(u8, u8, u8)>) -> proc_macro2::TokenStream {
+pub(super) fn quote_opt_rgb(opt: Option<(u8, u8, u8, u8)>) -> proc_macro2::TokenStream {
     match opt {
-        Some((r, g, b)) => quote! { Some((#r, #g, #b)) },
+        Some((r, g, b, a)) => quote! { Some((#r, #g, #b, #a)) },
         None => quote! { None },
     }
 }

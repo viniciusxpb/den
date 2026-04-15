@@ -18,10 +18,12 @@ use lexer::{
     skip_whitespace,
 };
 use values::{
-    apply_font_shorthand, apply_inset_shorthand, parse_border_value, parse_font_family,
-    parse_font_style, parse_font_weight, parse_letter_spacing, parse_line_height,
-    parse_offset_value, parse_position, parse_size_value, parse_text_align, parse_text_decoration,
-    parse_text_transform, parse_width_value, strip_important,
+    apply_border_color, apply_border_side_color, apply_border_side_shorthand,
+    apply_border_side_width, apply_border_width, apply_font_shorthand, apply_inset_shorthand,
+    parse_border_value, parse_font_family, parse_font_style, parse_font_weight,
+    parse_letter_spacing, parse_line_height, parse_offset_value, parse_position, parse_size_value,
+    parse_text_align, parse_text_decoration, parse_text_transform, parse_width_value,
+    strip_important,
 };
 use variables::{collect_variables, resolve_vars};
 
@@ -188,6 +190,23 @@ fn apply_property(rule: &mut StyleRule, prop_name: &str, value: &str) {
         "display" if value == "flex" => rule.display = DisplayMode::Flex,
         "display" if value == "grid" => rule.display = DisplayMode::Grid,
         "border" => rule.border = parse_border_value(value),
+        "border-width" => apply_border_width(value, rule),
+        "border-color" => apply_border_color(value, rule),
+        // Per-side shorthand: `border-top: 1px solid #...`
+        "border-top" => apply_border_side_shorthand(0, value, rule),
+        "border-right" => apply_border_side_shorthand(1, value, rule),
+        "border-bottom" => apply_border_side_shorthand(2, value, rule),
+        "border-left" => apply_border_side_shorthand(3, value, rule),
+        // Per-side width: `border-left-width: 0px`
+        "border-top-width" => apply_border_side_width(0, value, rule),
+        "border-right-width" => apply_border_side_width(1, value, rule),
+        "border-bottom-width" => apply_border_side_width(2, value, rule),
+        "border-left-width" => apply_border_side_width(3, value, rule),
+        // Per-side color: cor compartilhada por enquanto (last-wins).
+        "border-top-color"
+        | "border-right-color"
+        | "border-bottom-color"
+        | "border-left-color" => apply_border_side_color(value, rule),
         "border-radius" => rule.border_radius = parse_size_value(value),
         "width" => rule.width = parse_width_value(value),
         "height" => rule.height = parse_width_value(value),
@@ -214,8 +233,47 @@ fn apply_property(rule: &mut StyleRule, prop_name: &str, value: &str) {
             }
         }
         "inset" => apply_inset_shorthand(value, rule),
+        "opacity" => rule.opacity = parse_opacity(value),
+        "white-space" => rule.white_space_nowrap = parse_white_space(value),
+        "text-overflow" => rule.text_overflow_ellipsis = parse_text_overflow(value),
         _ => {}
     }
+}
+
+/// `white-space: nowrap | normal | ...`. Aceita `nowrap`/`pre`/`pre-wrap` como `true`,
+/// `normal`/`pre-line` como `false`. Outros valores são ignorados (= None).
+fn parse_white_space(value: &str) -> Option<bool> {
+    match strip_important(value).trim().to_ascii_lowercase().as_str() {
+        "nowrap" | "pre" | "pre-wrap" => Some(true),
+        "normal" | "pre-line" => Some(false),
+        other => {
+            eprintln!("Den: `white-space: {other}` desconhecido, ignorando");
+            None
+        }
+    }
+}
+
+/// `text-overflow: ellipsis | clip`. Outros valores são ignorados.
+fn parse_text_overflow(value: &str) -> Option<bool> {
+    match strip_important(value).trim().to_ascii_lowercase().as_str() {
+        "ellipsis" => Some(true),
+        "clip" => Some(false),
+        other => {
+            eprintln!("Den: `text-overflow: {other}` desconhecido, ignorando");
+            None
+        }
+    }
+}
+
+/// Parseia `opacity: N` onde N é `0..=1` (float) ou `N%`. Fora da faixa é clamped.
+fn parse_opacity(value: &str) -> Option<f32> {
+    let trimmed = value.trim();
+    if let Some(pct) = trimmed.strip_suffix('%')
+        && let Ok(v) = pct.trim().parse::<f32>()
+    {
+        return Some((v / 100.0).clamp(0.0, 1.0));
+    }
+    trimmed.parse::<f32>().ok().map(|v| v.clamp(0.0, 1.0))
 }
 
 #[cfg(test)]
@@ -238,8 +296,8 @@ mod tests {
         );
 
         let card = styles.get("card").expect("card style");
-        assert_eq!(card.color, Some((255, 255, 255)));
-        assert_eq!(card.background, Some((0, 0, 0)));
+        assert_eq!(card.color, Some((255, 255, 255, 255)));
+        assert_eq!(card.background, Some((0, 0, 0, 255)));
     }
 
     #[test]
@@ -269,7 +327,7 @@ mod tests {
         );
 
         let card = styles.get("card").expect("card style");
-        assert_eq!(card.color, Some((18, 52, 86)));
+        assert_eq!(card.color, Some((18, 52, 86, 255)));
     }
 
     #[test]
@@ -286,7 +344,7 @@ mod tests {
         );
 
         let subtitle = styles.get("subtitle").expect("subtitle style");
-        assert_eq!(subtitle.color, Some((106, 106, 138)));
+        assert_eq!(subtitle.color, Some((106, 106, 138, 255)));
     }
 
     #[test]
@@ -301,8 +359,107 @@ mod tests {
         );
 
         let alert = styles.get("alert").expect("alert style");
-        assert_eq!(alert.color, Some((233, 69, 96)));
-        assert_eq!(alert.background, Some((18, 18, 31)));
+        assert_eq!(alert.color, Some((233, 69, 96, 255)));
+        assert_eq!(alert.background, Some((18, 18, 31, 255)));
+    }
+
+    #[test]
+    fn opacity_property_clamps_to_unit_interval() {
+        let styles = parse_scss(
+            r#"
+            .a { opacity: 0.5; }
+            .b { opacity: 1; }
+            .c { opacity: 0; }
+            .d { opacity: 1.5; }      /* clamp pra 1 */
+            .e { opacity: -0.2; }     /* clamp pra 0 */
+            .f { opacity: 50%; }      /* aceita percentual */
+            "#,
+        );
+        assert_eq!(styles.get("a").unwrap().opacity, Some(0.5));
+        assert_eq!(styles.get("b").unwrap().opacity, Some(1.0));
+        assert_eq!(styles.get("c").unwrap().opacity, Some(0.0));
+        assert_eq!(styles.get("d").unwrap().opacity, Some(1.0));
+        assert_eq!(styles.get("e").unwrap().opacity, Some(0.0));
+        assert_eq!(styles.get("f").unwrap().opacity, Some(0.5));
+    }
+
+    #[test]
+    fn rgba_function_in_background_preserves_alpha() {
+        let styles = parse_scss(
+            r#"
+            .pill { background: rgba(0, 212, 170, 0.15); }
+            "#,
+        );
+        let pill = styles.get("pill").expect("pill style");
+        // 0.15 * 255 = 38.25 → 38
+        assert_eq!(pill.background, Some((0, 212, 170, 38)));
+    }
+
+    #[test]
+    fn hex_with_alpha_preserves_channel() {
+        let styles = parse_scss(
+            r#"
+            .x { color: #ff000080; }
+            "#,
+        );
+        assert_eq!(styles.get("x").unwrap().color, Some((255, 0, 0, 128)));
+    }
+
+    #[test]
+    fn border_uniform_shorthand_fills_all_sides() {
+        let styles = parse_scss(
+            r#"
+            .b { border: 2px solid #abcdef; }
+            "#,
+        );
+        let border = styles.get("b").unwrap().border.unwrap();
+        assert_eq!(border.widths, [2.0, 2.0, 2.0, 2.0]);
+        assert_eq!(border.color, (171, 205, 239, 255));
+    }
+
+    #[test]
+    fn border_left_width_zero_overrides_only_left_slot() {
+        let styles = parse_scss(
+            r#"
+            .b {
+                border: 1px solid #1a1a28;
+                border-left-width: 0px;
+            }
+            "#,
+        );
+        let border = styles.get("b").unwrap().border.unwrap();
+        // [top, right, bottom, left] — só o slot 3 zerado.
+        assert_eq!(border.widths, [1.0, 1.0, 1.0, 0.0]);
+        assert_eq!(border.color, (26, 26, 40, 255));
+    }
+
+    #[test]
+    fn white_space_and_text_overflow_dispatch() {
+        let styles = parse_scss(
+            r#"
+            .a { white-space: nowrap; text-overflow: ellipsis; }
+            .b { white-space: normal; text-overflow: clip; }
+            "#,
+        );
+        let a = styles.get("a").unwrap();
+        let b = styles.get("b").unwrap();
+        assert_eq!(a.white_space_nowrap, Some(true));
+        assert_eq!(a.text_overflow_ellipsis, Some(true));
+        assert_eq!(b.white_space_nowrap, Some(false));
+        assert_eq!(b.text_overflow_ellipsis, Some(false));
+    }
+
+    #[test]
+    fn border_top_shorthand_sets_only_top_side_and_color() {
+        let styles = parse_scss(
+            r#"
+            .b { border-top: 3px solid #ff0000; }
+            "#,
+        );
+        let border = styles.get("b").unwrap().border.unwrap();
+        // Sem `border:` shorthand antes, os outros 3 ficam zerados.
+        assert_eq!(border.widths, [3.0, 0.0, 0.0, 0.0]);
+        assert_eq!(border.color, (255, 0, 0, 255));
     }
 
     #[test]
