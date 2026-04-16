@@ -20,7 +20,8 @@ pub struct DenVisual {
     pub text_align: Option<TextAlign>,
     pub underline: Option<bool>,
     pub strikethrough: Option<bool>,
-    pub background: Option<RgbColor>,
+    /// Background shorthand (cor sólida ou gradient). Ver regra `Option<T>` em [`super::style`].
+    pub background: Option<Background>,
     pub padding: Option<f32>,
     pub margin: Option<f32>,
     /// Ver regra `Option<T>` em [`super::style`] (topo do arquivo).
@@ -88,7 +89,7 @@ impl DenVisual {
             text_align: rule.text_align,
             underline: rule.underline,
             strikethrough: rule.strikethrough,
-            background: rule.background,
+            background: rule.background.clone(),
             padding: rule.padding,
             margin: rule.margin,
             display: rule.display,
@@ -167,7 +168,7 @@ impl DenVisual {
             self.strikethrough = other.strikethrough;
         }
         if other.background.is_some() {
-            self.background = other.background;
+            self.background = other.background.clone();
         }
         if other.padding.is_some() {
             self.padding = other.padding;

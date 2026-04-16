@@ -390,12 +390,42 @@ fn paint_rotated_rect(
         rotate_around(rect.left_bottom(), center, sin, cos),
     ];
 
-    // Fill (background) via Mesh de 2 triangles.
-    if let Some(bg) = style.background {
-        let fill = rgb_to_color(bg, style.opacity);
+    // Fill (background) via Mesh — solid ou gradient, em ambos os casos a
+    // tesselação rotada reusa os mesmos 4 corners calculados acima.
+    let fill_colors: Option<[Color32; 4]> = match &style.background {
+        None => None,
+        Some(den_layout::Background::Solid(color)) => {
+            let fill = rgb_to_color(*color, style.opacity);
+            Some([fill; 4])
+        }
+        Some(den_layout::Background::LinearGradient(gradient)) if gradient.stops.len() >= 2 => {
+            // Projeta cantos rotacionados no eixo do gradient pra pegar a cor
+            // de cada corner. Mesma lógica do `paint_linear_gradient` mas aqui
+            // os cantos já foram rotacionados — o resultado é um gradient
+            // preenchendo o rect rotacionado consistentemente.
+            let (sin_g, cos_g) = gradient.angle_rad.sin_cos();
+            let axis_x = sin_g;
+            let axis_y = -cos_g;
+            let projections: [f32; 4] =
+                std::array::from_fn(|i| corners[i].x * axis_x + corners[i].y * axis_y);
+            let min_proj = projections.iter().copied().fold(f32::INFINITY, f32::min);
+            let max_proj = projections
+                .iter()
+                .copied()
+                .fold(f32::NEG_INFINITY, f32::max);
+            let span = (max_proj - min_proj).max(f32::EPSILON);
+            Some(std::array::from_fn(|i| {
+                let t = (projections[i] - min_proj) / span;
+                sample_gradient(&gradient.stops, t, style.opacity)
+            }))
+        }
+        // Gradient degenerado (<2 stops): pula fill mas segue pra border.
+        Some(den_layout::Background::LinearGradient(_)) => None,
+    };
+    if let Some(colors) = fill_colors {
         let mut mesh = egui::epaint::Mesh::default();
-        for corner in &corners {
-            mesh.colored_vertex(*corner, fill);
+        for (corner, color) in corners.iter().zip(colors.iter()) {
+            mesh.colored_vertex(*corner, *color);
         }
         mesh.add_triangle(0, 1, 2);
         mesh.add_triangle(0, 2, 3);
@@ -554,13 +584,119 @@ fn paint_order(tree: &RenderTree, children: &[usize]) -> Vec<usize> {
     in_flow
 }
 
-/// Pinta o fundo do nó, respeitando border_radius.
+/// Pinta o fundo do nó (cor sólida ou gradient), respeitando border_radius.
+///
+/// Linear gradient usa `egui::Mesh` com 4 vértices coloridos por projeção no
+/// eixo do gradient. Egui interpola entre vértices no tesselation — resultado
+/// é um gradiente visual sem precisar pintar pixel a pixel.
+/// Limitação: `border-radius` é ignorado em gradient (Mesh retangular sem
+/// corner arcs).
 fn paint_background(painter: &egui::Painter, rect: Rect, style: &PaintStyle, scale: f32) {
-    let Some(bg) = style.background else {
+    let Some(bg) = &style.background else {
         return;
     };
-    let radius = style.border_radius * scale;
-    painter.rect_filled(rect, radius, rgb_to_color(bg, style.opacity));
+    match bg {
+        den_layout::Background::Solid(color) => {
+            let radius = style.border_radius * scale;
+            painter.rect_filled(rect, radius, rgb_to_color(*color, style.opacity));
+        }
+        den_layout::Background::LinearGradient(gradient) => {
+            paint_linear_gradient(painter, rect, gradient, style.opacity);
+        }
+    }
+}
+
+/// Pinta um `linear-gradient` num rect axis-aligned via Mesh com vértices
+/// coloridos — egui interpola entre os 4 cantos no tesselation.
+///
+/// Algoritmo:
+/// 1. Definir o eixo do gradient via `angle_rad` (CSS: `0` = bottom→top, π/2
+///    = left→right, etc.).
+/// 2. Projetar os 4 cantos do rect no eixo; o canto com menor projeção
+///    recebe a primeira cor (stop[0]), o com maior recebe a última (stop[N-1]).
+/// 3. Cantos intermediários recebem cor interpolada conforme sua posição
+///    normalizada (0..=1) no eixo.
+///
+/// Interpolação linear de cor por componente RGBA em espaço sRGB (sem gamma
+/// correction — suficiente pro MVP, não é color-perfect).
+fn paint_linear_gradient(
+    painter: &egui::Painter,
+    rect: Rect,
+    gradient: &den_layout::LinearGradient,
+    opacity: f32,
+) {
+    if gradient.stops.len() < 2 {
+        return;
+    }
+    // Eixo do gradient. CSS angle: 0 = to top (gradient sobe), π/2 = to right,
+    // π = to bottom. Convertemos pra vetor (dx, dy) no espaço de tela do egui
+    // (y CRESCE pra baixo). "to top" = (0, -1), "to right" = (1, 0), etc.
+    let (sin, cos) = gradient.angle_rad.sin_cos();
+    // "to top" em CSS significa gradient vai DE baixo PRA cima.
+    // Nossa convenção pra `project`: primeiro stop no MENOR valor projetado.
+    // Dir do eixo: (sin, -cos) coloca stop[0] no lado oposto ao sentido "to <side>".
+    let axis_x = sin;
+    let axis_y = -cos;
+
+    let corners = [
+        rect.left_top(),
+        rect.right_top(),
+        rect.right_bottom(),
+        rect.left_bottom(),
+    ];
+    // Projeta cada canto no eixo; normaliza pra 0..=1 pela extensão min→max.
+    let projections: [f32; 4] = corners.map(|p| p.x * axis_x + p.y * axis_y);
+    let min_proj = projections.iter().copied().fold(f32::INFINITY, f32::min);
+    let max_proj = projections
+        .iter()
+        .copied()
+        .fold(f32::NEG_INFINITY, f32::max);
+    let span = (max_proj - min_proj).max(f32::EPSILON);
+
+    let mut mesh = egui::epaint::Mesh::default();
+    for (corner, projection) in corners.iter().zip(projections.iter()) {
+        let t = (projection - min_proj) / span;
+        let color = sample_gradient(&gradient.stops, t, opacity);
+        mesh.colored_vertex(*corner, color);
+    }
+    mesh.add_triangle(0, 1, 2);
+    mesh.add_triangle(0, 2, 3);
+    painter.add(egui::Shape::mesh(mesh));
+}
+
+/// Amostra a cor de um gradient em `t` (0..=1) com interpolação linear entre
+/// stops consecutivos.
+///
+/// - `stops`: lista de stops em ordem do gradient. MVP assume todos com
+///   `position: None` e distribui igualmente ao longo do eixo.
+/// - `t`: posição normalizada no eixo, clampada em `0..=1`.
+/// - `opacity`: multiplicador de alpha aplicado sobre a cor interpolada
+///   (compõe com `PaintStyle::opacity`).
+///
+/// Interpolação é feita componente-a-componente em espaço sRGB (sem gamma
+/// correction — suficiente pro MVP, não é color-perfect).
+fn sample_gradient(stops: &[den_layout::GradientStop], t: f32, opacity: f32) -> Color32 {
+    // MVP: assume todos os stops sem position (CSS auto-distribute igual).
+    // Stops com position serão ordenados e interpolados quando implementados.
+    let clamped = t.clamp(0.0, 1.0);
+    let n = stops.len();
+    if n == 1 {
+        return rgb_to_color(stops[0].color, opacity);
+    }
+    // Segmento em que `clamped` cai: entre stop[i] e stop[i+1].
+    let scaled = clamped * (n - 1) as f32;
+    let i = (scaled.floor() as usize).min(n - 2);
+    let local_t = scaled - i as f32;
+    let a = stops[i].color;
+    let b = stops[i + 1].color;
+    let mix = |x: u8, y: u8| -> u8 {
+        let r = x as f32 * (1.0 - local_t) + y as f32 * local_t;
+        r.round().clamp(0.0, u8::MAX as f32) as u8
+    };
+    rgb_to_color(
+        (mix(a.0, b.0), mix(a.1, b.1), mix(a.2, b.2), mix(a.3, b.3)),
+        opacity,
+    )
 }
 
 /// Pinta as sombras `box-shadow` externas (drop) do nó. Vão atrás do background.
@@ -660,7 +796,7 @@ fn paint_shadow_layer(
 /// Usado pelas camadas de blur do `box-shadow`.
 fn scale_color_alpha(rgb: Rgb, factor: f32) -> Color32 {
     let (r, g, b, a) = rgb;
-    let scaled = (a as f32 * factor.clamp(0.0, 1.0)).round().clamp(0.0, 255.0) as u8;
+    let scaled = (a as f32 * factor.clamp(0.0, 1.0)).round().clamp(0.0, u8::MAX as f32) as u8;
     Color32::from_rgba_unmultiplied(r, g, b, scaled)
 }
 
@@ -1012,6 +1148,12 @@ fn paint_input_visual(
     }
 }
 
+/// Mede + shapeia `text` aplicando font/size/weight/letter-spacing/etc. do
+/// `style`, retornando um [`TextBox`] com o galley pronto pra pintar.
+///
+/// Chamado 2× por nó textual: uma em `measure_tree_text` (pre-layout) e
+/// outra em `paint_text` (paint final, depois do layout resolver rects).
+/// Custo é baixo: egui faz cache de galleys.
 fn layout_text_box(
     ui: &Ui,
     text: &str,
@@ -1241,7 +1383,7 @@ fn next_char_boundary(s: &str, offset: usize) -> usize {
 /// o alpha original da cor; `opacity = 0.0` zera tudo (invisível).
 fn rgb_to_color(rgb: Rgb, opacity: f32) -> Color32 {
     let (r, g, b, a) = rgb;
-    let effective_a = (a as f32 * opacity.clamp(0.0, 1.0)).round().clamp(0.0, 255.0) as u8;
+    let effective_a = (a as f32 * opacity.clamp(0.0, 1.0)).round().clamp(0.0, u8::MAX as f32) as u8;
     Color32::from_rgba_unmultiplied(r, g, b, effective_a)
 }
 

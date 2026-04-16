@@ -29,8 +29,8 @@ pub use element_style::DenElementStyle;
 pub use entry::LayoutEntry;
 pub use geometry::LayoutRect;
 pub use render::{
-    BoxShadow, Interact, LayoutIntent, PaintStyle, RenderKind, RenderNode, RenderTree, Rgb,
-    TextAlign, TextTransform, Transform2d,
+    Background, BoxShadow, GradientStop, Interact, LayoutIntent, LinearGradient, PaintStyle,
+    RenderKind, RenderNode, RenderTree, Rgb, TextAlign, TextTransform, Transform2d,
 };
 pub use router::{DenPage, DenRouter};
 pub use state::{DenDebugState, DenInputState, DenNodeId, DenRouteState};

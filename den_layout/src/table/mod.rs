@@ -743,4 +743,32 @@ mod tests {
             ..LayoutEntry::default()
         }
     }
+
+    #[test]
+    fn flex_column_auto_height_sums_children() {
+        // Container flex-column com height:Auto deve reportar a soma das alturas
+        // dos filhos (+ gaps + padding) como sua própria altura, pra que siblings
+        // em block flow não desenhem por cima.
+        let mut parent = LayoutEntry {
+            parent: Some(0),
+            width_rule: DimensionRule::Px(200.0),
+            height_rule: DimensionRule::Auto,
+            display: DisplayMode::Flex,
+            flex_direction: crate::FlexDirection::Column,
+            gap: 10.0,
+            ..LayoutEntry::default()
+        };
+        // Sem padding pra math ficar direto.
+        parent.padding = 0.0;
+        let mut table = make_table(vec![
+            body(),
+            parent,
+            entry_fixed_size(1, 100.0, 30.0),
+            entry_fixed_size(1, 100.0, 30.0),
+            entry_fixed_size(1, 100.0, 30.0),
+        ]);
+        table.resolve(800.0);
+        // Esperado: 3 × 30 + 2 × 10 (gaps) = 110.
+        assert_eq!(table.rects[1].height, 110.0);
+    }
 }

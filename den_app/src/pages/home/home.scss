@@ -766,6 +766,66 @@ body {
     flex: 1;
 }
 
+// -- linear-gradient: direções e stops -------------------------
+//
+// Cada variante exercita um eixo/contagem de stops pra confirmar que a
+// interpolação rola bem e o ângulo CSS → vetor tá correto.
+
+.nf-gradient-row {
+    gap: 8px;
+}
+
+.nf-grad-to-right {
+    // Horizontal: esquerda azul, direita verde.
+    background: linear-gradient(to right, #4488ff, #5cdb95);
+    color: $dark-ink;
+    font-size: 11px;
+    padding: 14px;
+    border-radius: 4px;
+    flex: 1;
+}
+
+.nf-grad-to-bottom {
+    // Vertical default (omitir a direção é equivalente).
+    background: linear-gradient(to bottom, #f0a050, #e94560);
+    color: $white;
+    font-size: 11px;
+    padding: 14px;
+    border-radius: 4px;
+    flex: 1;
+}
+
+.nf-grad-45 {
+    // Diagonal a 45deg.
+    background: linear-gradient(45deg, #7eb8f7, rebeccapurple);
+    color: $white;
+    font-size: 11px;
+    padding: 14px;
+    border-radius: 4px;
+    flex: 1;
+}
+
+.nf-grad-triple {
+    // 3 stops: testa interpolação entre segmentos consecutivos.
+    background: linear-gradient(to right, red, yellow, green);
+    color: $dark-ink;
+    font-size: 11px;
+    padding: 14px;
+    border-radius: 4px;
+    flex: 1;
+}
+
+.nf-grad-rgba {
+    // rgba() dentro de linear-gradient — vírgulas internas não devem quebrar
+    // o split de stops do parser.
+    background: linear-gradient(to right, rgba(255, 0, 0, 1), rgba(255, 0, 0, 0));
+    color: $white;
+    font-size: 11px;
+    padding: 14px;
+    border-radius: 4px;
+    flex: 1;
+}
+
 // -- Footer ----------------------------------------------------
 
 .footer {

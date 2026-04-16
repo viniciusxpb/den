@@ -9,7 +9,7 @@ use super::config::{
 };
 use super::flex::{has_flex_grow, is_flex_container};
 use crate::types::{
-    AlignItems, DenElement, DenVisual, DisplayMode, FlexDirection, JustifyContent,
+    AlignItems, Background, DenElement, DenVisual, DisplayMode, FlexDirection, JustifyContent,
     LineHeightValue, OverflowKind, TextAlign, TextSegment, TextTransform, Transform2d, WidthValue,
 };
 use proc_macro2::Span;
@@ -19,7 +19,7 @@ use syn::LitStr;
 /// Emite um literal `den_layout::PaintStyle { .. }` para o visual dado.
 pub(crate) fn paint_style_tokens(visual: &DenVisual) -> proc_macro2::TokenStream {
     let color = quote_opt_rgb(visual.color);
-    let background = quote_opt_rgb(visual.background);
+    let background = background_tokens(visual.background.as_ref());
     let (border_color, border_widths) = match visual.border {
         Some(b) => {
             let (r, g, b_, a) = b.color;
@@ -282,6 +282,42 @@ pub(super) fn quote_opt_rgb(opt: Option<(u8, u8, u8, u8)>) -> proc_macro2::Token
     match opt {
         Some((r, g, b, a)) => quote! { Some((#r, #g, #b, #a)) },
         None => quote! { None },
+    }
+}
+
+/// Emite `Option<Background>` (solid cor ou linear-gradient).
+fn background_tokens(background: Option<&Background>) -> proc_macro2::TokenStream {
+    match background {
+        None => quote! { None },
+        Some(Background::Solid((r, g, b, a))) => {
+            quote! { Some(den_layout::Background::Solid((#r, #g, #b, #a))) }
+        }
+        Some(Background::LinearGradient(gradient)) => {
+            let angle_deg = gradient.angle_rad.to_degrees();
+            let stops = gradient.stops.iter().map(|stop| {
+                let (r, g, b, a) = stop.color;
+                let position = match stop.position {
+                    Some(p) => quote! { Some(#p as f32) },
+                    None => quote! { None },
+                };
+                quote! {
+                    den_layout::GradientStop {
+                        color: (#r, #g, #b, #a),
+                        position: #position,
+                    }
+                }
+            });
+            // `(deg).to_radians()` evita o lint `clippy::approx_constant`
+            // pra ângulos comuns (45°, 90°) — mesmo padrão do `transform_tokens`.
+            quote! {
+                Some(den_layout::Background::LinearGradient(
+                    den_layout::LinearGradient {
+                        angle_rad: (#angle_deg as f32).to_radians(),
+                        stops: vec![ #( #stops ),* ],
+                    }
+                ))
+            }
+        }
     }
 }
 

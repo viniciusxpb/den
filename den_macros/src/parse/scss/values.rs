@@ -4,11 +4,34 @@
 //! border, position, etc) e retorna a representação tipada do `den_macros::types`.
 //! Funções `apply_*` mutam o `StyleRule` direto pra shorthands com múltiplas
 //! propriedades (`font`, `inset`).
+//!
+//! # Estratégia de erros: `eprintln!` em vez de `compile_error!`
+//!
+//! Quando o parser encontra um valor desconhecido ou inválido (`overflow:
+//! teleport`, `linear-gradient(red)` com 1 stop só, `transform: matrix(...)`
+//! não suportado), ele loga via `eprintln!("Den: ...")` e retorna `None` —
+//! a propriedade é ignorada em runtime mas o compile SEGUE.
+//!
+//! Alternativa considerada: emitir `compile_error!` no macro. Não escolhida
+//! ainda porque:
+//! 1. **Faltam spans**: o HTML/SCSS é lido como string em compile-time via
+//!    `include_str!`; o parser não rastreia (line, col) por token ainda, então
+//!    o `compile_error!` apontaria pra linha do `den_template!(...)` e não
+//!    pro SCSS onde o erro está. Sem span preciso, o `eprintln!` é mais útil
+//!    (mostra o valor literal, dev acha rápido via grep).
+//! 2. **CSS é tolerante por design**: browsers ignoram properties/valores
+//!    desconhecidos em vez de falhar — Den segue isso. Fallha alta só quando
+//!    o erro leva a bug silencioso (regra 6 `Option<T>`, por exemplo).
+//!
+//! Follow-up: quando o HTML parser propagar `(line, col)` por atributo (ver
+//! PENDING "Spans de erro apontando pro `.html` original"), migrar pra
+//! `compile_error!` nos casos onde o erro é estritamente inválido.
 
 use crate::parse::color::parse_color;
 use crate::types::{
-    AlignItems, BorderStyle, BoxShadow, FlexDirection, JustifyContent, LineHeightValue,
-    OverflowKind, PositionKind, StyleRule, TextAlign, TextTransform, Transform2d, WidthValue,
+    AlignItems, Background, BorderStyle, BoxShadow, FlexDirection, GradientStop, JustifyContent,
+    LineHeightValue, LinearGradient, OverflowKind, PositionKind, StyleRule, TextAlign,
+    TextTransform, Transform2d, WidthValue,
 };
 
 /// Parseia tamanho Den/CSS em pixels, aceitando valor sem unidade ou `px`.
@@ -471,6 +494,127 @@ pub(super) fn parse_align_items(value: &str) -> Option<AlignItems> {
     }
     eprintln!("Den: `align-items: {trimmed}` desconhecido, ignorando");
     None
+}
+
+/// Parseia o valor de `background` CSS.
+///
+/// Aceita:
+/// - Cor sólida (hex, `rgb()`, `rgba()`, named CSS3) → [`Background::Solid`]
+/// - `linear-gradient(<direction>, stop, stop, ...)` → [`Background::LinearGradient`]
+///
+/// Retorna `None` quando o valor não bate em nada reconhecido.
+pub(super) fn parse_background_value(value: &str) -> Option<Background> {
+    let trimmed = strip_important(value).trim();
+    if let Some(inner) = strip_func_ci(trimmed, "linear-gradient") {
+        return parse_linear_gradient(inner).map(Background::LinearGradient);
+    }
+    parse_color(trimmed).map(Background::Solid)
+}
+
+/// Parseia o conteúdo de um `linear-gradient(...)` (sem os parens externos).
+///
+/// Formato CSS: `[<direction>,] <stop> , <stop> [, <stop>...]`
+/// - `<direction>`: opcional; `<angle>` (ex: `45deg`, `1rad`) OU `to <side>`
+///   (`to top|right|bottom|left`). Omitido = `to bottom` (π rad).
+/// - `<stop>`: no MVP só a cor (position explícita fica como follow-up).
+///
+/// Exige pelo menos 2 stops pra ter gradient válido — `linear-gradient(red)` falha.
+pub(super) fn parse_linear_gradient(inner: &str) -> Option<LinearGradient> {
+    let parts = split_top_level_commas(inner);
+    if parts.is_empty() {
+        return None;
+    }
+
+    let first = parts[0].trim();
+    let (angle_rad, stop_parts) = match parse_gradient_direction(first) {
+        Some(angle) => (angle, &parts[1..]),
+        // Sem direction explícita: default CSS = "to bottom" (π rad).
+        None => (std::f32::consts::PI, &parts[..]),
+    };
+
+    let stops: Vec<GradientStop> = stop_parts
+        .iter()
+        .filter_map(|part| parse_gradient_stop(part.trim()))
+        .collect();
+
+    if stops.len() < 2 {
+        eprintln!(
+            "Den: linear-gradient precisa de ao menos 2 stops de cor, recebi {}",
+            stops.len()
+        );
+        return None;
+    }
+
+    Some(LinearGradient { angle_rad, stops })
+}
+
+/// Interpreta o primeiro token do `linear-gradient(...)` como direção.
+/// Retorna `Some(angle_rad)` ou `None` se não é uma direção reconhecível
+/// (caller assume que o token é um stop e usa default `to bottom`).
+fn parse_gradient_direction(token: &str) -> Option<f32> {
+    // Ângulos cardeais do CSS `linear-gradient`. Convenção CSS: ângulo aumenta
+    // no sentido horário com 0 = "to top" (gradient sobe). Extraídos pra
+    // constantes nomeadas pra evitar literais mágicos no match.
+    const TO_TOP_RAD: f32 = 0.0;
+    const TO_RIGHT_RAD: f32 = std::f32::consts::FRAC_PI_2;
+    const TO_BOTTOM_RAD: f32 = std::f32::consts::PI;
+    const TO_LEFT_RAD: f32 = 3.0 * std::f32::consts::FRAC_PI_2;
+
+    // Keywords `to <side>`:
+    let lowered = token.to_ascii_lowercase();
+    if let Some(side) = lowered.strip_prefix("to ") {
+        return match side.trim() {
+            "top" => Some(TO_TOP_RAD),
+            "right" => Some(TO_RIGHT_RAD),
+            "bottom" => Some(TO_BOTTOM_RAD),
+            "left" => Some(TO_LEFT_RAD),
+            other => {
+                eprintln!(
+                    "Den: direção de linear-gradient desconhecida 'to {other}', caindo no default"
+                );
+                None
+            }
+        };
+    }
+    // Ângulo numérico com unidade? Reusa parse_rotation_angle.
+    if has_angle_unit(token) {
+        return parse_rotation_angle(token);
+    }
+    None
+}
+
+/// `true` se o token termina numa unidade de ângulo CSS conhecida.
+/// Usado pra desambiguar "é direção" vs "é cor" no primeiro token do gradient.
+fn has_angle_unit(token: &str) -> bool {
+    let lowered = token.to_ascii_lowercase();
+    lowered.ends_with("deg")
+        || lowered.ends_with("grad")
+        || lowered.ends_with("turn")
+        || lowered.ends_with("rad")
+}
+
+/// Parseia um stop individual: MVP aceita só `<color>`; position explícita
+/// (`red 50%`) é follow-up — por ora extrai só a primeira token como cor e
+/// ignora o resto com warning.
+fn parse_gradient_stop(raw: &str) -> Option<GradientStop> {
+    // Primeira token separada por whitespace (assume cor); resto é a position.
+    // Atenção: `rgba(0, 0, 0, 0.5)` tem espaços internos — usa o mesmo
+    // tokenizador do box-shadow que preserva parens.
+    let tokens = tokenize_shadow(raw);
+    if tokens.is_empty() {
+        return None;
+    }
+    let color = parse_color(tokens[0])?;
+    if tokens.len() > 1 {
+        eprintln!(
+            "Den: position de stop em linear-gradient ainda não suportada (extra: {:?}), ignorando",
+            &tokens[1..]
+        );
+    }
+    Some(GradientStop {
+        color,
+        position: None,
+    })
 }
 
 /// Parseia `overflow: visible | hidden`. `scroll`/`auto` caem em visible + warning.

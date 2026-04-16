@@ -168,19 +168,37 @@ impl LayoutTable {
             }
         }
 
-        // Auto-size do pai no eixo cruzado (altura em row, largura em column).
+        // Auto-size do pai:
+        // - Eixo CRUZADO: vira `max_cross` (maior filho no eixo cruzado) + edges.
+        // - Eixo PRINCIPAL: vira o cursor_main final (soma dos children + gaps
+        //   + margins) + edges. Isso é o que permite `flex-direction: column`
+        //   com `height: auto` reportar a altura real do conteúdo pro container
+        //   pai — sem isso, o pai fica com altura indefinida e o próximo
+        //   sibling em block layout desenha por cima.
+        //
+        // `cursor_main` começou em `main_start(...)` e acumulou cada resolved_main
+        // + margins + gaps. A extensão útil do conteúdo = cursor_main - start.
         if parent_idx != BODY_INDEX {
+            let content_main_used = cursor_main - main_start(content_x, content_y, direction);
             match direction {
                 FlexDirection::Row => {
+                    // Main = width. Cross = height.
                     if self.entries[parent_idx].height_rule == DimensionRule::Auto {
                         self.rects[parent_idx].height = max_cross + padding * 2.0 + border_y;
                     }
+                    if self.entries[parent_idx].width_rule == DimensionRule::Auto {
+                        self.rects[parent_idx].width =
+                            content_main_used + padding * 2.0 + border_x;
+                    }
                 }
                 FlexDirection::Column => {
+                    // Main = height. Cross = width.
                     if self.entries[parent_idx].width_rule == DimensionRule::Auto {
-                        // Column raramente precisa: width já tende a vir do contexto pai.
-                        // Mantido por simetria.
                         self.rects[parent_idx].width = max_cross + padding * 2.0 + border_x;
+                    }
+                    if self.entries[parent_idx].height_rule == DimensionRule::Auto {
+                        self.rects[parent_idx].height =
+                            content_main_used + padding * 2.0 + border_y;
                     }
                 }
             }
@@ -188,7 +206,20 @@ impl LayoutTable {
     }
 }
 
-/// Origem do eixo principal: `x` em row, `y` em column.
+/// Origem (em pixels absolutos) do eixo PRINCIPAL no content box do container.
+/// É a coordenada onde o primeiro filho começa a ser posicionado, ANTES de
+/// qualquer offset de `justify-content`.
+///
+/// - `content_x` / `content_y`: já calculados pelo caller como
+///   `parent_rect.{x,y} + padding + border_{left,top}` — i.e., o canto
+///   interno top-left do content box.
+/// - Row: main = horizontal → usa `content_x`.
+/// - Column: main = vertical → usa `content_y`.
+///
+/// O caller soma o offset inicial de justify-content a esse valor antes de
+/// usar como cursor do loop de filhos. `main_start` é também usado no final
+/// do layout pra calcular `content_main_used = cursor_main - main_start(...)`,
+/// que alimenta o auto-size do container no eixo principal.
 fn main_start(content_x: f32, content_y: f32, direction: FlexDirection) -> f32 {
     match direction {
         FlexDirection::Row => content_x,
@@ -196,7 +227,9 @@ fn main_start(content_x: f32, content_y: f32, direction: FlexDirection) -> f32 {
     }
 }
 
-/// Origem do eixo cruzado: `y` em row, `x` em column.
+/// Origem do eixo CRUZADO (perpendicular ao principal) no content box.
+/// `y` em row (cross = vertical), `x` em column (cross = horizontal).
+/// Simétrico a [`main_start`].
 fn cross_start_pos(content_x: f32, content_y: f32, direction: FlexDirection) -> f32 {
     match direction {
         FlexDirection::Row => content_y,

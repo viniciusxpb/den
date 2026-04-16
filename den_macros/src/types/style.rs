@@ -44,6 +44,41 @@
 
 use std::collections::HashMap;
 
+/// Um stop de gradient com cor e posição opcional.
+///
+/// `position: None` significa "posição automática" — distribuída igualmente
+/// entre os stops sem posição explícita. MVP aceita stops sem position; quando
+/// position explícita (`red 50%`) for implementada, stops mistos serão suportados.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GradientStop {
+    pub color: RgbColor,
+    /// `0.0..=1.0`. `None` = auto-distribuído pelo paint.
+    pub position: Option<f32>,
+}
+
+/// Gradient linear CSS (`linear-gradient(<direction>, stop, stop, ...)`).
+///
+/// `angle_rad` segue a convenção CSS: `0rad` = "to top" (gradient de baixo pra
+/// cima), `π/2 rad` (90deg) = "to right", `π rad` (180deg) = "to bottom", etc.
+/// Aumenta no sentido horário.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LinearGradient {
+    pub angle_rad: f32,
+    pub stops: Vec<GradientStop>,
+}
+
+/// Preenchimento de background: cor sólida ou gradient. `PaintStyle.background`
+/// vira `Option<Background>` em vez de `Option<RgbColor>` direto — `background`
+/// como shorthand CSS pode ser qualquer um dos dois.
+///
+/// Extensões futuras (mantendo compat via match): `RadialGradient`, múltiplos
+/// backgrounds em camadas, `url(...)` para imagens.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Background {
+    Solid(RgbColor),
+    LinearGradient(LinearGradient),
+}
+
 /// Cor RGBA em u8 (`(r, g, b, a)`). Alpha 255 = opaco total, 0 = transparente.
 ///
 /// Parseres que não declaram alpha (`#RGB`, `#RRGGBB`, `rgb(...)`, `$var` hex sem
@@ -271,7 +306,9 @@ pub struct StyleRule {
     pub text_align: Option<TextAlign>,
     pub underline: Option<bool>,
     pub strikethrough: Option<bool>,
-    pub background: Option<RgbColor>,
+    /// Background shorthand: pode ser cor sólida OU gradient. Ver regra `Option<T>`
+    /// no topo do arquivo — `Option` preserva cascade, `Background` discrimina fill.
+    pub background: Option<Background>,
     pub padding: Option<f32>,
     pub margin: Option<f32>,
     /// `display`. Default CSS = `Block`. Ver regra `Option<T>` no topo do arquivo.
@@ -381,7 +418,7 @@ impl StyleRule {
             self.strikethrough = other.strikethrough;
         }
         if other.background.is_some() {
-            self.background = other.background;
+            self.background = other.background.clone();
         }
         if other.padding.is_some() {
             self.padding = other.padding;

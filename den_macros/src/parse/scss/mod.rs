@@ -20,11 +20,11 @@ use lexer::{
 use values::{
     apply_border_color, apply_border_side_color, apply_border_side_shorthand,
     apply_border_side_width, apply_border_width, apply_font_shorthand, apply_inset_shorthand,
-    parse_align_items, parse_border_value, parse_box_shadow_value, parse_flex_direction,
-    parse_font_family, parse_font_style, parse_font_weight, parse_justify_content,
-    parse_letter_spacing, parse_line_height, parse_offset_value, parse_overflow, parse_position,
-    parse_size_value, parse_text_align, parse_text_decoration, parse_text_transform,
-    parse_transform, parse_width_value, strip_important,
+    parse_align_items, parse_background_value, parse_border_value, parse_box_shadow_value,
+    parse_flex_direction, parse_font_family, parse_font_style, parse_font_weight,
+    parse_justify_content, parse_letter_spacing, parse_line_height, parse_offset_value,
+    parse_overflow, parse_position, parse_size_value, parse_text_align, parse_text_decoration,
+    parse_text_transform, parse_transform, parse_width_value, strip_important,
 };
 use variables::{collect_variables, resolve_vars};
 
@@ -185,7 +185,7 @@ fn apply_property(rule: &mut StyleRule, prop_name: &str, value: &str) {
                 rule.strikethrough = strikethrough;
             }
         }
-        "background" => rule.background = parse_color(value),
+        "background" => rule.background = parse_background_value(value),
         "padding" => rule.padding = parse_size_value(value),
         "margin" => rule.margin = parse_size_value(value),
         "display" if value == "flex" => rule.display = Some(DisplayMode::Flex),
@@ -290,8 +290,8 @@ fn parse_opacity(value: &str) -> Option<f32> {
 mod tests {
     use super::parse_scss;
     use crate::types::{
-        BoxShadow, LineHeightValue, PositionKind, StyleMap, StyleRule, TextAlign, TextTransform,
-        WidthValue,
+        Background, BoxShadow, LineHeightValue, PositionKind, StyleMap, StyleRule, TextAlign,
+        TextTransform, WidthValue,
     };
 
     /// Helper de teste: extrai a slice `&[BoxShadow]` da classe `class` no map.
@@ -322,7 +322,7 @@ mod tests {
 
         let card = styles.get("card").expect("card style");
         assert_eq!(card.color, Some((255, 255, 255, 255)));
-        assert_eq!(card.background, Some((0, 0, 0, 255)));
+        assert_eq!(card.background, Some(Background::Solid((0, 0, 0, 255))));
     }
 
     #[test]
@@ -385,7 +385,7 @@ mod tests {
 
         let alert = styles.get("alert").expect("alert style");
         assert_eq!(alert.color, Some((233, 69, 96, 255)));
-        assert_eq!(alert.background, Some((18, 18, 31, 255)));
+        assert_eq!(alert.background, Some(Background::Solid((18, 18, 31, 255))));
     }
 
     #[test]
@@ -417,7 +417,7 @@ mod tests {
         );
         let pill = styles.get("pill").expect("pill style");
         // 0.15 * 255 = 38.25 → 38
-        assert_eq!(pill.background, Some((0, 212, 170, 38)));
+        assert_eq!(pill.background, Some(Background::Solid((0, 212, 170, 38))));
     }
 
     #[test]
@@ -585,6 +585,95 @@ mod tests {
         assert_eq!(styles.get("d").unwrap().justify_content, Some(JustifyContent::SpaceBetween));
         assert_eq!(styles.get("e").unwrap().justify_content, Some(JustifyContent::SpaceAround));
         assert_eq!(styles.get("f").unwrap().justify_content, Some(JustifyContent::SpaceEvenly));
+    }
+
+    #[test]
+    fn linear_gradient_with_explicit_angle() {
+        use crate::types::LinearGradient;
+        let styles = parse_scss(
+            r#"
+            .bar { background: linear-gradient(90deg, red, blue); }
+            "#,
+        );
+        let bg = styles.get("bar").expect(".bar").background.as_ref().unwrap();
+        let LinearGradient { angle_rad, stops } = match bg {
+            Background::LinearGradient(g) => g,
+            other => panic!("esperado LinearGradient, got {other:?}"),
+        };
+        let approx = |a: f32, b: f32| (a - b).abs() < 0.001;
+        assert!(approx(*angle_rad, std::f32::consts::FRAC_PI_2), "90deg = π/2");
+        assert_eq!(stops.len(), 2);
+        assert_eq!(stops[0].color, (255, 0, 0, 255));
+        assert_eq!(stops[1].color, (0, 0, 255, 255));
+    }
+
+    #[test]
+    fn linear_gradient_with_to_side_keyword() {
+        let styles = parse_scss(
+            r#"
+            .a { background: linear-gradient(to right, black, white); }
+            .b { background: linear-gradient(to bottom, red, yellow, green); }
+            "#,
+        );
+        let a = match styles.get("a").unwrap().background.as_ref().unwrap() {
+            Background::LinearGradient(g) => g,
+            _ => panic!(),
+        };
+        let approx = |a: f32, b: f32| (a - b).abs() < 0.001;
+        assert!(approx(a.angle_rad, std::f32::consts::FRAC_PI_2), "to right = π/2");
+        assert_eq!(a.stops.len(), 2);
+
+        let b = match styles.get("b").unwrap().background.as_ref().unwrap() {
+            Background::LinearGradient(g) => g,
+            _ => panic!(),
+        };
+        assert!(approx(b.angle_rad, std::f32::consts::PI), "to bottom = π");
+        assert_eq!(b.stops.len(), 3);
+    }
+
+    #[test]
+    fn linear_gradient_without_direction_defaults_to_bottom() {
+        // CSS spec: `linear-gradient(red, blue)` = `to bottom`.
+        let styles = parse_scss(
+            r#"
+            .a { background: linear-gradient(red, blue); }
+            "#,
+        );
+        let g = match styles.get("a").unwrap().background.as_ref().unwrap() {
+            Background::LinearGradient(g) => g,
+            _ => panic!(),
+        };
+        let approx = |a: f32, b: f32| (a - b).abs() < 0.001;
+        assert!(approx(g.angle_rad, std::f32::consts::PI));
+        assert_eq!(g.stops.len(), 2);
+    }
+
+    #[test]
+    fn linear_gradient_accepts_rgba_stops_with_inner_commas() {
+        let styles = parse_scss(
+            r#"
+            .a { background: linear-gradient(90deg, rgba(255, 0, 0, 0.5), rgba(0, 0, 255, 0.8)); }
+            "#,
+        );
+        let g = match styles.get("a").unwrap().background.as_ref().unwrap() {
+            Background::LinearGradient(g) => g,
+            _ => panic!(),
+        };
+        assert_eq!(g.stops.len(), 2, "vírgulas dentro de rgba(..) não quebram a lista");
+        assert_eq!(g.stops[0].color, (255, 0, 0, 128));
+        assert_eq!(g.stops[1].color, (0, 0, 255, 204));
+    }
+
+    #[test]
+    fn linear_gradient_requires_at_least_two_stops() {
+        // `linear-gradient(red)` não é válido CSS — único stop, sem gradiente.
+        let styles = parse_scss(
+            r#"
+            .a { background: linear-gradient(red); }
+            "#,
+        );
+        // Parser devolve None → styles.background continua None.
+        assert!(styles.get("a").unwrap().background.is_none());
     }
 
     #[test]

@@ -47,6 +47,38 @@ pub enum TextAlign {
     Right,
 }
 
+/// Um stop de gradient com cor + posição opcional (0..=1).
+///
+/// **ESPELHO** de [`den_macros::types::GradientStop`]. `position: None` = paint
+/// auto-distribui entre os stops sem position explícita.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GradientStop {
+    pub color: Rgb,
+    pub position: Option<f32>,
+}
+
+/// Gradient linear CSS (`linear-gradient(<direction>, stop, stop, ...)`).
+///
+/// **ESPELHO** de [`den_macros::types::LinearGradient`]. `angle_rad` usa a
+/// convenção CSS: `0` = "to top", `π/2` = "to right", `π` = "to bottom",
+/// `3π/2` = "to left". Sentido horário.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LinearGradient {
+    pub angle_rad: f32,
+    pub stops: Vec<GradientStop>,
+}
+
+/// Preenchimento de background: cor sólida ou gradient.
+///
+/// **ESPELHO** de [`den_macros::types::Background`]. Paint dispatcha sobre as
+/// variantes — `Solid` via `rect_filled`, `LinearGradient` via `Mesh` com
+/// vértices coloridos (egui interpola entre eles no tesselation).
+#[derive(Debug, Clone, PartialEq)]
+pub enum Background {
+    Solid(Rgb),
+    LinearGradient(LinearGradient),
+}
+
 /// Transformação 2D CSS (`transform: rotate(...) [scale(...) translate(...)]`).
 ///
 /// **ESPELHO** de [`den_macros::types::Transform2d`]. MVP: só rotação; demais
@@ -93,8 +125,8 @@ pub struct BoxShadow {
 pub struct PaintStyle {
     /// Cor do texto (quando houver).
     pub color: Option<Rgb>,
-    /// Cor de fundo (preenchimento).
-    pub background: Option<Rgb>,
+    /// Preenchimento do background: cor sólida OU gradient.
+    pub background: Option<Background>,
     /// Cor da borda (compartilhada pelos 4 lados no MVP).
     pub border_color: Option<Rgb>,
     /// Larguras de borda por lado em CSS pixels: `[top, right, bottom, left]`
