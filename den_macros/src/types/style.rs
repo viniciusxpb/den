@@ -91,6 +91,41 @@ pub enum AlignItems {
     FlexEnd,
 }
 
+/// Comportamento quando o conteúdo excede o rect do container (`overflow`).
+/// MVP suporta `Visible` (default CSS) e `Hidden`. `Scroll`/`Auto` ainda não
+/// implementados — caem em `Visible` com warning no parser.
+///
+/// **ESPELHO**: gêmeo de [`den_layout::OverflowKind`]. Adicionar variante aqui
+/// exige atualizar o do `den_layout` E o `overflow_tokens` em `codegen/style.rs`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum OverflowKind {
+    #[default]
+    Visible,
+    Hidden,
+}
+
+/// Transformações 2D CSS (`transform: rotate(...) [scale(...) translate(...)]`).
+///
+/// MVP: só rotação. `scale`/`translate`/`matrix` ainda não parseados — cairão
+/// aqui quando implementados, mesmo type, novos campos. Cada transform que o
+/// dev declara é combinado numa `Transform2d` resolvida.
+///
+/// `rotation_rad: 0.0` = sem rotação (equivalente a `None` no `Option<Transform2d>`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Transform2d {
+    /// Rotação em radianos aplicada em volta do centro do rect do nó
+    /// (CSS default `transform-origin: 50% 50%`).
+    pub rotation_rad: f32,
+}
+
+impl Transform2d {
+    /// `true` se nenhuma transformação foi efetivamente declarada (rotação = 0).
+    /// Paint pode pular o codepath de mesh rotated quando é identity.
+    pub fn is_identity(&self) -> bool {
+        self.rotation_rad == 0.0
+    }
+}
+
 /// Distribuição dos filhos no eixo PRINCIPAL de um flex container.
 ///
 /// `FlexStart` é o default CSS. `space-*` distribuem o espaço remanescente
@@ -300,6 +335,12 @@ pub struct StyleRule {
     /// `justify-content` — distribuição no eixo principal. Default CSS = `FlexStart`.
     /// Ver regra `Option<T>` no topo do arquivo.
     pub justify_content: Option<JustifyContent>,
+    /// `overflow`: o que acontece quando o conteúdo excede o rect do container.
+    /// `None` = não declarado (= Visible default CSS). Ver regra `Option<T>`.
+    pub overflow: Option<OverflowKind>,
+    /// `transform: rotate(...)`. `None` = não declarado (= identity, sem rotação).
+    /// Ver regra `Option<T>` no topo do arquivo.
+    pub transform: Option<Transform2d>,
     pub hover: Option<Box<StyleRule>>,
 }
 
@@ -422,6 +463,12 @@ impl StyleRule {
         }
         if other.justify_content.is_some() {
             self.justify_content = other.justify_content;
+        }
+        if other.overflow.is_some() {
+            self.overflow = other.overflow;
+        }
+        if other.transform.is_some() {
+            self.transform = other.transform;
         }
         if other.hover.is_some() {
             self.hover = other.hover.clone();

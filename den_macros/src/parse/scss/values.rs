@@ -8,7 +8,7 @@
 use crate::parse::color::parse_color;
 use crate::types::{
     AlignItems, BorderStyle, BoxShadow, FlexDirection, JustifyContent, LineHeightValue,
-    PositionKind, StyleRule, TextAlign, TextTransform, WidthValue,
+    OverflowKind, PositionKind, StyleRule, TextAlign, TextTransform, Transform2d, WidthValue,
 };
 
 /// Parseia tamanho Den/CSS em pixels, aceitando valor sem unidade ou `px`.
@@ -471,6 +471,95 @@ pub(super) fn parse_align_items(value: &str) -> Option<AlignItems> {
     }
     eprintln!("Den: `align-items: {trimmed}` desconhecido, ignorando");
     None
+}
+
+/// Parseia `overflow: visible | hidden`. `scroll`/`auto` caem em visible + warning.
+pub(super) fn parse_overflow(value: &str) -> Option<OverflowKind> {
+    let trimmed = strip_important(value).trim();
+    if trimmed.eq_ignore_ascii_case("visible") {
+        return Some(OverflowKind::Visible);
+    }
+    if trimmed.eq_ignore_ascii_case("hidden") {
+        return Some(OverflowKind::Hidden);
+    }
+    if trimmed.eq_ignore_ascii_case("scroll") || trimmed.eq_ignore_ascii_case("auto") {
+        eprintln!(
+            "Den: `overflow: {trimmed}` não suportado (sem scroll nativo), caindo pra `visible`",
+        );
+        return Some(OverflowKind::Visible);
+    }
+    eprintln!("Den: `overflow: {trimmed}` desconhecido, ignorando");
+    None
+}
+
+/// Parseia `transform: rotate(Ndeg|Nrad|Nturn)`. MVP: só `rotate()` suportado;
+/// `scale`/`translate`/`matrix`/múltiplos aninhados caem com warning.
+///
+/// Retorna `Some(Transform2d)` com a rotação em radianos, ou `None` se falha.
+pub(super) fn parse_transform(value: &str) -> Option<Transform2d> {
+    let trimmed = strip_important(value).trim();
+    // MVP: detecta SÓ `rotate(...)` no começo. Outras funções passam um
+    // warning + retornam None (cai pra default identity).
+    if let Some(inner) = strip_func_ci(trimmed, "rotate") {
+        let angle_rad = parse_rotation_angle(inner.trim())?;
+        return Some(Transform2d {
+            rotation_rad: angle_rad,
+        });
+    }
+    if trimmed.eq_ignore_ascii_case("none") {
+        return Some(Transform2d { rotation_rad: 0.0 });
+    }
+    eprintln!(
+        "Den: `transform: {trimmed}` não suportado (MVP só aceita `rotate()`), ignorando",
+    );
+    None
+}
+
+/// Case-insensitive check pra `name(ARGS)` — retorna `ARGS` ou `None`.
+/// Versão local aqui (não usa `parse::color::strip_func` pra não tornar pub).
+fn strip_func_ci<'a>(value: &'a str, name: &str) -> Option<&'a str> {
+    if value.len() < name.len() + 2 {
+        return None;
+    }
+    let (head, rest) = value.split_at(name.len());
+    if !head.eq_ignore_ascii_case(name) {
+        return None;
+    }
+    let rest = rest.trim_start();
+    rest.strip_prefix('(')?.strip_suffix(')')
+}
+
+/// Parseia ângulo CSS: `Ndeg` / `Nrad` / `Nturn` / `Ngrad`. Número sem unidade
+/// é tratado como graus (permissivo; CSS spec pede unidade, mas o warning no
+/// parser geral é suficiente).
+///
+/// **Ordem importa**: `grad` DEVE ser checado antes de `rad` (pois "grad"
+/// termina em "rad") e `turn` antes de qualquer substring dele.
+fn parse_rotation_angle(raw: &str) -> Option<f32> {
+    let trimmed = raw.trim();
+    if let Some(grad_str) = trimmed.strip_suffix("grad") {
+        // 1 gradiano = π/200 radianos. CHECK ANTES de `rad` (grad ends with rad).
+        return grad_str
+            .trim()
+            .parse::<f32>()
+            .ok()
+            .map(|v| v * std::f32::consts::PI / 200.0);
+    }
+    if let Some(turn_str) = trimmed.strip_suffix("turn") {
+        return turn_str
+            .trim()
+            .parse::<f32>()
+            .ok()
+            .map(|v| v * std::f32::consts::TAU);
+    }
+    if let Some(deg_str) = trimmed.strip_suffix("deg") {
+        return deg_str.trim().parse::<f32>().ok().map(|v| v.to_radians());
+    }
+    if let Some(rad_str) = trimmed.strip_suffix("rad") {
+        return rad_str.trim().parse::<f32>().ok();
+    }
+    // Fallback permissivo: trata número puro como graus.
+    trimmed.parse::<f32>().ok().map(|v| v.to_radians())
 }
 
 /// Parseia `justify-content: flex-start | center | flex-end | space-between

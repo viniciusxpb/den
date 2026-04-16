@@ -10,7 +10,7 @@ use super::config::{
 use super::flex::{has_flex_grow, is_flex_container};
 use crate::types::{
     AlignItems, DenElement, DenVisual, DisplayMode, FlexDirection, JustifyContent,
-    LineHeightValue, TextAlign, TextSegment, TextTransform, WidthValue,
+    LineHeightValue, OverflowKind, TextAlign, TextSegment, TextTransform, Transform2d, WidthValue,
 };
 use proc_macro2::Span;
 use quote::quote;
@@ -53,6 +53,9 @@ pub(crate) fn paint_style_tokens(visual: &DenVisual) -> proc_macro2::TokenStream
     // Default aplicado AQUI (codegen, antes do runtime) — Option preservado em
     // DenVisual pra cascade. None ou Some(vec![]) ambos viram Vec::new() no paint.
     let box_shadows = box_shadows_tokens(visual.box_shadows.as_deref().unwrap_or_default());
+    // Overflow: `None` ou `Some(Visible)` viram `false`; `Some(Hidden)` = `true`.
+    let overflow_hidden = matches!(visual.overflow, Some(OverflowKind::Hidden));
+    let transform_tokens = transform_tokens(visual.transform);
 
     quote! {
         den_layout::PaintStyle {
@@ -77,7 +80,31 @@ pub(crate) fn paint_style_tokens(visual: &DenVisual) -> proc_macro2::TokenStream
             white_space_nowrap: #white_space_nowrap,
             text_overflow_ellipsis: #text_overflow_ellipsis,
             box_shadows: #box_shadows,
+            overflow_hidden: #overflow_hidden,
+            transform: #transform_tokens,
         }
+    }
+}
+
+/// Emite `Option<Transform2d>` pro `PaintStyle`. `None` quando não declarado
+/// OU quando a transformação é identity (sem rotação) — assim o paint pode
+/// pular o codepath de mesh rotated sem checar `.is_identity()` em runtime.
+///
+/// Emite `(N_f32).to_radians()` em vez do literal radian convertido pra evitar
+/// que clippy confunda ângulos comuns (π/4, π/2) com constantes da stdlib
+/// (`FRAC_PI_4`, `FRAC_PI_2`). O `to_radians()` é trivial (multiply por π/180)
+/// e roda uma vez por frame por nó rotacionado.
+fn transform_tokens(transform: Option<Transform2d>) -> proc_macro2::TokenStream {
+    match transform {
+        Some(t) if !t.is_identity() => {
+            let rotation_deg = t.rotation_rad.to_degrees();
+            quote! {
+                Some(den_layout::Transform2d {
+                    rotation_rad: (#rotation_deg as f32).to_radians(),
+                })
+            }
+        }
+        _ => quote! { None },
     }
 }
 

@@ -19,8 +19,8 @@ test: lint-css-rules ## Roda guardas + cargo test + clippy (deny warnings) em to
 .PHONY: lint-css-rules
 lint-css-rules:
 	@FILES="den_macros/src/types/style.rs den_macros/src/types/resolved.rs"; \
-	BAD_FIELDS=$$(grep -nE 'pub +(display|width|height|cursor_pointer|flex_grow|position|flex_direction|align_items|justify_content|box_shadows): +(DisplayMode|WidthValue|PositionKind|FlexDirection|AlignItems|JustifyContent|bool) *,|pub +box_shadows: +Vec<' $$FILES 2>/dev/null || true); \
-	BAD_MERGE=$$(grep -nE 'if +other\.(display|width|height|position|flex_direction|align_items|justify_content) +!= +' $$FILES 2>/dev/null || true); \
+	BAD_FIELDS=$$(grep -nE 'pub +(display|width|height|cursor_pointer|flex_grow|position|flex_direction|align_items|justify_content|box_shadows|overflow|transform): +(DisplayMode|WidthValue|PositionKind|FlexDirection|AlignItems|JustifyContent|OverflowKind|Transform2d|bool) *,|pub +box_shadows: +Vec<' $$FILES 2>/dev/null || true); \
+	BAD_MERGE=$$(grep -nE 'if +other\.(display|width|height|position|flex_direction|align_items|justify_content|overflow|transform) +!= +' $$FILES 2>/dev/null || true); \
 	BAD_BOOL=$$(grep -nE 'if +other\.(cursor_pointer|flex_grow) *\{' $$FILES 2>/dev/null || true); \
 	BAD_VEC=$$(grep -nE 'if +!? *other\.(box_shadows)\.is_empty\(\)' $$FILES 2>/dev/null || true); \
 	if [ -n "$$BAD_FIELDS" ] || [ -n "$$BAD_MERGE" ] || [ -n "$$BAD_BOOL" ] || [ -n "$$BAD_VEC" ]; then \

@@ -65,6 +65,10 @@ pub struct DenVisual {
     pub align_items: Option<AlignItems>,
     /// `justify-content`. Ver regra `Option<T>` em [`super::style`].
     pub justify_content: Option<JustifyContent>,
+    /// `overflow: visible|hidden`. Ver regra `Option<T>` em [`super::style`].
+    pub overflow: Option<OverflowKind>,
+    /// `transform: rotate(...)`. Ver regra `Option<T>` em [`super::style`].
+    pub transform: Option<Transform2d>,
     /// Visual override quando hover. None = sem hover behavior.
     pub hover_override: Option<Box<DenVisual>>,
 }
@@ -114,6 +118,8 @@ impl DenVisual {
             flex_direction: rule.flex_direction,
             align_items: rule.align_items,
             justify_content: rule.justify_content,
+            overflow: rule.overflow,
+            transform: rule.transform,
             hover_override: rule
                 .hover
                 .as_ref()
@@ -243,6 +249,12 @@ impl DenVisual {
         }
         if other.justify_content.is_some() {
             self.justify_content = other.justify_content;
+        }
+        if other.overflow.is_some() {
+            self.overflow = other.overflow;
+        }
+        if other.transform.is_some() {
+            self.transform = other.transform;
         }
     }
 

@@ -503,6 +503,269 @@ body {
     font-size: 11px;
 }
 
+// -- New features showcase (manual visual check) ---------------
+//
+// Cada classe abaixo exercita uma CSS rule recém-implementada. Se uma dessas
+// não renderizar como descrito, o pipeline quebrou em algum ponto.
+
+.new-features {
+    background: $bg-card;
+    border-radius: 10px;
+    padding: 14px;
+    border: 1px solid $border;
+    width: 100%;
+    gap: 12px;
+}
+
+// -- box-shadow (drop + inset + múltiplas) ---------------------
+
+.nf-shadow-card {
+    background: $bg-deep;
+    border-radius: 8px;
+    padding: 12px;
+    color: $text-main;
+    font-size: 12px;
+    flex: 1;
+    // Drop shadow clássico: offset vertical + blur + cor com alpha.
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+}
+
+.nf-shadow-inset {
+    background: $bg-deep;
+    border-radius: 8px;
+    padding: 12px;
+    color: $text-main;
+    font-size: 12px;
+    flex: 1;
+    // Inset stub: desenha borda interna (spread vira largura do stroke).
+    box-shadow: inset 0 0 4px rgba(126, 184, 247, 0.8);
+}
+
+.nf-shadow-multi {
+    background: $bg-deep;
+    border-radius: 8px;
+    padding: 12px;
+    color: $text-main;
+    font-size: 12px;
+    flex: 1;
+    // 2 sombras empilhadas: halo azul + drop preto.
+    box-shadow: 0 0 12px rgba(126, 184, 247, 0.5), 0 3px 8px rgba(0, 0, 0, 0.5);
+}
+
+// -- transform: rotate() ---------------------------------------
+
+.nf-rotate-row {
+    gap: 20px;
+    padding: 20px 10px;
+}
+
+// Quadradinho colorido pra cada ângulo — verifica se a rotação é em torno
+// do centro do rect (default CSS transform-origin: 50% 50%).
+.nf-rotate-0 {
+    background: $blue;
+    color: $dark-ink;
+    font-size: 14px;
+    padding: 8px;
+    border-radius: 4px;
+    width: 60px;
+    height: 60px;
+    flex: 1;
+}
+
+.nf-rotate-15 {
+    background: $green;
+    color: $dark-ink;
+    font-size: 14px;
+    padding: 8px;
+    border-radius: 4px;
+    width: 60px;
+    height: 60px;
+    flex: 1;
+    transform: rotate(15deg);
+}
+
+.nf-rotate-45 {
+    background: $orange;
+    color: $dark-ink;
+    font-size: 14px;
+    padding: 8px;
+    border-radius: 4px;
+    width: 60px;
+    height: 60px;
+    flex: 1;
+    transform: rotate(45deg);
+}
+
+.nf-rotate-90 {
+    background: $crimson;
+    color: $white;
+    font-size: 14px;
+    padding: 8px;
+    border-radius: 4px;
+    width: 60px;
+    height: 60px;
+    flex: 1;
+    transform: rotate(90deg);
+}
+
+// -- overflow: hidden + text-overflow: ellipsis ----------------
+
+.nf-overflow-box {
+    background: $bg-deep;
+    border: 1px solid $border-sub;
+    border-radius: 6px;
+    padding: 8px;
+    width: 200px;
+    height: 60px;
+    flex: 1;
+    // Sem `overflow: hidden`, o texto escapa visivelmente; com, clipa no rect.
+    overflow: hidden;
+}
+
+.nf-overflow-long {
+    color: $text-main;
+    font-size: 12px;
+    width: 600px;
+}
+
+.nf-ellipsis {
+    background: $bg-deep;
+    border: 1px solid $border-sub;
+    border-radius: 6px;
+    padding: 10px;
+    color: $text-main;
+    font-size: 12px;
+    width: 200px;
+    // Sem `nowrap + ellipsis`, o texto vazaria. Com: trunca com "…".
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    flex: 1;
+}
+
+// -- flex-direction: column + align-items + justify-content ----
+
+.nf-column-stack {
+    // Coluna dos pills: filhos empilham verticalmente, não horizontalmente.
+    display: flex;
+    flex-direction: column;
+    background: $bg-deep;
+    border: 1px solid $border-sub;
+    border-radius: 6px;
+    padding: 8px;
+    gap: 6px;
+    flex: 1;
+}
+
+.nf-col-pill {
+    background: $blue;
+    color: $dark-ink;
+    font-size: 11px;
+    padding: 6px;
+    border-radius: 4px;
+    width: 100%;
+}
+
+.nf-justify-between {
+    // Pontos distribuídos com space-between: primeiro encostado na esquerda,
+    // último na direita, espaço igual entre eles.
+    display: flex;
+    justify-content: space-between;
+    background: $bg-deep;
+    border: 1px solid $border-sub;
+    border-radius: 6px;
+    padding: 8px;
+    height: 40px;
+    flex: 1;
+}
+
+.nf-sb-dot {
+    background: $green;
+    color: $dark-ink;
+    font-size: 11px;
+    padding: 6px;
+    border-radius: 12px;
+    width: 28px;
+    height: 28px;
+    text-align: center;
+}
+
+.nf-align-center {
+    // Align-items: center — o label deve ficar verticalmente no meio do box
+    // de 60px, não colado no topo.
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: $bg-deep;
+    border: 1px solid $border-sub;
+    border-radius: 6px;
+    padding: 8px;
+    height: 60px;
+    flex: 1;
+}
+
+.nf-ac-label {
+    background: $orange;
+    color: $dark-ink;
+    font-size: 11px;
+    padding: 6px;
+    border-radius: 4px;
+}
+
+// -- Named CSS colors + opacity + transparent ------------------
+
+.nf-color-row {
+    gap: 8px;
+}
+
+.nf-named-red {
+    background: red;
+    color: white;
+    font-size: 11px;
+    padding: 8px;
+    border-radius: 4px;
+    flex: 1;
+}
+
+.nf-named-rebeccapurple {
+    background: rebeccapurple;
+    color: white;
+    font-size: 11px;
+    padding: 8px;
+    border-radius: 4px;
+    flex: 1;
+}
+
+.nf-named-papayawhip {
+    background: papayawhip;
+    color: black;
+    font-size: 11px;
+    padding: 8px;
+    border-radius: 4px;
+    flex: 1;
+}
+
+.nf-opacity-demo {
+    background: $crimson;
+    color: $white;
+    font-size: 11px;
+    padding: 8px;
+    border-radius: 4px;
+    flex: 1;
+    // Sem opacity seria vermelho saturado; com 0.4 fica quase sumida.
+    opacity: 0.4;
+}
+
+.nf-transparent-border {
+    // Border transparente = invisível, mas ocupa espaço (teste de parse de "transparent").
+    background: $bg-deep;
+    border: 2px solid transparent;
+    color: $text-dim;
+    font-size: 11px;
+    padding: 8px;
+    border-radius: 4px;
+    flex: 1;
+}
+
 // -- Footer ----------------------------------------------------
 
 .footer {

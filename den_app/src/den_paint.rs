@@ -170,7 +170,17 @@ fn event_pass(
 ) -> Vec<PaintEvent> {
     let mut events = Vec::new();
     for &root_idx in &tree.roots {
-        collect_events_node(ui, scale, origin, tree, layout, state, root_idx, &mut events);
+        collect_events_node(
+            ui,
+            scale,
+            origin,
+            tree,
+            layout,
+            state,
+            root_idx,
+            None,
+            &mut events,
+        );
     }
     events
 }
@@ -189,7 +199,7 @@ fn paint_pass(
     state: &DenRouteState,
 ) {
     for &root_idx in &tree.roots {
-        paint_node(ui, scale, origin, tree, layout, state, root_idx);
+        paint_node(ui, scale, origin, tree, layout, state, root_idx, None);
     }
 }
 
@@ -231,8 +241,12 @@ fn measure_tree_text(ui: &Ui, tree: &mut RenderTree) {
 }
 
 /// Desenha um único nó da `RenderTree` (sem chamar `ui.interact()` nem emitir
-/// eventos). Lê `state.hover`/`state.focus` populados pelo `event_pass` pra
-/// escolher estilo ativo e pintar o caret de input focado.
+/// eventos). Lê `state.hover`/`state.focus` populados pelo `event_pass`.
+///
+/// `parent_clip` é o rect máximo em que este nó pode pintar, vindo do
+/// `overflow: hidden` de um ancestral. `None` = sem clipping extra (usa clip
+/// do `ui` como limite natural).
+#[allow(clippy::too_many_arguments)]
 fn paint_node(
     ui: &mut Ui,
     scale: f32,
@@ -241,6 +255,7 @@ fn paint_node(
     layout: &LayoutTable,
     state: &DenRouteState,
     node_idx: usize,
+    parent_clip: Option<Rect>,
 ) {
     let node = &tree.nodes[node_idx];
     let rect = scaled_rect(layout.rects[node.layout_index], origin, scale);
@@ -252,20 +267,58 @@ fn paint_node(
         &node.style
     };
 
-    // Sombras drop ficam ATRÁS do background e podem extender pra fora do nó —
-    // pinta com o painter do ui (clip mais largo), antes do painter clipado por nó.
-    paint_drop_shadows(&ui.painter().with_clip_rect(ui.clip_rect()), rect, active_style, scale);
+    // Clip efetivo: interseção do próprio rect com o clip do ancestral (se houver).
+    // Assim `overflow: hidden` no pai faz filhos que extrapolam sumirem visualmente.
+    let self_clip = match parent_clip {
+        Some(pc) => rect.intersect(pc),
+        None => rect,
+    };
+    // Clip pra sombras (extendem pra fora do rect): usa o clip do ancestral se
+    // houver, senão o clip do ui. Assim drop shadows respeitam overflow do pai
+    // mas não são cortadas no próprio rect do nó.
+    let shadow_clip = parent_clip.unwrap_or_else(|| ui.clip_rect());
 
-    // Pinta backgrounds, bordas, conteúdo via painter com clip no próprio rect
-    // (evita texto vazar pra fora do nó).
-    let painter = ui.painter_at(rect);
-    paint_background(&painter, rect, active_style, scale);
-    // Sombras inset ficam DENTRO do nó (entre background e conteúdo).
-    paint_inset_shadows(&painter, rect, active_style, scale);
+    paint_drop_shadows(
+        &ui.painter().with_clip_rect(shadow_clip),
+        rect,
+        active_style,
+        scale,
+    );
+
+    // Rotação: background/border/texto rotacionados via Mesh + `TextShape::angle`,
+    // todos em volta do centro do rect (CSS default `transform-origin: 50% 50%`).
+    //
+    // Quando rotacionado, o painter NÃO pode ser `painter_at(self_clip)` porque
+    // os cantos rotacionados extrapolam o rect axis-aligned e seriam cortados
+    // (resultaria em octógono em vez de quadrado girado). Usamos `shadow_clip`
+    // (clip do ancestral ou da `ui`) pra permitir que os cantos saiam do rect
+    // original. A aparência continua correta porque o Mesh rotacionado só
+    // desenha dentro dos 4 corners calculados.
+    //
+    // `border-radius` é ignorado quando rotated (Mesh não tem corner arcs).
+    // Input rotacionado: caret/focus tratados como axis-aligned — follow-up.
+    //
+    // `PaintStyle::transform` só é `Some` quando não-identity (ver `transform_tokens`).
+    let has_rotation = active_style.transform.is_some();
+
+    // Painter pra conteúdo: axis-aligned cuts conteúdo que extrapola (ok);
+    // rotated path usa o clip mais largo pra cantos não serem cortados.
+    let painter = if has_rotation {
+        ui.painter().with_clip_rect(shadow_clip)
+    } else {
+        ui.painter_at(self_clip)
+    };
+
+    if let Some(transform) = active_style.transform {
+        paint_rotated_rect(&painter, rect, active_style, transform, scale);
+    } else {
+        paint_background(&painter, rect, active_style, scale);
+        paint_inset_shadows(&painter, rect, active_style, scale);
+    }
 
     match &node.kind {
         RenderKind::Container => {
-            // Só fundo + borda; filhos vêm na recursão.
+            // Fundo + borda já pintados acima.
         }
         RenderKind::Text { content, heading } => {
             paint_text(ui, &painter, rect, content, *heading, active_style, scale);
@@ -287,15 +340,89 @@ fn paint_node(
         }
     }
 
-    paint_border(&painter, rect, active_style, scale);
+    if !has_rotation {
+        paint_border(&painter, rect, active_style, scale);
+    }
+
+    // Propaga clip pra filhos: se este nó tem `overflow: hidden`, filhos são
+    // limitados ao `self_clip`; senão herda o `parent_clip` do ancestral.
+    let child_clip = if active_style.overflow_hidden {
+        Some(self_clip)
+    } else {
+        parent_clip
+    };
 
     // Mesma ordem do event_pass: in-flow primeiro (tree order), depois positioned
     // ordenados por z-index ascendente (default 0; ties por tree order). Cobre os
     // casos comuns de overlay (ports sobre node, modal sobre canvas) sem implementar
     // stacking contexts completos.
     for child_idx in paint_order(tree, &node.children) {
-        paint_node(ui, scale, origin, tree, layout, state, child_idx);
+        paint_node(ui, scale, origin, tree, layout, state, child_idx, child_clip);
     }
+}
+
+/// Pinta o background + border de um rect rotacionado via Mesh 2D.
+///
+/// Aplica em qualquer `RenderKind`. O conteúdo (texto/input) continua sendo
+/// pintado axis-aligned POR CIMA — resulta num rect rotacionado com texto
+/// flat em cima. Suficiente pra wires/badges; rotação de texto via
+/// `TextShape::angle` é follow-up.
+///
+/// **Limitações MVP**:
+/// - `border-radius` é ignorado (Mesh retangular sem corner arcs).
+/// - `box-shadow` drop ainda é pintado axis-aligned atrás do rect original —
+///   não acompanha a rotação. Visualmente errado em casos extremos, mas wires
+///   do ndnm (caso principal de uso) não têm sombra, então OK pra MVP.
+/// - Children continuam paintados axis-aligned (rotação NÃO propaga).
+fn paint_rotated_rect(
+    painter: &egui::Painter,
+    rect: Rect,
+    style: &PaintStyle,
+    transform: den_layout::Transform2d,
+    scale: f32,
+) {
+    let (sin, cos) = transform.rotation_rad.sin_cos();
+    let center = rect.center();
+    let corners = [
+        rotate_around(rect.left_top(), center, sin, cos),
+        rotate_around(rect.right_top(), center, sin, cos),
+        rotate_around(rect.right_bottom(), center, sin, cos),
+        rotate_around(rect.left_bottom(), center, sin, cos),
+    ];
+
+    // Fill (background) via Mesh de 2 triangles.
+    if let Some(bg) = style.background {
+        let fill = rgb_to_color(bg, style.opacity);
+        let mut mesh = egui::epaint::Mesh::default();
+        for corner in &corners {
+            mesh.colored_vertex(*corner, fill);
+        }
+        mesh.add_triangle(0, 1, 2);
+        mesh.add_triangle(0, 2, 3);
+        painter.add(egui::Shape::mesh(mesh));
+    }
+
+    // Border: 4 line_segments rotacionados. Usa maior largura declarada
+    // (aprox. uniforme) — rotated + per-side widths é combinação rara.
+    let max_border_width = style.border_widths.iter().copied().fold(0.0f32, f32::max);
+    if max_border_width > 0.0 && let Some(color) = style.border_color {
+        let stroke_width = (max_border_width * scale).max(MIN_BORDER_WIDTH_PX);
+        let stroke = Stroke::new(stroke_width, rgb_to_color(color, style.opacity));
+        for i in 0..4 {
+            painter.line_segment([corners[i], corners[(i + 1) % 4]], stroke);
+        }
+    }
+}
+
+/// Rotaciona um ponto em volta de um centro dado `sin`/`cos` do ângulo
+/// (pré-calculados pra chamar 4× por rect sem redundância).
+fn rotate_around(point: Pos2, center: Pos2, sin: f32, cos: f32) -> Pos2 {
+    let dx = point.x - center.x;
+    let dy = point.y - center.y;
+    Pos2::new(
+        center.x + dx * cos - dy * sin,
+        center.y + dx * sin + dy * cos,
+    )
 }
 
 /// Walk de eventos DFS: chama `ui.interact()` em cada nó, atualiza hover/focus,
@@ -304,6 +431,10 @@ fn paint_node(
 /// **Não desenha**. A ordem DFS é IDÊNTICA à do `paint_node` pra garantir que
 /// egui interprete o z-order corretamente (chamadas posteriores a `ui.interact`
 /// sobrepõem as anteriores, o que bate com filhos sobre pais visualmente).
+///
+/// `parent_clip` é propagado pelos `overflow: hidden` ancestrais. Hit-test é
+/// feito na interseção do rect próprio com o clip — clicks fora da área
+/// visível do ancestral não registram.
 #[allow(clippy::too_many_arguments)]
 fn collect_events_node(
     ui: &mut Ui,
@@ -313,10 +444,17 @@ fn collect_events_node(
     layout: &LayoutTable,
     state: &mut DenRouteState,
     node_idx: usize,
+    parent_clip: Option<Rect>,
     events: &mut Vec<PaintEvent>,
 ) {
     let node = &tree.nodes[node_idx];
     let rect = scaled_rect(layout.rects[node.layout_index], origin, scale);
+
+    // Hit-test acontece só dentro da área visível (overflow: hidden de ancestrais).
+    let hit_rect = match parent_clip {
+        Some(pc) => rect.intersect(pc),
+        None => rect,
+    };
 
     let sense = if node.interact.is_clickable() {
         Sense::click()
@@ -324,7 +462,7 @@ fn collect_events_node(
         Sense::hover()
     };
     let id = Id::new(node.node_id.raw());
-    let resp = ui.interact(rect, id, sense);
+    let resp = ui.interact(hit_rect, id, sense);
 
     let hovering = resp.hovered();
     if hovering {
@@ -345,11 +483,33 @@ fn collect_events_node(
         handle_input_events(ui, *node_id, &resp, state, events);
     }
 
+    // Propaga clip pra filhos igual ao paint_node (overflow: hidden do pai).
+    let active_style: &PaintStyle = if hovering {
+        node.hover_style.as_ref().unwrap_or(&node.style)
+    } else {
+        &node.style
+    };
+    let child_clip = if active_style.overflow_hidden {
+        Some(hit_rect)
+    } else {
+        parent_clip
+    };
+
     // Recursão na MESMA ordem do paint_node — garante que hit-test de filhos
     // (chamadas mais tardias de ui.interact) sobrescreva a do pai quando
     // sobrepostos. Consistente com CSS pointer-events default.
     for child_idx in paint_order(tree, &node.children) {
-        collect_events_node(ui, scale, origin, tree, layout, state, child_idx, events);
+        collect_events_node(
+            ui,
+            scale,
+            origin,
+            tree,
+            layout,
+            state,
+            child_idx,
+            child_clip,
+            events,
+        );
     }
 
     // Click events coletados DEPOIS dos filhos — se o clique "pertence" a um
@@ -573,6 +733,11 @@ fn paint_border(painter: &egui::Painter, rect: Rect, style: &PaintStyle, scale: 
 }
 
 /// Pinta texto dentro do rect usando a caixa textual já medida pelo egui.
+///
+/// Respeita `style.transform`: quando há rotação, usa `TextShape::angle` do
+/// egui pra rotacionar os glifos em volta do centro do rect (CSS default
+/// `transform-origin: 50% 50%`), mantendo o texto coeso com o background
+/// rotacionado pelo `paint_rotated_rect`.
 fn paint_text(
     ui: &Ui,
     painter: &egui::Painter,
@@ -599,7 +764,26 @@ fn paint_text(
         text_box = layout_text_box(ui, &truncated, heading, style, scale, color);
     }
     let x = aligned_text_x(rect, text_box.width, style.text_align);
-    painter.galley(Pos2::new(x, rect.min.y), text_box.galley, color);
+    let natural_pos = Pos2::new(x, rect.min.y);
+
+    match style.transform {
+        None => {
+            painter.galley(natural_pos, text_box.galley, color);
+        }
+        Some(transform) => {
+            // Rotaciona o ponto de ancoragem (natural_pos) em volta do centro do
+            // rect. Como `TextShape::angle` rotaciona o galley em volta do próprio
+            // `pos`, o resultado combinado é: texto girando em volta do centro do
+            // rect (igual ao background rotacionado em `paint_rotated_rect`).
+            let (sin, cos) = transform.rotation_rad.sin_cos();
+            let pivot = rect.center();
+            let rotated_pos = rotate_around(natural_pos, pivot, sin, cos);
+            painter.add(
+                egui::epaint::TextShape::new(rotated_pos, text_box.galley, color)
+                    .with_angle(transform.rotation_rad),
+            );
+        }
+    }
 }
 
 /// Trunca `text` por chars (do fim) até `text + "…"` caber em `max_width`.

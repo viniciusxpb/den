@@ -56,3 +56,14 @@ pub enum JustifyContent {
     SpaceAround,
     SpaceEvenly,
 }
+
+/// Comportamento quando o conteúdo excede o rect do container.
+///
+/// **ESPELHO** de `den_macros::types::OverflowKind`. `Visible` (default)
+/// deixa conteúdo "vazar" visualmente; `Hidden` clipa pelo rect do container.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum OverflowKind {
+    #[default]
+    Visible,
+    Hidden,
+}

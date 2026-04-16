@@ -131,6 +131,60 @@
         </div>
     </div>
 
+    <!-- New features showcase (manual visual check das regras recém-implementadas) -->
+    <div class="new-features">
+        <div class="section-label">New CSS rules showcase</div>
+
+        <!-- Row 1: box-shadow (drop + inset + hover) -->
+        <div class="display__flex">
+            <div class="nf-shadow-card">box-shadow drop</div>
+            <div class="nf-shadow-inset">box-shadow inset</div>
+            <div class="nf-shadow-multi">multiple shadows</div>
+        </div>
+
+        <!-- Row 2: transform: rotate em 4 graus diferentes -->
+        <div class="display__flex nf-rotate-row">
+            <div class="nf-rotate-0">0°</div>
+            <div class="nf-rotate-15">15°</div>
+            <div class="nf-rotate-45">45°</div>
+            <div class="nf-rotate-90">90°</div>
+        </div>
+
+        <!-- Row 3: overflow: hidden + text-overflow: ellipsis -->
+        <div class="display__flex">
+            <div class="nf-overflow-box">
+                <div class="nf-overflow-long">Esse texto é propositalmente muito longo pra transbordar o container e o overflow hidden tem que clipar.</div>
+            </div>
+            <div class="nf-ellipsis">Um texto longo que vai truncar com reticências…</div>
+        </div>
+
+        <!-- Row 4: flex-direction column + align-items + justify-content -->
+        <div class="display__flex">
+            <div class="nf-column-stack">
+                <div class="nf-col-pill">primeiro</div>
+                <div class="nf-col-pill">segundo</div>
+                <div class="nf-col-pill">terceiro</div>
+            </div>
+            <div class="nf-justify-between">
+                <div class="nf-sb-dot">a</div>
+                <div class="nf-sb-dot">b</div>
+                <div class="nf-sb-dot">c</div>
+            </div>
+            <div class="nf-align-center">
+                <div class="nf-ac-label">centered</div>
+            </div>
+        </div>
+
+        <!-- Row 5: named CSS colors + transparent + opacity -->
+        <div class="display__flex nf-color-row">
+            <div class="nf-named-red">red</div>
+            <div class="nf-named-rebeccapurple">rebeccapurple</div>
+            <div class="nf-named-papayawhip">papayawhip</div>
+            <div class="nf-opacity-demo">opacity 0.4</div>
+            <div class="nf-transparent-border">transparent border</div>
+        </div>
+    </div>
+
     <!-- Footer -->
     <div class="footer">
         <div class="footer-text">Den v0.1.0</div>

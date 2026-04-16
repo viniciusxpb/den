@@ -39,24 +39,28 @@ Debug environment variables:
 
 ### Runtime pipeline (per frame)
 
+Unidirectional data flow with explicit pass separation (Elm-style): business
+state → data (pure) → draw (egui sink); events → data (egui source) → dispatch
+→ state mutations. The two directions are independent functions with narrow
+type contracts — no service is a "god object", each reads/writes only the
+state it owns.
+
 ```
-  BUILD                 RESOLVE                 PAINT
-  ─────                 ───────                 ─────
-  macro-generated       layout.entries =        paint_tree walks the
-  code pushes           tree.to_layout_         RenderTree. For each node:
-  RenderNodes into      entries();              rect_filled → content
-  __den_tree. For       measure_tree_text       (text/input) → rect_stroke.
-  loops/ifs run         via ui.fonts_mut;       Collects events.
-  Rust control flow     then resolve in
-  to include the        viewport.
-  right nodes.
-                                                DISPATCH
-                                                ────────
-                                                match click/goto slot →
-                                                self.handler() or router.goto.
-                                                InputChanged → mirror to
-                                                route_state + self.field.
+  BUILD               LAYOUT              EVENT              PAINT              DISPATCH
+  ─────               ──────              ─────              ─────              ────────
+  macro-generated     measure text +      ui.interact() +    draws nodes via    match click/goto slot →
+  code pushes         resolve rects       keyboard/focus +   rect_filled →      self.handler() or
+  RenderNodes into    (pure function:     collects           text galley →      router.goto.
+  __den_tree. For     no egui draws).     Vec<PaintEvent>.   rect_stroke.       InputChanged → mirror to
+  loops/ifs run                           Updates hover/     Reads hover/focus  route_state + self.field.
+  Rust control flow                       focus/cursor in    from state (same
+  to include the                          state.             frame, no lag).
+  right nodes.                            (egui SOURCE)      (egui SINK)
 ```
+
+Order matters: `event_pass` runs BEFORE `paint_pass` every frame so hover/focus
+updates of the current frame reflect in the same frame's paint (no 1-frame
+lag that would happen if paint ran first).
 
 ### Compile-time pipeline (in `den_macros/src/`)
 
@@ -218,31 +222,55 @@ For a template `den_template!("pages/home/home", self)`, the macro expands to ro
 - All values in CSS pixels. The paint function multiplies by `__den_scale` at draw time.
 - **`layout_index` is runtime-assigned**: `__den_tree.nodes.len() + 1` at push time. Invariant: parent.layout_index < child.layout_index, body = 0.
 
-### Paint function (`den_app/src/den_paint.rs`)
+### Paint adapter (`den_app/src/den_paint.rs`)
 
-The only egui-specific render code. Signature:
+The only egui-specific render code. Split into 3 passes with distinct
+responsibilities — no function "owns" multiple concerns.
 
 ```rust
-pub fn paint_tree(
-    ui: &mut Ui,
-    scale: f32,
-    tree: &mut RenderTree,      // mut: intrinsic sizes are filled in here
-    layout: &mut LayoutTable,   // mut: entries + rects populated in this call
-    state: &mut DenRouteState,
-) -> Vec<PaintEvent>
+pub fn paint_tree(ui, scale, tree, layout, state) -> Vec<PaintEvent>
+// alias pra `render_frame()` — o codegen do macro emite esse nome.
+
+pub fn render_frame(ui, scale, tree, layout, state) -> Vec<PaintEvent> {
+    layout_pass(ui, scale, tree, layout);          // pass 1 — pura
+    let events = event_pass(ui, scale, origin,     // pass 2 — egui source
+                             tree, layout, state);
+    paint_pass(ui, scale, origin, tree, layout, state);  // pass 3 — egui sink
+    events
+}
 ```
 
-Steps:
-1. **Measure**: build a TextBox/galley for each `RenderKind::Text` and `Input` using CSS-declared font/text properties, then write `LayoutIntent::intrinsic_{width,height}` in CSS pixels.
-2. **Populate**: `layout.entries = tree.to_layout_entries()`, resize `sizes`/`rects`.
+**Pass 1 — `layout_pass`** (pure, no draws):
+1. **Measure**: build a TextBox/galley for each `RenderKind::Text` and `Input`
+   via `ui.fonts_mut`; write `LayoutIntent::intrinsic_{width,height}` in CSS px.
+2. **Populate**: `layout.entries = tree.to_layout_entries()`, resize
+   `sizes`/`rects`.
 3. **Resolve**: `layout.resolve_in_viewport(available / scale)`.
-4. **Paint**: DFS walk. For each node:
-   - `ui.interact(rect, Id::new(node_id.raw()), click_or_hover_sense)` — egui detects click/hover
-   - Pick `active_style` (`hover_style` when `resp.hovered()`, else base)
-   - `painter.rect_filled` (background) → content (text galley / input) → `painter.rect_stroke` (border)
-   - Recurse children (painted on top)
-   - Emit `PaintEvent::Click` or `PaintEvent::Goto` on `resp.clicked()`
-5. **Input**: focus transitions on click / click-elsewhere, keyboard event processing, caret painted as `line_segment` with blink, emits `InputChanged` on mutation.
+
+**Pass 2 — `event_pass`** (egui source, NO draws). DFS walk matching paint
+order. For each node via `collect_events_node`:
+- `ui.interact(rect, Id::new(node_id.raw()), click_or_hover_sense)` — egui
+  does hit-test + hover/click detection.
+- When hovering: insert `node_id` into `state.hover`; set `CursorIcon::PointingHand`
+  if `active_style.cursor_pointer` or `pointer_on_hover`.
+- For Input nodes: delegate to `handle_input_events` (focus transitions, keyboard
+  event processing, `state.inputs`/`state.cursor` updates, emits `InputChanged`).
+- Recurse children BEFORE collecting click — egui's interact-order gives child
+  clicks priority over parent (matches CSS pointer-events default).
+- On `resp.clicked()`: push `Click { handler }` or `Goto { slot }`.
+
+**Pass 3 — `paint_pass`** (egui sink, NO `ui.interact`, NO event emission).
+Same DFS order as event pass. For each node via `paint_node`:
+- Read `state.hover.contains(&node_id)` (populated by event pass this frame).
+- Pick `active_style` = `hover_style` when hovering, else base.
+- Draw: drop shadows (outside rect, wider clip) → background → inset shadows →
+  content (text galley via `paint_text` / input via `paint_input_visual`) →
+  border.
+- Recurse children (painted on top).
+
+**Input visual**: `paint_input_visual` reads `state.inputs`/`state.focus`/
+`state.cursor` and draws the text (or placeholder in gray) + blinking caret
+when focused. No state mutation — that's `handle_input_events`' job.
 
 ### Route state (`den_layout::DenRouteState`)
 
@@ -250,10 +278,12 @@ One per active route in the `AppPages` host. Cleared on navigation. Holds:
 - `inputs: DenInputState` — `HashMap<DenNodeId, String>` for input values
 - `focus: Option<DenNodeId>` — currently focused input
 - `cursor: HashMap<DenNodeId, usize>` — byte-offset caret per input
-- `hover: HashSet<DenNodeId>` — populated by paint each frame
+- `hover: HashSet<DenNodeId>` — populated by `event_pass` each frame; read by `paint_pass`
 - `debug: DenDebugState` — debug dump tracking
 
-The paint function owns read/write access; dispatch also writes to `inputs` when mirroring.
+Access pattern: `event_pass` owns mutation (hover/focus/cursor/inputs);
+`paint_pass` only reads. Dispatcher (generated code) also writes `inputs`
+when mirroring `InputChanged` events back to `self.field`.
 
 ### Scale system
 
@@ -267,10 +297,10 @@ The paint function owns read/write access; dispatch also writes to `inputs` when
 
 | SCSS Property    | Paint operation                          | Scaled | Values                            |
 |------------------|------------------------------------------|--------|-----------------------------------|
-| `color`          | `painter.galley` color                   | —      | `#RRGGBB`, `#RGB`, `$variable`    |
+| `color`          | `painter.galley` color                   | —      | hex, `rgb()`, `rgba()`, named CSS3 (`black`, `transparent`, `rebeccapurple`…), `$variable` |
 | `font-size`      | TextBox `FontId` size                    | yes    | `24` or `24px`                    |
-| `font-family`    | TextBox `FontFamily` stack               | —      | `"Inter", sans-serif`             |
-| `font-weight`    | `PaintStyle.font_weight`                 | —      | `normal`, `bold`, `100`-`1000`    |
+| `font-family`    | TextBox `FontFamily` stack               | —      | `"Inter", sans-serif` — custom fonts fallback pra default egui (ver PENDING `@font-face`) |
+| `font-weight`    | `PaintStyle.font_weight`                 | —      | `normal`, `bold`, `100`-`1000` (armazenado, egui não seleciona face bold) |
 | `font-style`     | `TextFormat.italics`                     | —      | `normal`, `italic`, `oblique`     |
 | `font`           | shorthand for style/weight/size/line/family | mixed | `italic 600 16px/1.4 Inter`       |
 | `line-height`    | TextBox line height                      | yes    | `20px`, `1.4`, `140%`             |
@@ -278,16 +308,37 @@ The paint function owns read/write access; dispatch also writes to `inputs` when
 | `text-transform` | text transform before measure/paint      | —      | `uppercase`, `lowercase`, etc.    |
 | `text-align`     | text x-position inside node rect         | —      | `left`, `center`, `right`         |
 | `text-decoration`| `TextFormat` underline/strikethrough     | yes    | `underline`, `line-through`, `none`|
-| `background`     | `painter.rect_filled`                    | —      | `#RRGGBB`, `#RGB`, `$variable`    |
+| `white-space`    | single-line flag                         | —      | `nowrap` (de facto default, flag declarativa) |
+| `text-overflow`  | trunca + `…` no paint quando overflow    | —      | `ellipsis`, `clip`                |
+| `opacity`        | multiplica alpha de todas as cores       | —      | `0..1` ou `N%`                    |
+| `background`     | `painter.rect_filled`                    | —      | mesmas formas de cor que `color`  |
 | `padding`        | `LayoutIntent.padding`                   | yes    | `16` or `16px`                    |
 | `margin`         | `LayoutIntent.margin`                    | yes    | `16` or `16px`                    |
-| `display: flex`  | `LayoutIntent.display = Flex`            | —      | only `flex` value supported       |
-| `border`         | `painter.rect_stroke`                    | yes    | `1px solid #RRGGBB`               |
+| `display: flex`  | `LayoutIntent.display = Flex`            | —      | `block` \| `flex` (grid cai em block)|
+| `flex-direction` | flex main axis                           | —      | `row` (default), `column`. Reverse cai em eixo sem reverse + warning |
+| `align-items`    | cross-axis alignment                     | —      | `stretch` (default), `flex-start`, `center`, `flex-end` (+ aliases `start`/`end`) |
+| `justify-content`| main-axis distribution                   | —      | `flex-start`, `center`, `flex-end`, `space-between`, `space-around`, `space-evenly` |
+| `border`         | `painter.rect_stroke`                    | yes    | `1px solid <color>`               |
+| `border-<side>`  | shorthand por lado (top/right/bottom/left)| yes   | `1px solid #...` — `border-left: 0 solid transparent` |
+| `border-<side>-width` | override de largura por lado        | yes    | `0` pra zerar 1 lado específico   |
+| `border-<side>-color` | override de cor por lado            | —      | mesmas formas de cor              |
 | `border-radius`  | rect corner radius                       | yes    | `8` or `8px`                      |
+| `box-shadow`     | drop e inset; múltiplas sombras por elemento | yes | `[inset] <x> <y> [<blur>] [<spread>] <color>`, comma-separated. Blur simulado por N rects concêntricos (não GPU) |
 | `width`          | `LayoutIntent.width_rule`                | Px/Auto| `100%`, `50%`, `200px`, `auto`    |
 | `height`         | `LayoutIntent.height_rule`               | Px/Auto| `100%`, `200px`, `auto`           |
+| `min-width`/`max-width`/`min-height`/`max-height` | clamp no layout resolve | Px/Auto | `100px`, `50%`        |
 | `gap`            | `LayoutIntent.gap`                       | yes    | `8` or `8px`                      |
-| `cursor: pointer`| `CursorIcon::PointingHand` on hover      | —      | only in `:hover` blocks           |
+| `cursor: pointer`| `CursorIcon::PointingHand` on hover      | —      | normalmente em `:hover`; aceita `default` pra resetar |
+| `position`       | `LayoutIntent.position`                  | —      | `static`, `relative`, `absolute`, `fixed` (`sticky` cai em static + warning) |
+| `top`/`right`/`bottom`/`left` | offsets pra positioned     | yes    | `10px`, `50%`                     |
+| `z-index`        | ordem de paint entre positioned siblings | —      | `i32`                             |
+| `inset`          | shorthand de top/right/bottom/left       | yes    | 1–4 valores (CSS spec)            |
+
+**Regra arquitetural das propriedades**: toda propriedade CSS é `Option<T>` em
+`StyleRule` e `DenVisual`, mesmo enums com `Default` e `bool`s. Doc completo
+em [`den_macros/src/types/style.rs`](den_macros/src/types/style.rs) (topo do arquivo)
+e na REVIEW_PROMPT.md (regra 6). Fazer diferente quebra cascade silenciosamente
+— `make test` tem guard (`lint-css-rules`) que pega automaticamente.
 
 Supported HTML tags: `div`, `span`, `p`, `heading`/`h1`-`h3`, `input`, `for`, `if`/`else`. Visual tags become `RenderKind::Text` or `RenderKind::Container`.
 
@@ -300,7 +351,7 @@ Supported HTML tags: `div`, `span`, `p`, `heading`/`h1`-`h3`, `input`, `for`, `i
 
 ### Config modules
 
-- `den_app/src/paint_config.rs` — painter constants (minimum font/border sizes and input text padding).
+- `den_app/src/paint_config.rs` — painter constants (min font/border, input padding, shadow blur samples + alpha decay, min inset shadow spread).
 - `den_app/src/bin/preview_config/mod.rs` — preview output names, viewport width, refresh interval, simulated loop count, and unitless-px properties.
 - `den_app/src/bin/style_editor_config/mod.rs` — style editor debounce/scan intervals, slider bounds, defaults, and UI dimensions.
 - `den_macros/src/codegen/config.rs` — compile-time intrinsic text/input estimates used before runtime galley measurement.
@@ -308,9 +359,18 @@ Supported HTML tags: `div`, `span`, `p`, `heading`/`h1`-`h3`, `input`, `for`, `i
 ### Known limitations
 
 - **`(click)` with arguments**: compile error in the renderer. Simple `(click)="handler()"` works. See PENDING.md for the planned dispatch-by-node-id fix.
-- **Text wrapping**: TextBox measurement is single-line for now. Long text may overflow its container. Layout engine still reserves width from the measured galley.
+- **Text wrapping**: TextBox measurement is single-line for now. Long text may overflow its container (use `text-overflow: ellipsis` pra truncar).
 - **No text selection / no IME range** in inputs — keyboard editing is basic (insert, backspace, arrows, home/end).
+- **Custom fonts** (`@font-face`, `"JetBrains Mono"`, etc.) silenciosamente caem pro default egui. Genéricos (`monospace`, `sans-serif`) funcionam. Ver PENDING "Registro nativo de fontes".
+- **`font-weight`** é armazenado mas egui não seleciona face bold — text ainda renderiza com peso default.
 - **Grid layout** declared but not implemented; falls back to Block.
+- **`flex-wrap`** e **`row-reverse`/`column-reverse`** não suportados; wrap cai em single-line, reverse cai no eixo sem reverse + warning.
+- **`background: linear-gradient()` / `radial-gradient()`** ainda não parseados — grids de pontos e scanlines CRT não renderizam.
+- **`transform: rotate()` / `scale()` / `translate()`** não implementados.
+- **`overflow: hidden` real clipping** parcial — egui clipa pelo rect do `painter_at`, mas filhos positioned que extrapolam o pai podem não respeitar.
+- **`@keyframes` / `animation` / `transition`** não implementados.
+- **Shadow blur** é simulado por N rects concêntricos (sem GPU shader). Visualmente próximo, não idêntico.
+- **Inset shadow spread negativo** é clampado em 0 no paint stub. Drop shadow respeita normalmente.
 - **Margin collapse** not implemented; each margin is fully reserved.
 
 ### Known duplications

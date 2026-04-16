@@ -22,9 +22,9 @@ use values::{
     apply_border_side_width, apply_border_width, apply_font_shorthand, apply_inset_shorthand,
     parse_align_items, parse_border_value, parse_box_shadow_value, parse_flex_direction,
     parse_font_family, parse_font_style, parse_font_weight, parse_justify_content,
-    parse_letter_spacing, parse_line_height, parse_offset_value, parse_position, parse_size_value,
-    parse_text_align, parse_text_decoration, parse_text_transform, parse_width_value,
-    strip_important,
+    parse_letter_spacing, parse_line_height, parse_offset_value, parse_overflow, parse_position,
+    parse_size_value, parse_text_align, parse_text_decoration, parse_text_transform,
+    parse_transform, parse_width_value, strip_important,
 };
 use variables::{collect_variables, resolve_vars};
 
@@ -244,6 +244,8 @@ fn apply_property(rule: &mut StyleRule, prop_name: &str, value: &str) {
         "flex-direction" => rule.flex_direction = parse_flex_direction(value),
         "align-items" => rule.align_items = parse_align_items(value),
         "justify-content" => rule.justify_content = parse_justify_content(value),
+        "overflow" => rule.overflow = parse_overflow(value),
+        "transform" => rule.transform = parse_transform(value),
         _ => {}
     }
 }
@@ -583,6 +585,120 @@ mod tests {
         assert_eq!(styles.get("d").unwrap().justify_content, Some(JustifyContent::SpaceBetween));
         assert_eq!(styles.get("e").unwrap().justify_content, Some(JustifyContent::SpaceAround));
         assert_eq!(styles.get("f").unwrap().justify_content, Some(JustifyContent::SpaceEvenly));
+    }
+
+    #[test]
+    fn overflow_hidden_and_visible_dispatch() {
+        use crate::types::OverflowKind;
+        let styles = parse_scss(
+            r#"
+            .a { overflow: hidden; }
+            .b { overflow: visible; }
+            .c { overflow: scroll; }   /* MVP: cai pra visible + warning */
+            "#,
+        );
+        assert_eq!(
+            styles.get("a").expect(".a").overflow,
+            Some(OverflowKind::Hidden)
+        );
+        assert_eq!(
+            styles.get("b").expect(".b").overflow,
+            Some(OverflowKind::Visible)
+        );
+        assert_eq!(
+            styles.get("c").expect(".c").overflow,
+            Some(OverflowKind::Visible)
+        );
+    }
+
+    #[test]
+    fn transform_rotate_parses_angles_in_multiple_units() {
+        let styles = parse_scss(
+            r#"
+            .deg    { transform: rotate(90deg); }
+            .rad    { transform: rotate(1.23rad); }
+            .turn   { transform: rotate(0.25turn); }
+            .grad   { transform: rotate(100grad); }
+            .none   { transform: none; }
+            "#,
+        );
+        let approx = |a: f32, b: f32| (a - b).abs() < 0.001;
+        let deg = styles
+            .get("deg")
+            .expect(".deg")
+            .transform
+            .expect("transform set");
+        assert!(
+            approx(deg.rotation_rad, std::f32::consts::FRAC_PI_2),
+            "90deg = π/2 rad (got {})",
+            deg.rotation_rad
+        );
+        let rad = styles
+            .get("rad")
+            .expect(".rad")
+            .transform
+            .expect("transform set");
+        assert!(approx(rad.rotation_rad, 1.23), "1.23rad passthrough");
+        let turn = styles
+            .get("turn")
+            .expect(".turn")
+            .transform
+            .expect("transform set");
+        assert!(
+            approx(turn.rotation_rad, std::f32::consts::FRAC_PI_2),
+            "0.25 turn = π/2 rad"
+        );
+        let grad = styles
+            .get("grad")
+            .expect(".grad")
+            .transform
+            .expect("transform set");
+        assert!(
+            approx(grad.rotation_rad, std::f32::consts::FRAC_PI_2),
+            "100 grad = π/2 rad"
+        );
+        // `none` é parseado como transform identity.
+        let none = styles
+            .get("none")
+            .expect(".none")
+            .transform
+            .expect("transform set");
+        assert!(none.is_identity());
+    }
+
+    #[test]
+    fn transform_negative_degrees_rotate_counterclockwise() {
+        let styles = parse_scss(
+            r#"
+            .x { transform: rotate(-90deg); }
+            "#,
+        );
+        let t = styles
+            .get("x")
+            .expect(".x")
+            .transform
+            .expect("transform set");
+        let approx = |a: f32, b: f32| (a - b).abs() < 0.001;
+        assert!(approx(t.rotation_rad, -std::f32::consts::FRAC_PI_2));
+    }
+
+    #[test]
+    fn transform_hover_overrides_base_rotation() {
+        // Cascade test: transform tem que seguir a regra Option<T>. Se o
+        // hover declarar um rotate diferente, merge_from sobreescreve.
+        let styles = parse_scss(
+            r#"
+            .wire        { transform: rotate(45deg); }
+            .wire:hover  { transform: rotate(0deg); }
+            "#,
+        );
+        let base = styles.get("wire").expect(".wire");
+        let hover = base.hover.as_ref().expect(":hover branch");
+        let mut merged = base.clone();
+        merged.merge_from(hover);
+        let t = merged.transform.expect("transform presente depois do merge");
+        // 0deg após override — identity.
+        assert!(t.is_identity(), "hover com rotate(0) deve zerar a rotação");
     }
 
     #[test]

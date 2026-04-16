@@ -47,6 +47,24 @@ pub enum TextAlign {
     Right,
 }
 
+/// Transformação 2D CSS (`transform: rotate(...) [scale(...) translate(...)]`).
+///
+/// **ESPELHO** de [`den_macros::types::Transform2d`]. MVP: só rotação; demais
+/// componentes entram quando implementados. Aplicada no paint em volta do
+/// centro do rect do nó (CSS default `transform-origin: 50% 50%`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Transform2d {
+    /// Rotação em radianos.
+    pub rotation_rad: f32,
+}
+
+impl Transform2d {
+    /// `true` se a transformação é identidade (sem rotação).
+    pub fn is_identity(&self) -> bool {
+        self.rotation_rad == 0.0
+    }
+}
+
 /// Sombra CSS (`box-shadow`).
 ///
 /// Espelho runtime de [`den_macros::types::BoxShadow`]. Sintaxe CSS:
@@ -128,6 +146,11 @@ pub struct PaintStyle {
     /// Lista de sombras `box-shadow`. Ordem CSS: primeira na frente do stack.
     /// `Vec` vazio = sem sombra.
     pub box_shadows: Vec<BoxShadow>,
+    /// `overflow: hidden` quando `true` — clipa filhos pelo rect do container.
+    /// `false` = visible (default CSS).
+    pub overflow_hidden: bool,
+    /// Transformação 2D aplicada no paint. `None` = sem transform.
+    pub transform: Option<Transform2d>,
 }
 
 impl Default for PaintStyle {
@@ -154,6 +177,8 @@ impl Default for PaintStyle {
             white_space_nowrap: false,
             text_overflow_ellipsis: false,
             box_shadows: Vec::new(),
+            overflow_hidden: false,
+            transform: None,
         }
     }
 }

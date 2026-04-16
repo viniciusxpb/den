@@ -229,29 +229,49 @@ Nenhum código de `den_layout` / `den_macros` precisa mudar. Isso é o que permi
 
 ## Expansão do subset CSS suportado (ex-"gap visual ndnm")
 
-A tela `ndnm` funciona como *teste de limite* do que o runtime não cobre hoje. Reframing: não é paridade com React, é expansão priorizada do subset CSS que dev front escreve por default em app moderno. Agrupado por impacto (o que desbloqueia mais UIs reais vem primeiro):
+A tela `ndnm` funciona como *teste de limite* do que o runtime não cobre hoje. Reframing: não é paridade com React, é expansão priorizada do subset CSS que dev front escreve por default em app moderno.
 
-**Alta prioridade (dev front usa todo dia)**
-- `opacity`, `rgba(...)`, alpha real nas cores.
-- `box-shadow` (inclusive múltiplas, `inset`) — onipresente em card/button/modal.
-- `background-image` com gradientes (`linear-gradient`, `radial-gradient`). Repeating fica depois.
-- Border individual: `border-left`, `border-top-width`, `border-right-color`, etc.
-- `white-space` (`nowrap`, `pre`, `pre-wrap`), `text-overflow`.
-- Flex completo: `flex-direction`, `align-items`, `justify-content`, `flex-shrink`, `min-width: 0`.
+### ✅ Implementado
 
-**Média prioridade (casos específicos mas recorrentes)**
-- `position: absolute` / `relative` / `z-index` com containing block rules.
-- `overflow: hidden` / `visible` / `scroll` com clipping real.
-- `transform: rotate/scale/translate` 2D.
-- `grid-template-columns` (conecta com pendência "Política pra `display: grid`").
-- SVG pra ícones (lucide-react style) — dev front espera `<Icon name="database" />` funcionando.
+- `opacity`, `rgba(...)`, alpha em hex (`#RRGGBBAA`, `#RGBA`), `transparent`
+- Named colors CSS3 completo (148 nomes: `black`, `rebeccapurple`, `papayawhip`, etc.)
+- `box-shadow` com múltiplas sombras, `inset`, blur simulado por rects concêntricos
+- Bordas individuais: `border-<side>`, `border-<side>-width`, `border-<side>-color`, `border-width`, `border-color` uniformes
+- `white-space: nowrap|pre|pre-wrap|normal|pre-line`, `text-overflow: ellipsis|clip` com truncamento real + "…"
+- **Flex completo**: `flex-direction: row|column`, `align-items: stretch|flex-start|center|flex-end`, `justify-content: flex-start|center|flex-end|space-between|space-around|space-evenly`. Abstração main/cross axis isola a lógica.
+- `position: static|relative|absolute|fixed`, `top/right/bottom/left`, `z-index`, `inset` shorthand
+- `min-width`/`max-width`/`min-height`/`max-height`
 
-**Baixa prioridade (nice to have)**
-- `@keyframes` / `transition` / animações.
-- 3D transforms, filter, backdrop-filter.
-- `repeating-linear-gradient`, gradientes cônicos.
-- Fontes externas / Google Fonts (conecta com pendência `@font-face`).
+### ⏳ Alta prioridade (próxima leva)
 
-**Decisão pendente**: cada item acima — falha alta (erro de compile) até implementar, ou aceita e ignora? Coerente com o norte do projeto: falha alta. Documentar o subset suportado por release.
+- **`background: linear-gradient(...)` / `radial-gradient(...)`** — grid de pontos do canvas, scanlines CRT, gradientes de cards. Sem isso o ndnm ainda perde o fundo.
+- **`transform: rotate(Ndeg)` / `scale(f)` / `translate(x, y)`** — wires angulados; sem isso seguem como retângulos horizontais.
+- **`overflow: hidden|visible|scroll`** com clipping real — ports que "saem" do node precisam; scroll vertical de listas também.
+- **`@font-face` + font loader** — "DenMonospace", "JetBrains Mono", "Inter" silenciosamente caem pra default (ver pendência "Registro nativo de fontes").
 
-**Resumo**: a estrutura e o CSS da tela ndnm já vivem no projeto. O trabalho aqui é engine, não produto.
+### ⏳ Média prioridade
+
+- **`display: grid` + `grid-template-columns`** com `fr` + `px` + `%` (ver pendência dedicada abaixo).
+- **`flex-wrap: wrap`** — listas longas que quebram linha.
+- **`flex-shrink`**, **`flex-basis`**, **`flex: 1 1 auto`** shorthand completo.
+- **`row-reverse`/`column-reverse`** — hoje warn + cai no eixo sem reverse.
+- **Múltiplos backgrounds**: `background: url(a), linear-gradient(...)` em camadas.
+- **`filter: blur() / brightness() / ...`** — necessário pra shadows com blur GPU e efeitos tipo backdrop.
+- **SVG pra ícones** (lucide-react style) — dev front espera `<Icon name="database" />` funcionando.
+
+### ⏳ Baixa prioridade (nice to have)
+
+- **`@keyframes` / `animation` / `transition`** — status dots pulsando, queue progress animado, hover suave. Precisa runtime timer + diff de frames.
+- **3D transforms**, **`perspective`**, **`backdrop-filter`**.
+- **`repeating-linear-gradient`**, **gradientes cônicos**.
+- **`text-selection`** (input ranges, clipboard), **IME** pra idiomas com composição.
+- **`calc()`** em valores (`width: calc(100% - 20px)`).
+- **CSS custom properties** (`--var: foo; color: var(--var)`) além dos `$scss-vars` atuais.
+
+### Diretriz pra novos CSS rules
+
+- **Falha alta**: valor desconhecido ignora + `eprintln!` warning, nunca aceita silenciosamente. Exceção: valores listados como "não suportado hoje mas planejado" podem cair pra default mais próximo (ex: `row-reverse → row`) com warning explícito.
+- **Toda prop que chega em `StyleRule` ou `DenVisual` é `Option<T>`** — cascade preservado (regra 6 do REVIEW_PROMPT.md).
+- **Teste de cascade obrigatório**: quando a prop suporta override por `:hover`, inclua teste que cria base + hover + faz `merge_from` e valida que o override passa.
+
+**Resumo**: engine vai evoluindo; a tela ndnm é o benchmark. Alto-prio restante: `gradients`, `transform`, `overflow`, `@font-face`.
