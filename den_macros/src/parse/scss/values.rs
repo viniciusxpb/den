@@ -7,7 +7,8 @@
 
 use crate::parse::color::parse_color;
 use crate::types::{
-    BorderStyle, LineHeightValue, PositionKind, StyleRule, TextAlign, TextTransform, WidthValue,
+    AlignItems, BorderStyle, BoxShadow, FlexDirection, JustifyContent, LineHeightValue,
+    PositionKind, StyleRule, TextAlign, TextTransform, WidthValue,
 };
 
 /// Parseia tamanho Den/CSS em pixels, aceitando valor sem unidade ou `px`.
@@ -407,4 +408,227 @@ impl BorderStyle {
             color: (0, 0, 0, 255),
         }
     }
+}
+
+/// Helper zero-alloc pra match case-insensitive de keywords CSS.
+///
+/// Itera `keywords` e retorna o primeiro valor cujo `key` casa case-insensitive
+/// com `value`. Sem alocação (compara byte-a-byte via `eq_ignore_ascii_case`).
+/// Caller controla o handling do `None` (warning customizado).
+fn match_keyword<T: Copy>(value: &str, keywords: &[(&str, T)]) -> Option<T> {
+    keywords
+        .iter()
+        .find(|(key, _)| value.eq_ignore_ascii_case(key))
+        .map(|(_, val)| *val)
+}
+
+/// Parseia `flex-direction: row | column`. `row-reverse`/`column-reverse` caem
+/// no eixo equivalente sem reverso (com warning) — reverse não implementado.
+pub(super) fn parse_flex_direction(value: &str) -> Option<FlexDirection> {
+    let trimmed = strip_important(value).trim();
+    if let Some(direction) = match_keyword(
+        trimmed,
+        &[
+            ("row", FlexDirection::Row),
+            ("column", FlexDirection::Column),
+        ],
+    ) {
+        return Some(direction);
+    }
+    if trimmed.eq_ignore_ascii_case("row-reverse") {
+        eprintln!("Den: `flex-direction: row-reverse` não suportado, caindo pra `row`");
+        return Some(FlexDirection::Row);
+    }
+    if trimmed.eq_ignore_ascii_case("column-reverse") {
+        eprintln!("Den: `flex-direction: column-reverse` não suportado, caindo pra `column`");
+        return Some(FlexDirection::Column);
+    }
+    eprintln!("Den: `flex-direction: {trimmed}` desconhecido, ignorando");
+    None
+}
+
+/// Parseia `align-items: stretch | flex-start | center | flex-end`.
+/// `start`/`end` (CSS Box Alignment) viram `flex-start`/`flex-end`.
+/// `baseline` cai em `flex-start` com warning.
+pub(super) fn parse_align_items(value: &str) -> Option<AlignItems> {
+    let trimmed = strip_important(value).trim();
+    if let Some(align) = match_keyword(
+        trimmed,
+        &[
+            ("stretch", AlignItems::Stretch),
+            ("flex-start", AlignItems::FlexStart),
+            ("start", AlignItems::FlexStart),
+            ("center", AlignItems::Center),
+            ("flex-end", AlignItems::FlexEnd),
+            ("end", AlignItems::FlexEnd),
+        ],
+    ) {
+        return Some(align);
+    }
+    if trimmed.eq_ignore_ascii_case("baseline") {
+        eprintln!("Den: `align-items: baseline` não suportado, caindo pra `flex-start`");
+        return Some(AlignItems::FlexStart);
+    }
+    eprintln!("Den: `align-items: {trimmed}` desconhecido, ignorando");
+    None
+}
+
+/// Parseia `justify-content: flex-start | center | flex-end | space-between
+/// | space-around | space-evenly`. `start`/`end` viram `flex-start`/`flex-end`.
+pub(super) fn parse_justify_content(value: &str) -> Option<JustifyContent> {
+    let trimmed = strip_important(value).trim();
+    if let Some(justify) = match_keyword(
+        trimmed,
+        &[
+            ("flex-start", JustifyContent::FlexStart),
+            ("start", JustifyContent::FlexStart),
+            ("center", JustifyContent::Center),
+            ("flex-end", JustifyContent::FlexEnd),
+            ("end", JustifyContent::FlexEnd),
+            ("space-between", JustifyContent::SpaceBetween),
+            ("space-around", JustifyContent::SpaceAround),
+            ("space-evenly", JustifyContent::SpaceEvenly),
+        ],
+    ) {
+        return Some(justify);
+    }
+    eprintln!("Den: `justify-content: {trimmed}` desconhecido, ignorando");
+    None
+}
+
+/// Parseia `box-shadow: none | <shadow> [, <shadow>...]` numa lista de [`BoxShadow`].
+///
+/// Cada `<shadow>` segue a forma CSS:
+/// `[inset] <offset-x> <offset-y> [<blur>] [<spread>] <color>`
+///
+/// `inset` é opcional (default = drop shadow externo). `blur` e `spread` default
+/// `0`. A cor pode ser hex, `rgb()`, `rgba()` ou named — passa por `parse_color`.
+///
+/// Retorno: `Some(vec![..])` pra lista, `Some(vec![])` pra `none` explícito (a
+/// distinção de `None`/`Some(vec![])` importa pra cascade — `:hover` com
+/// `box-shadow: none` precisa cancelar a sombra base, e isso só funciona se o
+/// merge_from souber que algo foi declarado). `None` só quando todos os
+/// `<shadow>` individuais falham no parse.
+pub(super) fn parse_box_shadow_value(value: &str) -> Option<Vec<BoxShadow>> {
+    let trimmed = strip_important(value).trim();
+    if trimmed.eq_ignore_ascii_case("none") || trimmed.is_empty() {
+        return Some(Vec::new());
+    }
+    let shadows: Vec<BoxShadow> = split_top_level_commas(trimmed)
+        .into_iter()
+        .filter_map(|part| parse_single_box_shadow(part.trim()))
+        .collect();
+    if shadows.is_empty() {
+        // Todos os tokens falharam — não declarou nada parseável.
+        None
+    } else {
+        Some(shadows)
+    }
+}
+
+/// Quebra `value` em segmentos separados por vírgulas no nível 0 — ignora
+/// vírgulas dentro de `rgba(...)` / `rgb(...)`. Necessário porque `box-shadow`
+/// aceita lista (vírgula) e cada item pode ter `rgba(r, g, b, a)` (vírgula).
+fn split_top_level_commas(input: &str) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let mut depth = 0usize;
+    let mut start = 0usize;
+    for (idx, ch) in input.char_indices() {
+        match ch {
+            '(' => depth += 1,
+            ')' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => {
+                parts.push(&input[start..idx]);
+                start = idx + 1;
+            }
+            _ => {}
+        }
+    }
+    parts.push(&input[start..]);
+    parts
+}
+
+/// Parseia UM `<shadow>` individual. Retorna `None` se faltar campo obrigatório
+/// (ao menos `offset-x`, `offset-y`, `color`).
+fn parse_single_box_shadow(raw: &str) -> Option<BoxShadow> {
+    // Tokens são separados por whitespace, mas precisamos preservar `rgba(...)`
+    // como um único token porque tem espaços/vírgulas internos.
+    let tokens = tokenize_shadow(raw);
+    if tokens.len() < 3 {
+        eprintln!("Den: box-shadow inválido '{raw}' (mínimo: <x> <y> <color>)");
+        return None;
+    }
+
+    let mut inset = false;
+    let mut idx = 0;
+    if tokens[idx].eq_ignore_ascii_case("inset") {
+        inset = true;
+        idx += 1;
+    }
+
+    // Próximos 2-4 tokens são números (px); depois vem a cor (último).
+    let lengths_start = idx;
+    let color_token = tokens.last()?;
+    let color = parse_color(color_token)?;
+    let lengths_end = tokens.len() - 1;
+
+    // Trailing `inset` também é válido em algumas variantes CSS.
+    let mut lengths = Vec::new();
+    for tk in &tokens[lengths_start..lengths_end] {
+        if tk.eq_ignore_ascii_case("inset") {
+            inset = true;
+            continue;
+        }
+        lengths.push(parse_size_value(tk)?);
+    }
+
+    if lengths.len() < 2 {
+        eprintln!("Den: box-shadow precisa de offset-x e offset-y em '{raw}'");
+        return None;
+    }
+    let offset_x = lengths[0];
+    let offset_y = lengths[1];
+    let blur = lengths.get(2).copied().unwrap_or(0.0);
+    let spread = lengths.get(3).copied().unwrap_or(0.0);
+
+    Some(BoxShadow {
+        offset_x,
+        offset_y,
+        blur,
+        spread,
+        color,
+        inset,
+    })
+}
+
+/// Tokeniza uma `box-shadow` única preservando `rgba(...)`/`rgb(...)` inteiros.
+fn tokenize_shadow(input: &str) -> Vec<&str> {
+    let mut tokens = Vec::new();
+    let mut depth = 0usize;
+    let mut start: Option<usize> = None;
+    for (idx, ch) in input.char_indices() {
+        match ch {
+            '(' => {
+                depth += 1;
+                if start.is_none() {
+                    start = Some(idx);
+                }
+            }
+            ')' => depth = depth.saturating_sub(1),
+            c if c.is_ascii_whitespace() && depth == 0 => {
+                if let Some(s) = start.take() {
+                    tokens.push(&input[s..idx]);
+                }
+            }
+            _ => {
+                if start.is_none() {
+                    start = Some(idx);
+                }
+            }
+        }
+    }
+    if let Some(s) = start {
+        tokens.push(&input[s..]);
+    }
+    tokens
 }

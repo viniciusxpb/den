@@ -23,21 +23,25 @@ pub struct DenVisual {
     pub background: Option<RgbColor>,
     pub padding: Option<f32>,
     pub margin: Option<f32>,
-    pub display: DisplayMode,
+    /// Ver regra `Option<T>` em [`super::style`] (topo do arquivo).
+    pub display: Option<DisplayMode>,
     pub border: Option<BorderStyle>,
     pub border_radius: Option<f32>,
-    pub width: WidthValue,
-    pub height: WidthValue,
+    /// Ver regra `Option<T>` em [`super::style`].
+    pub width: Option<WidthValue>,
+    /// Ver regra `Option<T>` em [`super::style`].
+    pub height: Option<WidthValue>,
     pub min_width: Option<WidthValue>,
     pub max_width: Option<WidthValue>,
     pub min_height: Option<WidthValue>,
     pub max_height: Option<WidthValue>,
     pub gap: Option<f32>,
-    pub cursor_pointer: bool,
-    /// `flex: 1` — cresce pra preencher o share do flex pai igualmente.
-    pub flex_grow: bool,
-    /// Esquema de posicionamento CSS.
-    pub position: PositionKind,
+    /// Ver regra `Option<T>` em [`super::style`].
+    pub cursor_pointer: Option<bool>,
+    /// `flex: 1` — `Some(true)` cresce, `None` = não declarado.
+    pub flex_grow: Option<bool>,
+    /// Esquema de posicionamento CSS. Ver regra `Option<T>` em [`super::style`].
+    pub position: Option<PositionKind>,
     /// Offsets do containing block (só aplicados se `position != Static`).
     pub top: Option<WidthValue>,
     pub left: Option<WidthValue>,
@@ -52,6 +56,15 @@ pub struct DenVisual {
     pub white_space_nowrap: Option<bool>,
     /// `text-overflow: ellipsis` — trunca com `…` quando texto não cabe no rect.
     pub text_overflow_ellipsis: Option<bool>,
+    /// Lista de `box-shadow`s. `None` = não declarado, `Some(vec![])` = `none`
+    /// explícito. Ver regra `Option<T>` em [`super::style`].
+    pub box_shadows: Option<Vec<BoxShadow>>,
+    /// `flex-direction`. Ver regra `Option<T>` em [`super::style`].
+    pub flex_direction: Option<FlexDirection>,
+    /// `align-items` — alinhamento cruzado. Ver regra `Option<T>` em [`super::style`].
+    pub align_items: Option<AlignItems>,
+    /// `justify-content`. Ver regra `Option<T>` em [`super::style`].
+    pub justify_content: Option<JustifyContent>,
     /// Visual override quando hover. None = sem hover behavior.
     pub hover_override: Option<Box<DenVisual>>,
 }
@@ -86,7 +99,7 @@ impl DenVisual {
             gap: rule.gap,
             cursor_pointer: rule.cursor_pointer,
             flex_grow: rule.flex_grow,
-            position: rule.position.unwrap_or_default(),
+            position: rule.position,
             top: rule.top,
             left: rule.left,
             right: rule.right,
@@ -95,6 +108,12 @@ impl DenVisual {
             opacity: rule.opacity,
             white_space_nowrap: rule.white_space_nowrap,
             text_overflow_ellipsis: rule.text_overflow_ellipsis,
+            box_shadows: rule.box_shadows.clone(),
+            // (Option preservada — codegen aplica .as_deref().unwrap_or_default()
+            // pra emitir Vec<BoxShadow> concreto no PaintStyle.)
+            flex_direction: rule.flex_direction,
+            align_items: rule.align_items,
+            justify_content: rule.justify_content,
             hover_override: rule
                 .hover
                 .as_ref()
@@ -150,7 +169,7 @@ impl DenVisual {
         if other.margin.is_some() {
             self.margin = other.margin;
         }
-        if other.display != DisplayMode::Block {
+        if other.display.is_some() {
             self.display = other.display;
         }
         if other.border.is_some() {
@@ -159,10 +178,10 @@ impl DenVisual {
         if other.border_radius.is_some() {
             self.border_radius = other.border_radius;
         }
-        if other.width != WidthValue::Auto {
+        if other.width.is_some() {
             self.width = other.width;
         }
-        if other.height != WidthValue::Auto {
+        if other.height.is_some() {
             self.height = other.height;
         }
         if other.min_width.is_some() {
@@ -180,13 +199,13 @@ impl DenVisual {
         if other.gap.is_some() {
             self.gap = other.gap;
         }
-        if other.cursor_pointer {
-            self.cursor_pointer = true;
+        if other.cursor_pointer.is_some() {
+            self.cursor_pointer = other.cursor_pointer;
         }
-        if other.flex_grow {
-            self.flex_grow = true;
+        if other.flex_grow.is_some() {
+            self.flex_grow = other.flex_grow;
         }
-        if other.position != PositionKind::Static {
+        if other.position.is_some() {
             self.position = other.position;
         }
         if other.top.is_some() {
@@ -212,6 +231,18 @@ impl DenVisual {
         }
         if other.text_overflow_ellipsis.is_some() {
             self.text_overflow_ellipsis = other.text_overflow_ellipsis;
+        }
+        if other.box_shadows.is_some() {
+            self.box_shadows = other.box_shadows.clone();
+        }
+        if other.flex_direction.is_some() {
+            self.flex_direction = other.flex_direction;
+        }
+        if other.align_items.is_some() {
+            self.align_items = other.align_items;
+        }
+        if other.justify_content.is_some() {
+            self.justify_content = other.justify_content;
         }
     }
 

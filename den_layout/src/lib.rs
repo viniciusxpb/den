@@ -24,13 +24,13 @@ mod width;
 pub use dimension::{DimensionRule, PositionKind};
 pub use ghost::{DenGhost, DenGhostService};
 pub use pipes::Pipe;
-pub use display::DisplayMode;
+pub use display::{AlignItems, DisplayMode, FlexDirection, JustifyContent};
 pub use element_style::DenElementStyle;
 pub use entry::LayoutEntry;
 pub use geometry::LayoutRect;
 pub use render::{
-    Interact, LayoutIntent, PaintStyle, RenderKind, RenderNode, RenderTree, Rgb, TextAlign,
-    TextTransform,
+    BoxShadow, Interact, LayoutIntent, PaintStyle, RenderKind, RenderNode, RenderTree, Rgb,
+    TextAlign, TextTransform,
 };
 pub use router::{DenPage, DenRouter};
 pub use state::{DenDebugState, DenInputState, DenNodeId, DenRouteState};

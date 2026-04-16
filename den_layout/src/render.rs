@@ -4,7 +4,9 @@
 //! a `LayoutTable` via `to_layout_entries()` e é percorrida pelo painter pra
 //! desenhar o conteúdo no backend ativo (egui hoje).
 
-use crate::{DenNodeId, DimensionRule, DisplayMode, LayoutEntry};
+use crate::{
+    AlignItems, DenNodeId, DimensionRule, DisplayMode, FlexDirection, JustifyContent, LayoutEntry,
+};
 
 /// RGBA u8 — formato canônico do Den pra cores. Alpha 255 = opaco total.
 ///
@@ -43,6 +45,29 @@ pub enum TextAlign {
     Center,
     /// Alinha à direita.
     Right,
+}
+
+/// Sombra CSS (`box-shadow`).
+///
+/// Espelho runtime de [`den_macros::types::BoxShadow`]. Sintaxe CSS:
+/// `[inset] <offset-x> <offset-y> [<blur>] [<spread>] <color>`.
+///
+/// Pintura: drop shadows (inset=false) vão atrás do background; insets vão na
+/// frente. Lista no `PaintStyle.box_shadows` em ordem CSS (primeira na frente).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BoxShadow {
+    /// Offset horizontal em CSS px (positivo = direita).
+    pub offset_x: f32,
+    /// Offset vertical em CSS px (positivo = baixo).
+    pub offset_y: f32,
+    /// Raio do blur em CSS px. `0` = sombra nítida.
+    pub blur: f32,
+    /// Spread em CSS px — expande a sombra em todos os lados antes do blur.
+    pub spread: f32,
+    /// Cor com alpha (não é re-multiplicada por `style.opacity` no paint).
+    pub color: Rgb,
+    /// `true` = sombra interna; `false` = drop shadow externo.
+    pub inset: bool,
 }
 
 /// Estilo visual resolvido de um nó pronto pro painter.
@@ -100,6 +125,9 @@ pub struct PaintStyle {
     /// adiciona `…` no final. Combina com `white-space: nowrap` na spec CSS,
     /// mas Den aplica sempre que `ellipsis` está setado (texto é single-line).
     pub text_overflow_ellipsis: bool,
+    /// Lista de sombras `box-shadow`. Ordem CSS: primeira na frente do stack.
+    /// `Vec` vazio = sem sombra.
+    pub box_shadows: Vec<BoxShadow>,
 }
 
 impl Default for PaintStyle {
@@ -125,6 +153,7 @@ impl Default for PaintStyle {
             opacity: 1.0,
             white_space_nowrap: false,
             text_overflow_ellipsis: false,
+            box_shadows: Vec::new(),
         }
     }
 }
@@ -186,6 +215,12 @@ pub struct LayoutIntent {
     pub bottom: Option<DimensionRule>,
     /// Ordem de paint entre positioned siblings. `None` = 0 (default CSS `auto`).
     pub z_index: Option<i32>,
+    /// `flex-direction`: define o eixo principal do container flex.
+    pub flex_direction: FlexDirection,
+    /// `align-items`: alinhamento dos filhos no eixo cruzado.
+    pub align_items: AlignItems,
+    /// `justify-content`: distribuição dos filhos no eixo principal.
+    pub justify_content: JustifyContent,
 }
 
 impl Default for LayoutIntent {
@@ -211,6 +246,9 @@ impl Default for LayoutIntent {
             right: None,
             bottom: None,
             z_index: None,
+            flex_direction: FlexDirection::Row,
+            align_items: AlignItems::Stretch,
+            justify_content: JustifyContent::FlexStart,
         }
     }
 }
@@ -337,6 +375,9 @@ impl RenderTree {
             right: None,
             bottom: None,
             z_index: None,
+            flex_direction: FlexDirection::Row,
+            align_items: AlignItems::Stretch,
+            justify_content: JustifyContent::FlexStart,
         });
 
         // Prepara entradas por nó (sem parent ainda).
@@ -369,6 +410,9 @@ impl RenderTree {
                 right: l.right,
                 bottom: l.bottom,
                 z_index: l.z_index,
+                flex_direction: l.flex_direction,
+                align_items: l.align_items,
+                justify_content: l.justify_content,
             });
         }
 

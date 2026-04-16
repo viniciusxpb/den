@@ -20,7 +20,8 @@ use lexer::{
 use values::{
     apply_border_color, apply_border_side_color, apply_border_side_shorthand,
     apply_border_side_width, apply_border_width, apply_font_shorthand, apply_inset_shorthand,
-    parse_border_value, parse_font_family, parse_font_style, parse_font_weight,
+    parse_align_items, parse_border_value, parse_box_shadow_value, parse_flex_direction,
+    parse_font_family, parse_font_style, parse_font_weight, parse_justify_content,
     parse_letter_spacing, parse_line_height, parse_offset_value, parse_position, parse_size_value,
     parse_text_align, parse_text_decoration, parse_text_transform, parse_width_value,
     strip_important,
@@ -187,8 +188,9 @@ fn apply_property(rule: &mut StyleRule, prop_name: &str, value: &str) {
         "background" => rule.background = parse_color(value),
         "padding" => rule.padding = parse_size_value(value),
         "margin" => rule.margin = parse_size_value(value),
-        "display" if value == "flex" => rule.display = DisplayMode::Flex,
-        "display" if value == "grid" => rule.display = DisplayMode::Grid,
+        "display" if value == "flex" => rule.display = Some(DisplayMode::Flex),
+        "display" if value == "grid" => rule.display = Some(DisplayMode::Grid),
+        "display" if value == "block" => rule.display = Some(DisplayMode::Block),
         "border" => rule.border = parse_border_value(value),
         "border-width" => apply_border_width(value, rule),
         "border-color" => apply_border_color(value, rule),
@@ -208,16 +210,18 @@ fn apply_property(rule: &mut StyleRule, prop_name: &str, value: &str) {
         | "border-bottom-color"
         | "border-left-color" => apply_border_side_color(value, rule),
         "border-radius" => rule.border_radius = parse_size_value(value),
-        "width" => rule.width = parse_width_value(value),
-        "height" => rule.height = parse_width_value(value),
+        "width" => rule.width = Some(parse_width_value(value)),
+        "height" => rule.height = Some(parse_width_value(value)),
         "min-width" => rule.min_width = Some(parse_width_value(value)),
         "max-width" => rule.max_width = Some(parse_width_value(value)),
         "min-height" => rule.min_height = Some(parse_width_value(value)),
         "max-height" => rule.max_height = Some(parse_width_value(value)),
         "gap" => rule.gap = parse_size_value(value),
-        "cursor" if value == "pointer" => rule.cursor_pointer = true,
-        "flex" if value == "1" => rule.flex_grow = true,
-        "flex-grow" if value == "1" => rule.flex_grow = true,
+        "cursor" if value == "pointer" => rule.cursor_pointer = Some(true),
+        "cursor" if value == "default" => rule.cursor_pointer = Some(false),
+        "flex" if value == "1" => rule.flex_grow = Some(true),
+        "flex-grow" if value == "1" => rule.flex_grow = Some(true),
+        "flex-grow" if value == "0" => rule.flex_grow = Some(false),
         "position" => {
             if let Some(pos) = parse_position(value) {
                 rule.position = Some(pos);
@@ -236,6 +240,10 @@ fn apply_property(rule: &mut StyleRule, prop_name: &str, value: &str) {
         "opacity" => rule.opacity = parse_opacity(value),
         "white-space" => rule.white_space_nowrap = parse_white_space(value),
         "text-overflow" => rule.text_overflow_ellipsis = parse_text_overflow(value),
+        "box-shadow" => rule.box_shadows = parse_box_shadow_value(value),
+        "flex-direction" => rule.flex_direction = parse_flex_direction(value),
+        "align-items" => rule.align_items = parse_align_items(value),
+        "justify-content" => rule.justify_content = parse_justify_content(value),
         _ => {}
     }
 }
@@ -280,8 +288,23 @@ fn parse_opacity(value: &str) -> Option<f32> {
 mod tests {
     use super::parse_scss;
     use crate::types::{
-        LineHeightValue, PositionKind, StyleRule, TextAlign, TextTransform, WidthValue,
+        BoxShadow, LineHeightValue, PositionKind, StyleMap, StyleRule, TextAlign, TextTransform,
+        WidthValue,
     };
+
+    /// Helper de teste: extrai a slice `&[BoxShadow]` da classe `class` no map.
+    /// Substitui o chain `.get().unwrap().box_shadows.as_deref().unwrap()` que
+    /// aparecia em todos os testes de box-shadow — usar `expect` aqui documenta
+    /// as pré-condições E centraliza a mensagem de falha (Regra 5: nada de
+    /// `.unwrap()` sem justificativa).
+    fn box_shadows_of<'a>(styles: &'a StyleMap, class: &str) -> &'a [BoxShadow] {
+        let rule = styles
+            .get(class)
+            .unwrap_or_else(|| panic!("classe `.{class}` não foi parseada"));
+        rule.box_shadows
+            .as_deref()
+            .unwrap_or_else(|| panic!("classe `.{class}` não declarou box-shadow"))
+    }
 
     #[test]
     fn line_comment_inside_rule_is_ignored() {
@@ -431,6 +454,202 @@ mod tests {
         // [top, right, bottom, left] — só o slot 3 zerado.
         assert_eq!(border.widths, [1.0, 1.0, 1.0, 0.0]);
         assert_eq!(border.color, (26, 26, 40, 255));
+    }
+
+    #[test]
+    fn box_shadow_single_drop() {
+        let styles = parse_scss(
+            r#"
+            .card { box-shadow: 0 2px 12px #00000066; }
+            "#,
+        );
+        let shadows = box_shadows_of(&styles, "card");
+        assert_eq!(shadows.len(), 1);
+        assert_eq!(shadows[0].offset_x, 0.0);
+        assert_eq!(shadows[0].offset_y, 2.0);
+        assert_eq!(shadows[0].blur, 12.0);
+        assert_eq!(shadows[0].spread, 0.0);
+        assert_eq!(shadows[0].color, (0, 0, 0, 102));
+        assert!(!shadows[0].inset);
+    }
+
+    #[test]
+    fn box_shadow_multiple_comma_separated() {
+        let styles = parse_scss(
+            r#"
+            .glow { box-shadow: 0 0 6px #ff884466, 0 0 2px #ff8844aa; }
+            "#,
+        );
+        let shadows = box_shadows_of(&styles, "glow");
+        assert_eq!(shadows.len(), 2);
+        assert_eq!(shadows[0].blur, 6.0);
+        assert_eq!(shadows[0].color, (255, 136, 68, 102));
+        assert_eq!(shadows[1].blur, 2.0);
+        assert_eq!(shadows[1].color, (255, 136, 68, 170));
+    }
+
+    #[test]
+    fn box_shadow_with_inset_keyword() {
+        let styles = parse_scss(
+            r#"
+            .well { box-shadow: inset 0 0 4px #00000080; }
+            "#,
+        );
+        let shadows = box_shadows_of(&styles, "well");
+        assert_eq!(shadows.len(), 1);
+        assert!(shadows[0].inset);
+        assert_eq!(shadows[0].blur, 4.0);
+    }
+
+    #[test]
+    fn box_shadow_with_spread_and_named_color() {
+        let styles = parse_scss(
+            r#"
+            .card { box-shadow: 4px 6px 10px 2px black; }
+            "#,
+        );
+        let shadows = box_shadows_of(&styles, "card");
+        assert_eq!(shadows.len(), 1);
+        assert_eq!(shadows[0].offset_x, 4.0);
+        assert_eq!(shadows[0].offset_y, 6.0);
+        assert_eq!(shadows[0].blur, 10.0);
+        assert_eq!(shadows[0].spread, 2.0);
+        assert_eq!(shadows[0].color, (0, 0, 0, 255));
+    }
+
+    #[test]
+    fn box_shadow_with_rgba_function_preserves_inner_commas() {
+        let styles = parse_scss(
+            r#"
+            .a { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), 0 0 16px red; }
+            "#,
+        );
+        let shadows = box_shadows_of(&styles, "a");
+        assert_eq!(shadows.len(), 2, "vírgulas dentro de rgba(..) não quebram a lista");
+        assert_eq!(shadows[0].color, (0, 0, 0, 102));
+        assert_eq!(shadows[1].color, (255, 0, 0, 255));
+    }
+
+    #[test]
+    fn flex_direction_dispatch() {
+        use crate::types::FlexDirection;
+        let styles = parse_scss(
+            r#"
+            .row { flex-direction: row; }
+            .col { flex-direction: column; }
+            .rev { flex-direction: row-reverse; }     /* warn + cai pra row */
+            "#,
+        );
+        assert_eq!(styles.get("row").unwrap().flex_direction, Some(FlexDirection::Row));
+        assert_eq!(styles.get("col").unwrap().flex_direction, Some(FlexDirection::Column));
+        assert_eq!(styles.get("rev").unwrap().flex_direction, Some(FlexDirection::Row));
+    }
+
+    #[test]
+    fn align_items_dispatch() {
+        use crate::types::AlignItems;
+        let styles = parse_scss(
+            r#"
+            .a { align-items: stretch; }
+            .b { align-items: flex-start; }
+            .c { align-items: center; }
+            .d { align-items: flex-end; }
+            .e { align-items: start; }       /* alias = flex-start */
+            "#,
+        );
+        assert_eq!(styles.get("a").unwrap().align_items, Some(AlignItems::Stretch));
+        assert_eq!(styles.get("b").unwrap().align_items, Some(AlignItems::FlexStart));
+        assert_eq!(styles.get("c").unwrap().align_items, Some(AlignItems::Center));
+        assert_eq!(styles.get("d").unwrap().align_items, Some(AlignItems::FlexEnd));
+        assert_eq!(styles.get("e").unwrap().align_items, Some(AlignItems::FlexStart));
+    }
+
+    #[test]
+    fn justify_content_dispatch() {
+        use crate::types::JustifyContent;
+        let styles = parse_scss(
+            r#"
+            .a { justify-content: flex-start; }
+            .b { justify-content: center; }
+            .c { justify-content: flex-end; }
+            .d { justify-content: space-between; }
+            .e { justify-content: space-around; }
+            .f { justify-content: space-evenly; }
+            "#,
+        );
+        assert_eq!(styles.get("a").unwrap().justify_content, Some(JustifyContent::FlexStart));
+        assert_eq!(styles.get("b").unwrap().justify_content, Some(JustifyContent::Center));
+        assert_eq!(styles.get("c").unwrap().justify_content, Some(JustifyContent::FlexEnd));
+        assert_eq!(styles.get("d").unwrap().justify_content, Some(JustifyContent::SpaceBetween));
+        assert_eq!(styles.get("e").unwrap().justify_content, Some(JustifyContent::SpaceAround));
+        assert_eq!(styles.get("f").unwrap().justify_content, Some(JustifyContent::SpaceEvenly));
+    }
+
+    #[test]
+    fn box_shadow_none_is_some_empty_not_none() {
+        // CSS `box-shadow: none` deve VIRAR `Some(vec![])`, não `None` —
+        // a distinção importa pra cascade: `:hover { box-shadow: none }` precisa
+        // sobreescrever a sombra base. Se virasse `None`, o merge_from acharia
+        // que nada foi declarado e manteria a sombra do estado base.
+        let styles = parse_scss(
+            r#"
+            .a { box-shadow: none; }
+            "#,
+        );
+        let rule = styles.get("a").expect("classe `.a` deve estar no map");
+        assert!(
+            rule.box_shadows.is_some(),
+            "`none` deve ser declarado explicitamente"
+        );
+        assert!(
+            box_shadows_of(&styles, "a").is_empty(),
+            "`none` resolve numa lista vazia"
+        );
+    }
+
+    #[test]
+    fn box_shadow_undeclared_is_none() {
+        let styles = parse_scss(
+            r#"
+            .a { color: red; }    /* sem box-shadow */
+            "#,
+        );
+        let rule = styles.get("a").expect("classe `.a` deve estar no map");
+        assert!(rule.box_shadows.is_none());
+    }
+
+    #[test]
+    fn box_shadow_none_in_hover_cancels_base_shadow() {
+        // O caso real de cascade que motivou virar Option<Vec>:
+        // base tem sombra, hover declara `none` → merge_from deve sobreescrever
+        // pra Some(vec![]), não manter a sombra herdada.
+        let styles = parse_scss(
+            r#"
+            .card        { box-shadow: 0 2px 12px black; }
+            .card:hover  { box-shadow: none; }
+            "#,
+        );
+        let card = styles.get("card").expect("card style");
+        let hover = card
+            .hover
+            .as_ref()
+            .expect(":hover deve ter sido capturado como branch");
+        let hover_shadows = hover
+            .box_shadows
+            .as_deref()
+            .expect("hover declara `box-shadow: none` explicitamente — vira Some(vec![])");
+        assert!(hover_shadows.is_empty(), "`none` resolve numa lista vazia");
+        // Simula o merge cascade: clona a base e aplica hover por cima.
+        let mut merged = card.clone();
+        merged.merge_from(hover);
+        let merged_shadows = merged
+            .box_shadows
+            .as_deref()
+            .expect("merge_from(Some(vec![])) sobre uma base com sombra deve resultar em Some");
+        assert!(
+            merged_shadows.is_empty(),
+            "merge_from de Some(vec![]) sobreescreve a sombra base — cascade preservado",
+        );
     }
 
     #[test]

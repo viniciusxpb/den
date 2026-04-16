@@ -1,4 +1,46 @@
 //! Tipos de estilo SCSS: regras, cores, bordas, display modes.
+//!
+//! # ⚠️ REGRA INEGOCIÁVEL — TODA PROPRIEDADE CSS É `Option<T>`
+//!
+//! **Toda** propriedade CSS sobreescrevível (color, display, position, flex_*,
+//! cursor, etc.) DEVE ser `Option<T>` em `StyleRule` E em `DenVisual`. Nunca
+//! `T` direto, nunca enum-com-default, nunca `bool`-direto.
+//!
+//! ## Por quê
+//!
+//! O CSS tem **cascade**: regra mais específica sobreescreve a menos específica.
+//! Em Den, isso aparece em duas formas:
+//! 1. **Múltiplas classes no mesmo elemento** — `class="a b"` faz merge `b` por cima de `a`.
+//! 2. **`:hover` override** — `.btn:hover { ... }` sobreescreve `.btn`.
+//!
+//! Se a propriedade for `T` direto (ex.: `display: DisplayMode`), o `merge_from`
+//! tem que comparar `other != Default::default()` pra decidir se sobreescreve. Isso
+//! quebra silenciosamente quando o usuário quer **forçar o default explicitamente**:
+//!
+//! ```scss
+//! .col            { display: flex;  flex-direction: column; }
+//! .col:hover      { flex-direction: row; }   /* row é o default → IGNORADO se não for Option */
+//! ```
+//!
+//! Com `Option<FlexDirection>`, o merge usa `is_some()` e o override sempre passa.
+//!
+//! ## Como aplicar
+//!
+//! - `StyleRule.foo: Option<Foo>` (parse-time, vem do parser SCSS)
+//! - `DenVisual.foo: Option<Foo>` (resolve-time, depois de merge de classes)
+//! - `merge_from`: `if other.foo.is_some() { self.foo = other.foo; }` — SEMPRE.
+//! - **Nunca** comparar com default (`if other.foo != Default::default()`).
+//! - O default só é aplicado **uma vez**, no **codegen**, ao emitir
+//!   `LayoutIntent`/`PaintStyle` em runtime via `.unwrap_or_default()` ou
+//!   `.unwrap_or(<concreto>)`.
+//!
+//! ## Como o reviewer pega
+//!
+//! Procura por:
+//! - Campo novo de `StyleRule` ou `DenVisual` que não é `Option<T>`.
+//! - `merge_from` com `if other.x != Default::default()` (ou comparando com
+//!   variante específica de enum) — bug latente garantido.
+//! - `if other.x { ... }` com `other.x: bool` em merge — não dá pra unsetar.
 
 use std::collections::HashMap;
 
@@ -18,6 +60,52 @@ pub enum DisplayMode {
     Block,
     Flex,
     Grid,
+}
+
+/// Eixo principal de um container flex. `Row` (default CSS) = horizontal;
+/// `Column` = vertical. `row-reverse` / `column-reverse` ainda não suportados;
+/// caem em `Row`/`Column` com warning.
+///
+/// **ESPELHO**: gêmeo de [`den_layout::FlexDirection`].
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum FlexDirection {
+    #[default]
+    Row,
+    Column,
+}
+
+/// Alinhamento dos filhos no eixo CRUZADO de um flex container (vertical em
+/// `flex-direction: row`, horizontal em `column`).
+///
+/// `Stretch` é o default CSS — filhos com tamanho cruzado `auto` esticam pra
+/// preencher o cross. `Baseline` ainda não é suportado (depende de baseline da
+/// fonte); cai em `FlexStart` com warning.
+///
+/// **ESPELHO**: gêmeo de [`den_layout::AlignItems`].
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum AlignItems {
+    #[default]
+    Stretch,
+    FlexStart,
+    Center,
+    FlexEnd,
+}
+
+/// Distribuição dos filhos no eixo PRINCIPAL de um flex container.
+///
+/// `FlexStart` é o default CSS. `space-*` distribuem o espaço remanescente
+/// (depois dos children + gaps fixos) em diferentes lugares.
+///
+/// **ESPELHO**: gêmeo de [`den_layout::JustifyContent`].
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum JustifyContent {
+    #[default]
+    FlexStart,
+    Center,
+    FlexEnd,
+    SpaceBetween,
+    SpaceAround,
+    SpaceEvenly,
 }
 
 /// Borda CSS resolvida com largura por lado e cor única.
@@ -52,6 +140,28 @@ impl Default for BorderStyle {
             color: (0, 0, 0, 255),
         }
     }
+}
+
+/// Uma sombra CSS (`box-shadow: <x> <y> <blur> [<spread>] <color> [inset]`).
+///
+/// CSS aceita lista vírgula-separada (`box-shadow: 0 2px red, inset 0 0 4px blue`),
+/// representada como `Vec<BoxShadow>` no `StyleRule`. Pintura: ordem de stacking
+/// = primeira sombra na frente, última no fundo (CSS spec).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BoxShadow {
+    /// Offset horizontal em CSS px (positivo = direita).
+    pub offset_x: f32,
+    /// Offset vertical em CSS px (positivo = baixo).
+    pub offset_y: f32,
+    /// Raio do blur em CSS px. `0` = sombra nítida.
+    pub blur: f32,
+    /// Spread em CSS px — expande a sombra em todos os lados antes do blur.
+    /// Negativo encolhe (útil pra sombras inset).
+    pub spread: f32,
+    /// Cor (com alpha já consumido — paint não multiplica `style.opacity` por cima).
+    pub color: RgbColor,
+    /// `true` = sombra interna (inset). `false` = drop shadow externo (default).
+    pub inset: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -129,19 +239,26 @@ pub struct StyleRule {
     pub background: Option<RgbColor>,
     pub padding: Option<f32>,
     pub margin: Option<f32>,
-    pub display: DisplayMode,
+    /// `display`. Default CSS = `Block`. Ver regra `Option<T>` no topo do arquivo.
+    pub display: Option<DisplayMode>,
     pub border: Option<BorderStyle>,
     pub border_radius: Option<f32>,
-    pub width: WidthValue,
-    pub height: WidthValue,
+    /// `width`. Default CSS = `Auto`. Ver regra `Option<T>` no topo do arquivo.
+    pub width: Option<WidthValue>,
+    /// `height`. Default CSS = `Auto`. Ver regra `Option<T>` no topo do arquivo.
+    pub height: Option<WidthValue>,
     pub min_width: Option<WidthValue>,
     pub max_width: Option<WidthValue>,
     pub min_height: Option<WidthValue>,
     pub max_height: Option<WidthValue>,
     pub gap: Option<f32>,
-    pub cursor_pointer: bool,
-    /// `flex: 1` / `flex-grow: 1` — elemento cresce pra preencher o share do flex pai.
-    pub flex_grow: bool,
+    /// `cursor: pointer`. `Some(true)` ou `None` (não declarado).
+    /// Ver regra `Option<T>` no topo do arquivo — `bool` direto não permite `:hover`
+    /// resetar pra `cursor: default`.
+    pub cursor_pointer: Option<bool>,
+    /// `flex: 1` / `flex-grow: 1` — `Some(true)` cresce, `None` = não declarado.
+    /// Ver regra `Option<T>` no topo do arquivo.
+    pub flex_grow: Option<bool>,
     /// Esquema de posicionamento. `None` = não declarado em nenhuma regra que
     /// se aplica; o codegen colapsa pra `Static` na hora de emitir o `LayoutIntent`.
     /// Manter como `Option` permite que `position: static` explícito num seletor
@@ -169,6 +286,20 @@ pub struct StyleRule {
     pub white_space_nowrap: Option<bool>,
     /// `text-overflow: ellipsis` declarado.
     pub text_overflow_ellipsis: Option<bool>,
+    /// Lista de `box-shadow`. `None` = não declarado; `Some(vec![])` = `box-shadow: none`
+    /// explícito (cancela sombra herdada). Sintaxe CSS: vírgula-separado,
+    /// primeira sombra fica na frente do stack visual.
+    /// Ver regra `Option<T>` no topo do arquivo — `Vec` direto não distingue
+    /// "não declarado" de "explicitamente vazio", quebrando cascade pra `none`.
+    pub box_shadows: Option<Vec<BoxShadow>>,
+    /// `flex-direction`. Default CSS = `Row`. Ver regra `Option<T>` no topo do arquivo.
+    pub flex_direction: Option<FlexDirection>,
+    /// `align-items` — alinhamento cruzado dos filhos. Default CSS = `Stretch`.
+    /// Ver regra `Option<T>` no topo do arquivo.
+    pub align_items: Option<AlignItems>,
+    /// `justify-content` — distribuição no eixo principal. Default CSS = `FlexStart`.
+    /// Ver regra `Option<T>` no topo do arquivo.
+    pub justify_content: Option<JustifyContent>,
     pub hover: Option<Box<StyleRule>>,
 }
 
@@ -217,7 +348,7 @@ impl StyleRule {
         if other.margin.is_some() {
             self.margin = other.margin;
         }
-        if other.display != DisplayMode::Block {
+        if other.display.is_some() {
             self.display = other.display;
         }
         if other.border.is_some() {
@@ -226,10 +357,10 @@ impl StyleRule {
         if other.border_radius.is_some() {
             self.border_radius = other.border_radius;
         }
-        if other.width != WidthValue::Auto {
+        if other.width.is_some() {
             self.width = other.width;
         }
-        if other.height != WidthValue::Auto {
+        if other.height.is_some() {
             self.height = other.height;
         }
         if other.min_width.is_some() {
@@ -247,11 +378,11 @@ impl StyleRule {
         if other.gap.is_some() {
             self.gap = other.gap;
         }
-        if other.cursor_pointer {
-            self.cursor_pointer = true;
+        if other.cursor_pointer.is_some() {
+            self.cursor_pointer = other.cursor_pointer;
         }
-        if other.flex_grow {
-            self.flex_grow = true;
+        if other.flex_grow.is_some() {
+            self.flex_grow = other.flex_grow;
         }
         if other.position.is_some() {
             self.position = other.position;
@@ -279,6 +410,18 @@ impl StyleRule {
         }
         if other.text_overflow_ellipsis.is_some() {
             self.text_overflow_ellipsis = other.text_overflow_ellipsis;
+        }
+        if other.box_shadows.is_some() {
+            self.box_shadows = other.box_shadows.clone();
+        }
+        if other.flex_direction.is_some() {
+            self.flex_direction = other.flex_direction;
+        }
+        if other.align_items.is_some() {
+            self.align_items = other.align_items;
+        }
+        if other.justify_content.is_some() {
+            self.justify_content = other.justify_content;
         }
         if other.hover.is_some() {
             self.hover = other.hover.clone();

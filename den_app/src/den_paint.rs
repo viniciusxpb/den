@@ -10,6 +10,7 @@
 
 use crate::paint_config::{
     INPUT_TEXT_PADDING_X, INPUT_TEXT_PADDING_Y, MIN_BORDER_WIDTH_PX, MIN_FONT_SIZE_PX,
+    MIN_INSET_SHADOW_SPREAD_PX, SHADOW_BLUR_ALPHA_DECAY, SHADOW_BLUR_SAMPLES,
 };
 use den_layout::{
     DenNodeId, DenRouteState, LayoutRect, LayoutTable, PaintStyle, RenderKind, RenderTree, Rgb,
@@ -191,10 +192,16 @@ fn paint_node(
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
     }
 
+    // Sombras drop ficam ATRÁS do background e podem extender pra fora do nó —
+    // pinta com o painter do ui (clip mais largo), antes do painter clipado por nó.
+    paint_drop_shadows(&ui.painter().with_clip_rect(ui.clip_rect()), rect, active_style, scale);
+
     // Pinta backgrounds, bordas, conteúdo via painter com clip no próprio rect
     // (evita texto vazar pra fora do nó).
     let painter = ui.painter_at(rect);
     paint_background(&painter, rect, active_style, scale);
+    // Sombras inset ficam DENTRO do nó (entre background e conteúdo).
+    paint_inset_shadows(&painter, rect, active_style, scale);
 
     match &node.kind {
         RenderKind::Container => {
@@ -281,6 +288,107 @@ fn paint_background(painter: &egui::Painter, rect: Rect, style: &PaintStyle, sca
     };
     let radius = style.border_radius * scale;
     painter.rect_filled(rect, radius, rgb_to_color(bg, style.opacity));
+}
+
+/// Pinta as sombras `box-shadow` externas (drop) do nó. Vão atrás do background.
+///
+/// Ordem CSS: a primeira sombra do `Vec` fica na FRENTE do stack visual; a
+/// última fica no FUNDO. Pintamos da última pra primeira.
+fn paint_drop_shadows(painter: &egui::Painter, rect: Rect, style: &PaintStyle, scale: f32) {
+    for shadow in style.box_shadows.iter().rev() {
+        if shadow.inset {
+            continue;
+        }
+        paint_shadow_layer(painter, rect, style, shadow, scale);
+    }
+}
+
+/// Pinta as sombras `box-shadow inset` (internas). Vão DEPOIS do background mas
+/// antes do conteúdo.
+///
+/// MVP: aproximação por borda interna — usa `rect_stroke` com o `spread` como
+/// largura da linha (mínimo `MIN_INSET_SHADOW_SPREAD_PX`), assim o desenho fica
+/// nas bordas internas e NÃO ocupa o miolo do nó (rect_filled cobriria texto).
+/// `blur` é ignorado nesta variante; gradiente direcional real saindo das
+/// bordas pra dentro fica como melhoria futura — ndnm.scss não usa inset.
+///
+/// **Limitação intencional**: `spread` negativo é tratado como `0`. CSS spec diz
+/// que negativo encolhe a sombra inset (cobre menos área). Como nesta aproximação
+/// stub a sombra É um stroke nas bordas internas, "encolher" não tem semântica
+/// visual coerente — desenhar com spread negativo expandiria o `inner` rect pra
+/// FORA do nó e o stroke "inset" sairia das bordas externas. Documentado aqui;
+/// quando o blur direcional real for implementado, o spread negativo passa a
+/// fazer sentido (reduz a extensão do gradiente).
+fn paint_inset_shadows(painter: &egui::Painter, rect: Rect, style: &PaintStyle, scale: f32) {
+    for shadow in style.box_shadows.iter().rev() {
+        if !shadow.inset {
+            continue;
+        }
+        let radius = style.border_radius * scale;
+        // `.max(0.0)` é deliberado — ver doc da função sobre spread negativo.
+        let inner = rect
+            .translate(egui::vec2(shadow.offset_x * scale, shadow.offset_y * scale))
+            .shrink(shadow.spread.max(0.0) * scale);
+        if inner.width() <= 0.0 || inner.height() <= 0.0 {
+            continue;
+        }
+        // `spread` vira largura do stroke interno; piso `MIN_INSET_SHADOW_SPREAD_PX`
+        // pra ser visível mesmo quando spread declarado for zero.
+        let stroke_width =
+            (shadow.spread.max(MIN_INSET_SHADOW_SPREAD_PX) * scale).max(MIN_BORDER_WIDTH_PX);
+        painter.rect_stroke(
+            inner,
+            radius,
+            egui::Stroke::new(stroke_width, rgb_to_color(shadow.color, style.opacity)),
+            egui::epaint::StrokeKind::Inside,
+        );
+    }
+}
+
+/// Pinta uma única sombra drop (não-inset). Simula blur com `SHADOW_BLUR_SAMPLES`
+/// retângulos concêntricos de alpha decrescente — egui não tem blur shader.
+///
+/// Resultado: rect denso no centro (a "sombra dura"), fade gradual nas bordas.
+fn paint_shadow_layer(
+    painter: &egui::Painter,
+    rect: Rect,
+    style: &PaintStyle,
+    shadow: &den_layout::BoxShadow,
+    scale: f32,
+) {
+    let radius = style.border_radius * scale;
+    let base_rect = rect
+        .translate(egui::vec2(shadow.offset_x * scale, shadow.offset_y * scale))
+        .expand(shadow.spread * scale);
+
+    // blur=0 → uma única camada nítida.
+    if shadow.blur <= 0.0 {
+        painter.rect_filled(base_rect, radius, rgb_to_color(shadow.color, style.opacity));
+        return;
+    }
+
+    let scaled_blur = shadow.blur * scale;
+    let layers = SHADOW_BLUR_SAMPLES.max(1);
+    let step = scaled_blur / layers as f32;
+
+    // Camadas pintadas OUTSIDE-IN: a externa cai primeiro (alpha mínimo),
+    // depois cada interna por cima reforça o centro. O resultado visual:
+    // borda esmaecida, núcleo opaco.
+    for i in (0..layers).rev() {
+        let expand = i as f32 * step;
+        let layer_rect = base_rect.expand(expand);
+        let alpha_factor = (1.0 - i as f32 * SHADOW_BLUR_ALPHA_DECAY).clamp(0.0, 1.0);
+        let layer_color = scale_color_alpha(shadow.color, alpha_factor * style.opacity);
+        painter.rect_filled(layer_rect, radius, layer_color);
+    }
+}
+
+/// Multiplica o alpha de uma cor RGBA por um fator (0..=1) e devolve `Color32`.
+/// Usado pelas camadas de blur do `box-shadow`.
+fn scale_color_alpha(rgb: Rgb, factor: f32) -> Color32 {
+    let (r, g, b, a) = rgb;
+    let scaled = (a as f32 * factor.clamp(0.0, 1.0)).round().clamp(0.0, 255.0) as u8;
+    Color32::from_rgba_unmultiplied(r, g, b, scaled)
 }
 
 /// Pinta a borda do nó por cima do conteúdo.

@@ -657,4 +657,90 @@ mod tests {
         assert_eq!(table.rects[1].x, 200.0);
         assert_eq!(table.rects[1].y, 300.0);
     }
+
+    /// Cria um container flex column com tamanho fixo.
+    fn flex_column(parent: usize, width: f32, height: f32) -> LayoutEntry {
+        LayoutEntry {
+            parent: Some(parent),
+            width_rule: DimensionRule::Px(width),
+            height_rule: DimensionRule::Px(height),
+            display: DisplayMode::Flex,
+            flex_direction: crate::FlexDirection::Column,
+            ..LayoutEntry::default()
+        }
+    }
+
+    #[test]
+    fn flex_column_stacks_children_vertically() {
+        let mut table = make_table(vec![
+            body(),
+            flex_column(0, 400.0, 600.0),
+            entry_fixed_size(1, 100.0, 50.0),
+            entry_fixed_size(1, 100.0, 80.0),
+        ]);
+        table.resolve(800.0);
+        assert_eq!(table.rects[2].x, 0.0);
+        assert_eq!(table.rects[2].y, 0.0);
+        assert_eq!(table.rects[3].x, 0.0);
+        assert_eq!(table.rects[3].y, 50.0);
+    }
+
+    #[test]
+    fn flex_row_with_justify_center_offsets_initial_cursor() {
+        let mut parent = flex_entry(0, DimensionRule::Px(600.0));
+        parent.justify_content = crate::JustifyContent::Center;
+        let mut table = make_table(vec![
+            body(),
+            parent,
+            entry_fixed_size(1, 100.0, 50.0),
+            entry_fixed_size(1, 100.0, 50.0),
+        ]);
+        table.resolve(800.0);
+        // 600 - 200 (children) = 400 remaining; centered → start at 200.
+        assert_eq!(table.rects[2].x, 200.0);
+        assert_eq!(table.rects[3].x, 300.0);
+    }
+
+    #[test]
+    fn flex_row_with_justify_space_between_distributes_gap() {
+        let mut parent = flex_entry(0, DimensionRule::Px(600.0));
+        parent.justify_content = crate::JustifyContent::SpaceBetween;
+        let mut table = make_table(vec![
+            body(),
+            parent,
+            entry_fixed_size(1, 100.0, 50.0),
+            entry_fixed_size(1, 100.0, 50.0),
+            entry_fixed_size(1, 100.0, 50.0),
+        ]);
+        table.resolve(800.0);
+        // 600 - 300 (3×100) = 300 remaining; 2 gaps de 150 entre 3 children.
+        assert_eq!(table.rects[2].x, 0.0);
+        assert_eq!(table.rects[3].x, 250.0);
+        assert_eq!(table.rects[4].x, 500.0);
+    }
+
+    #[test]
+    fn flex_row_with_align_items_center_offsets_cross_axis() {
+        let mut parent = flex_entry(0, DimensionRule::Px(400.0));
+        parent.height_rule = DimensionRule::Px(200.0);
+        parent.align_items = crate::AlignItems::Center;
+        let mut table = make_table(vec![
+            body(),
+            parent,
+            entry_fixed_size(1, 100.0, 50.0),
+        ]);
+        table.resolve(800.0);
+        // height 200 - child 50 = 150 slack; center → y = 75.
+        assert_eq!(table.rects[2].y, 75.0);
+    }
+
+    /// Cria entry com width e height fixos.
+    fn entry_fixed_size(parent: usize, width: f32, height: f32) -> LayoutEntry {
+        LayoutEntry {
+            parent: Some(parent),
+            width_rule: DimensionRule::Px(width),
+            height_rule: DimensionRule::Px(height),
+            ..LayoutEntry::default()
+        }
+    }
 }

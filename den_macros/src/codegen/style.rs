@@ -9,8 +9,8 @@ use super::config::{
 };
 use super::flex::{has_flex_grow, is_flex_container};
 use crate::types::{
-    DenElement, DenVisual, DisplayMode, LineHeightValue, TextAlign, TextSegment, TextTransform,
-    WidthValue,
+    AlignItems, DenElement, DenVisual, DisplayMode, FlexDirection, JustifyContent,
+    LineHeightValue, TextAlign, TextSegment, TextTransform, WidthValue,
 };
 use proc_macro2::Span;
 use quote::quote;
@@ -46,10 +46,13 @@ pub(crate) fn paint_style_tokens(visual: &DenVisual) -> proc_macro2::TokenStream
     let text_align = text_align_tokens(visual.text_align.unwrap_or_default());
     let underline = visual.underline.unwrap_or(false);
     let strikethrough = visual.strikethrough.unwrap_or(false);
-    let cursor_pointer = visual.cursor_pointer;
+    let cursor_pointer = visual.cursor_pointer.unwrap_or(false);
     let opacity = visual.opacity.unwrap_or(1.0);
     let white_space_nowrap = visual.white_space_nowrap.unwrap_or(false);
     let text_overflow_ellipsis = visual.text_overflow_ellipsis.unwrap_or(false);
+    // Default aplicado AQUI (codegen, antes do runtime) — Option preservado em
+    // DenVisual pra cascade. None ou Some(vec![]) ambos viram Vec::new() no paint.
+    let box_shadows = box_shadows_tokens(visual.box_shadows.as_deref().unwrap_or_default());
 
     quote! {
         den_layout::PaintStyle {
@@ -73,8 +76,35 @@ pub(crate) fn paint_style_tokens(visual: &DenVisual) -> proc_macro2::TokenStream
             opacity: #opacity as f32,
             white_space_nowrap: #white_space_nowrap,
             text_overflow_ellipsis: #text_overflow_ellipsis,
+            box_shadows: #box_shadows,
         }
     }
+}
+
+/// Emite `vec![BoxShadow { .. }, ..]` ou `Vec::new()` quando vazio.
+fn box_shadows_tokens(shadows: &[crate::types::BoxShadow]) -> proc_macro2::TokenStream {
+    if shadows.is_empty() {
+        return quote! { ::std::vec::Vec::new() };
+    }
+    let items = shadows.iter().map(|shadow| {
+        let (r, g, b, a) = shadow.color;
+        let offset_x = shadow.offset_x;
+        let offset_y = shadow.offset_y;
+        let blur = shadow.blur;
+        let spread = shadow.spread;
+        let inset = shadow.inset;
+        quote! {
+            den_layout::BoxShadow {
+                offset_x: #offset_x as f32,
+                offset_y: #offset_y as f32,
+                blur: #blur as f32,
+                spread: #spread as f32,
+                color: (#r, #g, #b, #a),
+                inset: #inset,
+            }
+        }
+    });
+    quote! { vec![ #( #items ),* ] }
 }
 
 /// Emite `Option<PaintStyle>` para o override de hover, se existir.
@@ -92,8 +122,10 @@ pub(super) fn hover_style_tokens(visual: &DenVisual) -> proc_macro2::TokenStream
 /// Emite um literal `den_layout::LayoutIntent { .. }` para o elemento dado.
 pub(super) fn layout_intent_tokens(el: &DenElement) -> proc_macro2::TokenStream {
     let visual = &el.visual;
-    let width_rule = dimension_rule_tokens(visual.width);
-    let height_rule = dimension_rule_tokens(visual.height);
+    // Defaults aplicados aqui (no codegen, ANTES do runtime) — DenVisual mantém
+    // Option pra preservar cascade. Ver regra `Option<T>` em types/style.rs.
+    let width_rule = dimension_rule_tokens(visual.width.unwrap_or_default());
+    let height_rule = dimension_rule_tokens(visual.height.unwrap_or_default());
     let min_width = optional_dimension_tokens(visual.min_width);
     let max_width = optional_dimension_tokens(visual.max_width);
     let min_height = optional_dimension_tokens(visual.min_height);
@@ -101,7 +133,7 @@ pub(super) fn layout_intent_tokens(el: &DenElement) -> proc_macro2::TokenStream 
     let display = display_mode_tokens(if is_flex_container(el) {
         DisplayMode::Flex
     } else {
-        visual.display
+        visual.display.unwrap_or_default()
     });
     let padding = visual.padding.unwrap_or(0.0);
     let margin = visual.margin.unwrap_or(0.0);
@@ -110,7 +142,7 @@ pub(super) fn layout_intent_tokens(el: &DenElement) -> proc_macro2::TokenStream 
     let flex_grow: f32 = if has_flex_grow(el) { 1.0 } else { 0.0 };
     let intrinsic_width = intrinsic_width_for(el);
     let intrinsic_height = intrinsic_height_for(el);
-    let position = position_tokens(visual.position);
+    let position = position_tokens(visual.position.unwrap_or_default());
     let top = optional_dimension_tokens(visual.top);
     let left = optional_dimension_tokens(visual.left);
     let right = optional_dimension_tokens(visual.right);
@@ -119,6 +151,9 @@ pub(super) fn layout_intent_tokens(el: &DenElement) -> proc_macro2::TokenStream 
         Some(z) => quote! { Some(#z) },
         None => quote! { None },
     };
+    let flex_direction = flex_direction_tokens(visual.flex_direction.unwrap_or_default());
+    let align_items = align_items_tokens(visual.align_items.unwrap_or_default());
+    let justify_content = justify_content_tokens(visual.justify_content.unwrap_or_default());
 
     quote! {
         den_layout::LayoutIntent {
@@ -142,7 +177,40 @@ pub(super) fn layout_intent_tokens(el: &DenElement) -> proc_macro2::TokenStream 
             right: #right,
             bottom: #bottom,
             z_index: #z_index,
+            flex_direction: #flex_direction,
+            align_items: #align_items,
+            justify_content: #justify_content,
         }
+    }
+}
+
+/// Emite o token equivalente ao `den_layout::FlexDirection` espelhado.
+fn flex_direction_tokens(direction: FlexDirection) -> proc_macro2::TokenStream {
+    match direction {
+        FlexDirection::Row => quote! { den_layout::FlexDirection::Row },
+        FlexDirection::Column => quote! { den_layout::FlexDirection::Column },
+    }
+}
+
+/// Emite o token equivalente ao `den_layout::AlignItems` espelhado.
+fn align_items_tokens(align: AlignItems) -> proc_macro2::TokenStream {
+    match align {
+        AlignItems::Stretch => quote! { den_layout::AlignItems::Stretch },
+        AlignItems::FlexStart => quote! { den_layout::AlignItems::FlexStart },
+        AlignItems::Center => quote! { den_layout::AlignItems::Center },
+        AlignItems::FlexEnd => quote! { den_layout::AlignItems::FlexEnd },
+    }
+}
+
+/// Emite o token equivalente ao `den_layout::JustifyContent` espelhado.
+fn justify_content_tokens(justify: JustifyContent) -> proc_macro2::TokenStream {
+    match justify {
+        JustifyContent::FlexStart => quote! { den_layout::JustifyContent::FlexStart },
+        JustifyContent::Center => quote! { den_layout::JustifyContent::Center },
+        JustifyContent::FlexEnd => quote! { den_layout::JustifyContent::FlexEnd },
+        JustifyContent::SpaceBetween => quote! { den_layout::JustifyContent::SpaceBetween },
+        JustifyContent::SpaceAround => quote! { den_layout::JustifyContent::SpaceAround },
+        JustifyContent::SpaceEvenly => quote! { den_layout::JustifyContent::SpaceEvenly },
     }
 }
 

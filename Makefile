@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: dev preview test review yoink commit push c component help
+.PHONY: dev preview test lint-css-rules review yoink commit push c component help
 
 dev: ## Hot reload (requires cargo-watch)
 	cargo watch -w den_app/src -w den_macros/src -i den_macros/src/lib.rs \
@@ -8,9 +8,32 @@ dev: ## Hot reload (requires cargo-watch)
 preview: ## Gera preview/preview.html com todas as páginas
 	cargo run --bin preview
 
-test: ## Roda cargo test + clippy (deny warnings) em todo o workspace
+test: lint-css-rules ## Roda guardas + cargo test + clippy (deny warnings) em todo o workspace
 	cargo test --workspace --all-targets
 	cargo clippy --workspace --all-targets -- -D warnings
+
+# Guarda da regra "toda propriedade CSS é Option<T>" em StyleRule/DenVisual.
+# Documentação completa: den_macros/src/types/style.rs (topo do arquivo) e REVIEW_PROMPT.md (regra 6).
+# Quebra build se algum modelo (ou humano) tentar voltar pra enum/bool direto, que mata cascade.
+# Procura SÓ nos 2 arquivos onde a regra se aplica — não polui outras estruturas.
+.PHONY: lint-css-rules
+lint-css-rules:
+	@FILES="den_macros/src/types/style.rs den_macros/src/types/resolved.rs"; \
+	BAD_FIELDS=$$(grep -nE 'pub +(display|width|height|cursor_pointer|flex_grow|position|flex_direction|align_items|justify_content|box_shadows): +(DisplayMode|WidthValue|PositionKind|FlexDirection|AlignItems|JustifyContent|bool) *,|pub +box_shadows: +Vec<' $$FILES 2>/dev/null || true); \
+	BAD_MERGE=$$(grep -nE 'if +other\.(display|width|height|position|flex_direction|align_items|justify_content) +!= +' $$FILES 2>/dev/null || true); \
+	BAD_BOOL=$$(grep -nE 'if +other\.(cursor_pointer|flex_grow) *\{' $$FILES 2>/dev/null || true); \
+	BAD_VEC=$$(grep -nE 'if +!? *other\.(box_shadows)\.is_empty\(\)' $$FILES 2>/dev/null || true); \
+	if [ -n "$$BAD_FIELDS" ] || [ -n "$$BAD_MERGE" ] || [ -n "$$BAD_BOOL" ] || [ -n "$$BAD_VEC" ]; then \
+		printf '\033[31m✗ VIOLAÇÃO da regra "toda propriedade CSS é Option<T>"\033[0m\n'; \
+		printf '\033[33m  Doc: den_macros/src/types/style.rs (topo) + REVIEW_PROMPT.md regra 6\033[0m\n'; \
+		printf '\033[33m  Quebra cascade silenciosamente — :hover não consegue resetar pro default.\033[0m\n\n'; \
+		[ -n "$$BAD_FIELDS" ] && printf '\033[31mCampo direto (não Option):\033[0m\n%s\n\n' "$$BAD_FIELDS"; \
+		[ -n "$$BAD_MERGE" ]  && printf '\033[31mmerge_from comparando com default (não is_some()):\033[0m\n%s\n\n' "$$BAD_MERGE"; \
+		[ -n "$$BAD_BOOL" ]   && printf '\033[31mmerge_from de bool sem Option (não dá pra unsetar):\033[0m\n%s\n\n' "$$BAD_BOOL"; \
+		[ -n "$$BAD_VEC" ]    && printf '\033[31mmerge_from de Vec via is_empty() (não distingue None de Some(vec![])):\033[0m\n%s\n\n' "$$BAD_VEC"; \
+		exit 1; \
+	fi
+	@printf '\033[32m✓ Regra Option<T> respeitada.\033[0m\n'
 
 review: ## Copia REVIEW_PROMPT.md + diff para o clipboard
 	@{ cat REVIEW_PROMPT.md; printf '\n'; git diff HEAD; } | xclip -selection clipboard

@@ -52,6 +52,26 @@ Se encontrar código que usa `egui::Painter` direto (`painter.rect_filled`, `pai
 - Todo `.unwrap()` deve ter um comentário explicando por que é seguro, ou ser substituído por tratamento de erro adequado.
 - `.unwrap_or_default()` que silencia erros de I/O é igualmente problemático — pelo menos um `eprintln!` no caminho de erro.
 
+### 6. ⚠️ Toda propriedade CSS é `Option<T>` em `StyleRule` e `DenVisual`
+
+**A regra mais quebrada do projeto.** Já foi violada 4 vezes (`display`, `position` no `DenVisual`, `flex_direction`, `align_items`, `justify_content`, e os bools `cursor_pointer`/`flex_grow`). Doc completo em [`den_macros/src/types/style.rs`](den_macros/src/types/style.rs) topo do arquivo.
+
+**Regra:** propriedades CSS sobreescrevíveis (qualquer cosa que aparece em `StyleRule` ou `DenVisual`) DEVEM ser `Option<T>`, **inclusive** enums com Default e `bool`s. O default só é aplicado **uma vez**, no codegen, via `.unwrap_or_default()`.
+
+**Por quê:** se for `T` direto, `merge_from` precisa comparar com default pra decidir se sobreescreve, e isso quebra cascade: `:hover` que volta pro default explicitamente é silenciosamente descartado.
+
+```scss
+.col          { display: flex; flex-direction: column; }
+.col:hover    { flex-direction: row; }    /* row é o default — IGNORADO se enum direto */
+```
+
+**Procura por:**
+- Campo novo de `StyleRule`/`DenVisual` que não é `Option<T>`.
+- `merge_from` com `if other.x != Default::default()` ou `if other.x != EnumKind::Variant` — bug garantido.
+- `if other.x { ... }` com `other.x: bool` em merge — não dá pra unsetar.
+
+Severidade: **CRÍTICO** sempre, mesmo que o teste não pegue (cascade só falha em condições específicas que normalmente não estão cobertas).
+
 ## O que revisar
 
 Faça code review do diff/código fornecido verificando:
@@ -64,6 +84,7 @@ Faça code review do diff/código fornecido verificando:
 6. **Nomes de variáveis genéricos** — `x`, `val`, `tmp` sem contexto.
 7. **Arquivos monolíticos** — módulos acima de ~300 linhas devem ser avaliados pra split.
 8. **Documentação desatualizada** — README.md, CLAUDE.md, PENDING.md devem refletir o estado real do código.
+9. **⚠️ Propriedades CSS que NÃO são `Option<T>` em `StyleRule`/`DenVisual`** — leia regra 6 acima. Bug latente garantido em cascade/hover.
 
 ## Contexto adicional
 

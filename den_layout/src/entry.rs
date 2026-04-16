@@ -5,7 +5,7 @@
 //! que as funções de regra (`width::resolve`, `height::resolve`, etc.)
 //! saibam tudo que precisam só olhando pra entry e pro pai.
 
-use crate::{DimensionRule, DisplayMode, PositionKind};
+use crate::{AlignItems, DimensionRule, DisplayMode, FlexDirection, JustifyContent, PositionKind};
 
 /// Uma entrada na flat list de layout.
 #[derive(Debug, Clone, Default)]
@@ -59,6 +59,12 @@ pub struct LayoutEntry {
     pub bottom: Option<DimensionRule>,
     /// Ordem de paint entre positioned siblings. `None` = 0 (default CSS `auto`).
     pub z_index: Option<i32>,
+    /// `flex-direction`: define o eixo principal do container flex.
+    pub flex_direction: FlexDirection,
+    /// `align-items`: alinhamento dos filhos no eixo cruzado.
+    pub align_items: AlignItems,
+    /// `justify-content`: distribuição dos filhos no eixo principal.
+    pub justify_content: JustifyContent,
 }
 
 impl LayoutEntry {
