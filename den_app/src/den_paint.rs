@@ -1,12 +1,38 @@
-//! Painter Den para o backend egui.
+//! Adapter egui do Den — ponte única entre `RenderTree`/`LayoutTable` e o backend.
 //!
-//! Esta é a ÚNICA ponte entre Den e egui pra renderização de páginas. Recebe
-//! uma `RenderTree` com valores já resolvidos e uma `LayoutTable` com rects
-//! calculados em CSS pixels. Desenha cada nó via `egui::Painter` (rect_filled,
-//! galley, rect_stroke) — nada de widgets egui.
+//! ## Arquitetura (fluxo unidirecional separado)
 //!
-//! Retorna `PaintEvent`s que o código gerado pelo `den_template!` despacha
-//! pros handlers (`(click)`, `goto`, `InputChanged` pra two-way binding).
+//! ```text
+//!                        render_frame()
+//!                              │
+//!         ┌────────────────────┼────────────────────┐
+//!         │                    │                    │
+//!    layout_pass          event_pass           paint_pass
+//!     (pura, sem           (egui source)       (egui sink)
+//!      toque em egui)           │                    │
+//!                               ▼                    ▼
+//!                       Vec<PaintEvent>        draws on egui
+//!                           │
+//!                           ▼
+//!                     Dispatcher (no
+//!                     código gerado)
+//! ```
+//!
+//! - **`layout_pass`**: mede texto, monta `LayoutTable.entries`, resolve rects.
+//!   Pura — não toca `egui::Painter`. Pode rodar em qualquer lugar.
+//! - **`event_pass`**: fonte de eventos do egui. Chama `ui.interact()` em cada nó
+//!   pra hit-test, gerencia foco/caret/teclado de inputs, atualiza `hover` no
+//!   `DenRouteState`, e coleta `Vec<PaintEvent>`. Não desenha nada.
+//! - **`paint_pass`**: consome `hover`/`focus` do state (populados pelo event_pass
+//!   no mesmo frame) e desenha. Não chama `ui.interact()`, não emite eventos.
+//!
+//! A **ordem matters**: event_pass roda ANTES do paint_pass. Assim o frame N
+//! já reage ao hover/focus do frame N (não do N-1), mantendo a UI responsiva
+//! sem o atraso de 1 frame do modelo "paint → coletar → próximo frame".
+//!
+//! Os `PaintEvent`s retornados são despachados pelo código gerado pelo
+//! `den_template!` pros handlers (`(click)`, `goto`, `InputChanged` pra two-way
+//! binding).
 
 use crate::paint_config::{
     INPUT_TEXT_PADDING_X, INPUT_TEXT_PADDING_Y, MIN_BORDER_WIDTH_PX, MIN_FONT_SIZE_PX,
@@ -44,13 +70,17 @@ pub enum PaintEvent {
     InputChanged { node_id: DenNodeId, value: String },
 }
 
-/// Mede texto, resolve layout e pinta a árvore — pipeline completo Den.
+/// Orchestrator: roda os 3 passes em ordem e devolve os eventos coletados.
 ///
-/// Recebe a tree construída pelo macro, faz a medição intrínseca via
-/// `ui.fonts_mut`, repopula a `LayoutTable` com as entradas da tree, resolve
-/// rects no viewport atual, e finalmente pinta no `egui::Painter`.
+/// O código gerado pelo `den_template!` chama esta função e depois faz
+/// dispatch dos eventos retornados pros handlers do usuário. Isto é o único
+/// ponto de entrada público do painter.
 ///
-/// Retorna os eventos coletados (cliques, mudanças de input, goto).
+/// Ordem dos passes:
+/// 1. `layout_pass` — mede texto + resolve rects (pura)
+/// 2. `event_pass` — hit-test + foco/teclado + coleta eventos
+/// 3. Paint do body (seletor `body {}` do SCSS)
+/// 4. `paint_pass` — desenha nós reutilizando hover/focus do event_pass
 pub fn paint_tree(
     ui: &mut Ui,
     scale: f32,
@@ -58,10 +88,58 @@ pub fn paint_tree(
     layout: &mut LayoutTable,
     state: &mut DenRouteState,
 ) -> Vec<PaintEvent> {
-    // 1. Medição intrínseca via egui fonts (substitui estimativa compile-time).
+    render_frame(ui, scale, tree, layout, state)
+}
+
+/// Mesma coisa que `paint_tree`, nome novo reflete a arquitetura de 3 passes.
+/// Mantemos `paint_tree` como alias porque o codegen do macro emite esse nome.
+pub fn render_frame(
+    ui: &mut Ui,
+    scale: f32,
+    tree: &mut RenderTree,
+    layout: &mut LayoutTable,
+    state: &mut DenRouteState,
+) -> Vec<PaintEvent> {
+    layout_pass(ui, scale, tree, layout);
+
+    let origin = ui.min_rect().min;
+    let body_rect = scaled_rect(
+        layout.rects.first().copied().unwrap_or_default(),
+        origin,
+        scale,
+    );
+    ui.allocate_rect(body_rect, Sense::hover());
+
+    // Event pass PRIMEIRO — assim paint_pass do mesmo frame já usa o hover/focus
+    // recém-atualizado (sem atraso de 1 frame).
+    state.hover_mut().clear();
+    let events = event_pass(ui, scale, origin, tree, layout, state);
+
+    // Pinta o body (seletor `body` no SCSS) antes dos nós. Equivalente ao
+    // <body> do browser — define background, border, etc. do viewport inteiro.
+    if let Some(body_style) = &tree.body_style {
+        let body_painter = ui.painter_at(body_rect);
+        paint_background(&body_painter, body_rect, body_style, scale);
+        paint_border(&body_painter, body_rect, body_style, scale);
+    }
+
+    paint_pass(ui, scale, origin, tree, layout, state);
+
+    events
+}
+
+/// **Pass 1 — layout** (função pura, NÃO chama `egui::Painter`).
+///
+/// Mede o texto intrínseco via `ui.fonts_mut` (única interação com egui aqui,
+/// mas é só consulta de métricas — não desenha), popula `LayoutTable.entries`
+/// a partir da `RenderTree`, e resolve rects no viewport atual.
+///
+/// Depois dessa função, `layout.rects[i]` tem x/y/width/height resolvidos em
+/// CSS pixels pra todo nó. `event_pass` e `paint_pass` só leem daí.
+fn layout_pass(ui: &Ui, scale: f32, tree: &mut RenderTree, layout: &mut LayoutTable) {
+    // Medição intrínseca substitui a estimativa compile-time do codegen.
     measure_tree_text(ui, tree);
 
-    // 2. Popula LayoutTable a partir da tree e reajusta sizes/rects.
     layout.entries = tree.to_layout_entries();
     let len = layout.entries.len();
     if layout.sizes.len() != len {
@@ -71,47 +149,48 @@ pub fn paint_tree(
         layout.rects.resize(len, LayoutRect::default());
     }
 
-    // 3. Resolve no viewport atual, em CSS pixels.
     let viewport_w = ui.available_width() / scale;
     let viewport_h = ui.available_height() / scale;
     layout.resolve_in_viewport(viewport_w, viewport_h);
+}
 
-    // 4. Prepara origem + reseta hover antes do walk.
-    let origin = ui.min_rect().min;
+/// **Pass 2 — eventos** (egui source). Não desenha nada.
+///
+/// Walk DFS idêntico ao paint_pass: chama `ui.interact()` em cada nó pra
+/// hit-test, atualiza `state.hover`/`state.focus`/`state.cursor` (inputs),
+/// processa eventos de teclado quando há input focado, e coleta
+/// `Vec<PaintEvent>` pra dispatch.
+fn event_pass(
+    ui: &mut Ui,
+    scale: f32,
+    origin: Pos2,
+    tree: &RenderTree,
+    layout: &LayoutTable,
+    state: &mut DenRouteState,
+) -> Vec<PaintEvent> {
     let mut events = Vec::new();
-
-    let body_rect = scaled_rect(
-        layout.rects.first().copied().unwrap_or_default(),
-        origin,
-        scale,
-    );
-    ui.allocate_rect(body_rect, Sense::hover());
-
-    // Pinta o body (seletor `body` no SCSS) antes dos filhos. Equivalente ao
-    // <body> do browser — define background, border, etc. do viewport inteiro.
-    if let Some(body_style) = &tree.body_style {
-        let body_painter = ui.painter_at(body_rect);
-        paint_background(&body_painter, body_rect, body_style, scale);
-        paint_border(&body_painter, body_rect, body_style, scale);
-    }
-
-    state.hover_mut().clear();
-
-    // 5. Walk + paint.
     for &root_idx in &tree.roots {
-        paint_node(
-            ui,
-            scale,
-            origin,
-            tree,
-            layout,
-            state,
-            root_idx,
-            &mut events,
-        );
+        collect_events_node(ui, scale, origin, tree, layout, state, root_idx, &mut events);
     }
-
     events
+}
+
+/// **Pass 3 — paint** (egui sink). Não chama `ui.interact()`, não emite eventos.
+///
+/// Lê `state.hover`/`state.focus` populados pelo `event_pass` pra escolher o
+/// estilo ativo (base vs hover) e desenha cada nó: drop-shadow → background →
+/// inset-shadow → conteúdo (text/input visual) → border.
+fn paint_pass(
+    ui: &mut Ui,
+    scale: f32,
+    origin: Pos2,
+    tree: &RenderTree,
+    layout: &LayoutTable,
+    state: &DenRouteState,
+) {
+    for &root_idx in &tree.roots {
+        paint_node(ui, scale, origin, tree, layout, state, root_idx);
+    }
 }
 
 /// Mede o CONTEÚDO (texto puro) de cada nó e atualiza `LayoutIntent::intrinsic_{width,height}`.
@@ -151,46 +230,27 @@ fn measure_tree_text(ui: &Ui, tree: &mut RenderTree) {
     }
 }
 
-/// Desenha um único nó da `RenderTree` e recursivamente seus filhos.
-#[allow(clippy::too_many_arguments)]
+/// Desenha um único nó da `RenderTree` (sem chamar `ui.interact()` nem emitir
+/// eventos). Lê `state.hover`/`state.focus` populados pelo `event_pass` pra
+/// escolher estilo ativo e pintar o caret de input focado.
 fn paint_node(
     ui: &mut Ui,
     scale: f32,
     origin: Pos2,
     tree: &RenderTree,
     layout: &LayoutTable,
-    state: &mut DenRouteState,
+    state: &DenRouteState,
     node_idx: usize,
-    events: &mut Vec<PaintEvent>,
 ) {
     let node = &tree.nodes[node_idx];
     let rect = scaled_rect(layout.rects[node.layout_index], origin, scale);
 
-    // Interação primeiro — precisa saber se tá em hover antes de escolher o estilo.
-    let sense = if node.interact.is_clickable() {
-        Sense::click()
-    } else {
-        Sense::hover()
-    };
-    let id = Id::new(node.node_id.raw());
-    let resp = ui.interact(rect, id, sense);
-
-    let hovering = resp.hovered();
-    if hovering {
-        state.hover_mut().insert(node.node_id);
-    }
-
+    let hovering = state.hover().contains(&node.node_id);
     let active_style: &PaintStyle = if hovering {
         node.hover_style.as_ref().unwrap_or(&node.style)
     } else {
         &node.style
     };
-
-    // Cursor pointer: seja vindo do hover_style (cursor: pointer dentro do :hover)
-    // seja explícito por ser clicável (goto, click com styling do pointer).
-    if hovering && (active_style.cursor_pointer || node.interact.pointer_on_hover) {
-        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-    }
 
     // Sombras drop ficam ATRÁS do background e podem extender pra fora do nó —
     // pinta com o painter do ui (clip mais largo), antes do painter clipado por nó.
@@ -214,7 +274,7 @@ fn paint_node(
             node_id,
             placeholder,
         } => {
-            paint_input(
+            paint_input_visual(
                 ui,
                 &painter,
                 rect,
@@ -222,26 +282,79 @@ fn paint_node(
                 placeholder.as_deref(),
                 active_style,
                 scale,
-                &resp,
                 state,
-                events,
             );
         }
     }
 
     paint_border(&painter, rect, active_style, scale);
 
-    // Filhos primeiro, depois eventos — garante que o clique no pai vença ordem
-    // visual de desenho (filhos por cima), mas eventos de filho já estão na lista.
-    //
-    // Ordem CSS-spec simplificada: in-flow primeiro (tree order), depois positioned
+    // Mesma ordem do event_pass: in-flow primeiro (tree order), depois positioned
     // ordenados por z-index ascendente (default 0; ties por tree order). Cobre os
     // casos comuns de overlay (ports sobre node, modal sobre canvas) sem implementar
     // stacking contexts completos.
     for child_idx in paint_order(tree, &node.children) {
-        paint_node(ui, scale, origin, tree, layout, state, child_idx, events);
+        paint_node(ui, scale, origin, tree, layout, state, child_idx);
+    }
+}
+
+/// Walk de eventos DFS: chama `ui.interact()` em cada nó, atualiza hover/focus,
+/// processa teclado pra inputs focados, e coleta `PaintEvent`s pra dispatch.
+///
+/// **Não desenha**. A ordem DFS é IDÊNTICA à do `paint_node` pra garantir que
+/// egui interprete o z-order corretamente (chamadas posteriores a `ui.interact`
+/// sobrepõem as anteriores, o que bate com filhos sobre pais visualmente).
+#[allow(clippy::too_many_arguments)]
+fn collect_events_node(
+    ui: &mut Ui,
+    scale: f32,
+    origin: Pos2,
+    tree: &RenderTree,
+    layout: &LayoutTable,
+    state: &mut DenRouteState,
+    node_idx: usize,
+    events: &mut Vec<PaintEvent>,
+) {
+    let node = &tree.nodes[node_idx];
+    let rect = scaled_rect(layout.rects[node.layout_index], origin, scale);
+
+    let sense = if node.interact.is_clickable() {
+        Sense::click()
+    } else {
+        Sense::hover()
+    };
+    let id = Id::new(node.node_id.raw());
+    let resp = ui.interact(rect, id, sense);
+
+    let hovering = resp.hovered();
+    if hovering {
+        state.hover_mut().insert(node.node_id);
     }
 
+    // Cursor pointer precisa ler estilo ativo. Usa o mesmo critério do paint_node
+    // (hover → hover_style.cursor_pointer OU interact.pointer_on_hover).
+    if hovering {
+        let active_style: &PaintStyle = node.hover_style.as_ref().unwrap_or(&node.style);
+        if active_style.cursor_pointer || node.interact.pointer_on_hover {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+        }
+    }
+
+    // Inputs: foco, teclado, InputChanged.
+    if let RenderKind::Input { node_id, .. } = &node.kind {
+        handle_input_events(ui, *node_id, &resp, state, events);
+    }
+
+    // Recursão na MESMA ordem do paint_node — garante que hit-test de filhos
+    // (chamadas mais tardias de ui.interact) sobrescreva a do pai quando
+    // sobrepostos. Consistente com CSS pointer-events default.
+    for child_idx in paint_order(tree, &node.children) {
+        collect_events_node(ui, scale, origin, tree, layout, state, child_idx, events);
+    }
+
+    // Click events coletados DEPOIS dos filhos — se o clique "pertence" a um
+    // filho, o resp.clicked() do filho retorna true; o do pai false. Egui
+    // resolve isso via interact order automaticamente.
     if resp.clicked() {
         if let Some(h) = node.interact.click_handler {
             events.push(PaintEvent::Click { handler: h });
@@ -511,18 +624,15 @@ fn fit_with_ellipsis(text: &str, max_width: f32, mut measure: impl FnMut(&str) -
     ELLIPSIS.to_string()
 }
 
-/// Pinta um input: fundo (desenhado pelo caller), texto ou placeholder, e caret piscante
-/// quando o nó está focado. Também consome eventos de teclado em modo focado e emite
-/// `PaintEvent::InputChanged` quando o valor muda.
-#[allow(clippy::too_many_arguments)]
-fn paint_input(
+/// **Event pass pra inputs**: gerencia foco (click-to-focus, click-elsewhere-to-blur),
+/// processa eventos de teclado quando focado, atualiza `state.inputs`/`state.cursor`,
+/// e emite `PaintEvent::InputChanged` quando o valor muda.
+///
+/// Não desenha nada — o lado visual (texto + caret) vive em `paint_input_visual`,
+/// que só lê o state atualizado aqui.
+fn handle_input_events(
     ui: &Ui,
-    painter: &egui::Painter,
-    rect: Rect,
     node_id: DenNodeId,
-    placeholder: Option<&str>,
-    style: &PaintStyle,
-    scale: f32,
     resp: &egui::Response,
     state: &mut DenRouteState,
     events: &mut Vec<PaintEvent>,
@@ -546,7 +656,6 @@ fn paint_input(
         .map(|s| s.to_string())
         .unwrap_or_default();
 
-    // Posição do caret (mantida entre frames).
     let mut cursor = clamp_char_boundary(
         &value,
         state
@@ -555,7 +664,6 @@ fn paint_input(
             .min(value.len()),
     );
 
-    // Processa eventos de teclado quando focado. Emite InputChanged se o valor muda.
     let mut new_value = value.clone();
     let mut changed = false;
     if focused {
@@ -563,7 +671,6 @@ fn paint_input(
         for ev in key_events {
             match ev {
                 egui::Event::Text(text) => {
-                    // Filtra caracteres de controle que não queremos.
                     let filtered: String = text.chars().filter(|c| !c.is_control()).collect();
                     if !filtered.is_empty() {
                         new_value.insert_str(cursor, &filtered);
@@ -635,25 +742,44 @@ fn paint_input(
         }
     }
 
-    // Persiste a posição do caret clampada ao novo valor.
     cursor = clamp_char_boundary(&new_value, cursor.min(new_value.len()));
     state.set_cursor(node_id, cursor);
 
     if changed {
-        // Atualiza route state e emite o evento pra dispatch (mirror pro self.field).
         state.inputs_mut().set(node_id, new_value.clone());
         events.push(PaintEvent::InputChanged {
             node_id,
-            value: new_value.clone(),
+            value: new_value,
         });
     }
 
-    // Texto a pintar: valor ou placeholder em cinza.
+    // Caret pisca continuamente quando focado → solicita repaint.
+    if focused {
+        ui.ctx().request_repaint();
+    }
+}
+
+/// **Paint pass pra inputs**: desenha o texto (valor ou placeholder) e, se
+/// focado, o caret piscante. Lê tudo de `state` — não muta nada, não emite
+/// eventos. A lógica de teclado/foco fica em `handle_input_events`.
+#[allow(clippy::too_many_arguments)]
+fn paint_input_visual(
+    ui: &Ui,
+    painter: &egui::Painter,
+    rect: Rect,
+    node_id: DenNodeId,
+    placeholder: Option<&str>,
+    style: &PaintStyle,
+    scale: f32,
+    state: &DenRouteState,
+) {
+    let focused = state.focus() == Some(node_id);
     let display_value = state
         .inputs()
         .get(node_id)
         .map(|s| s.to_string())
         .unwrap_or_default();
+
     let (display_text, is_placeholder) = if display_value.is_empty() {
         (placeholder.unwrap_or("").to_string(), true)
     } else {
@@ -676,7 +802,6 @@ fn paint_input(
         painter.galley(text_pos, text_box.galley, text_color);
     }
 
-    // Caret pisca quando focado.
     if focused {
         let show_caret = ui.ctx().input(|i| (i.time % 1.0) < 0.5);
         if show_caret {
@@ -684,9 +809,12 @@ fn paint_input(
                 .color
                 .map(|c| rgb_to_color(c, style.opacity))
                 .unwrap_or(Color32::from_gray(220));
-            let display_cursor =
-                clamp_char_boundary(&display_value, cursor.min(display_value.len()));
-            let pre = &display_value[..display_cursor];
+            let cursor_pos = state
+                .cursor_of(node_id)
+                .unwrap_or(display_value.len())
+                .min(display_value.len());
+            let cursor_safe = clamp_char_boundary(&display_value, cursor_pos);
+            let pre = &display_value[..cursor_safe];
             let painted_pre = apply_text_transform(pre, style.text_transform);
             let pre_box = layout_text_box(ui, &painted_pre, false, style, scale, caret_color);
             let caret_x = text_pos.x + pre_box.width;
@@ -697,8 +825,6 @@ fn paint_input(
                 Stroke::new((1.0 * scale).max(1.0), caret_color),
             );
         }
-        // Solicita repaint contínuo pra piscar o caret.
-        ui.ctx().request_repaint();
     }
 }
 
