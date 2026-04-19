@@ -1,10 +1,14 @@
 mod hello;
 mod home;
 mod ndnm;
+mod nodes;
+mod post_logs;
 mod usuario;
 pub use hello::HelloPage;
 pub use home::HomePage;
 pub use ndnm::NdnmPage;
+pub use nodes::NodesPage;
+pub use post_logs::PostLogsPage;
 pub use usuario::UsuarioPage;
 mod footer;
 pub use footer::Footer;

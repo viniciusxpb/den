@@ -1,3 +1,4 @@
 [workspace]
 members = ["den_macros", "den_app", "den_layout"]
+exclude = ["nodes"]
 resolver = "3"

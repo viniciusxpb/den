@@ -32,3 +32,5 @@ epaint_default_fonts = "0.33"
 # HTTP sync usado pelo demo do GhostService no home (catfact.ninja).
 # Sync casa direto com a thread do `DenGhostService::fetch` — sem tokio/async.
 ureq = "2"
+# Parse das frames SSE do `/run` dos nodes (ver `pages/nodes/nodes.rs`).
+serde_json = "1"

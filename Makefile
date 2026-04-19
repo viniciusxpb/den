@@ -1,9 +1,56 @@
 .DEFAULT_GOAL := help
-.PHONY: dev preview test lint-css-rules review yoink commit push c component help
+.PHONY: dev preview test lint-css-rules review yoink commit push c component help nodes-up nodes-down
 
-dev: ## Hot reload (requires cargo-watch)
+# Arquivo onde nodes-up grava os PIDs dos servers (1 por linha) pra nodes-down
+# ler e matar. /tmp é ok porque a vida útil é a sessão de dev — não precisa
+# persistir entre boots.
+NODES_PIDS := /tmp/den-nodes.pids
+
+dev: ## Hot reload + sobe os node servers (Ctrl+C derruba tudo)
+	@trap 'echo; $(MAKE) -s nodes-down' INT TERM EXIT; \
+	$(MAKE) -s nodes-up; \
 	cargo watch -w den_app/src -w den_macros/src -i den_macros/src/lib.rs \
 		-s 'touch den_macros/src/lib.rs && cargo run --bin den_app'
+
+nodes-up: ## Sobe em background SERVERS (toml com [runtime] port). CLIs ficam de fora — orquestrador spawna sob demanda.
+	@rm -f $(NODES_PIDS); \
+	any=0; \
+	for toml in nodes/*/node.toml; do \
+		[ -f "$$toml" ] || continue; \
+		dir=$$(dirname "$$toml"); \
+		name=$$(basename "$$dir"); \
+		cmd=$$(grep -E '^[[:space:]]*command[[:space:]]*=' "$$toml" | head -1 | sed -E 's/.*=[[:space:]]*"([^"]*)".*/\1/'); \
+		port=$$(grep -E '^[[:space:]]*port[[:space:]]*=' "$$toml" | head -1 | sed -E 's/.*=[[:space:]]*([0-9]+).*/\1/'); \
+		[ -z "$$cmd" ] && continue; \
+		if [ -z "$$port" ]; then \
+			printf '\033[90m· %-20s CLI (orquestrador roda on-demand)\033[0m\n' "$$name"; \
+			continue; \
+		fi; \
+		bin="$$dir/$${cmd#./}"; \
+		if [ ! -x "$$bin" ]; then \
+			printf '\033[33m⚠ %-20s sem binário (esperado em %s)\033[0m\n' "$$name" "$$bin"; \
+			continue; \
+		fi; \
+		log="/tmp/den-node-$$name.log"; \
+		( cd "$$dir" && exec $$cmd ) >"$$log" 2>&1 & \
+		echo $$! >> $(NODES_PIDS); \
+		printf '\033[36m▶ %-20s port %-5s pid %-6s log %s\033[0m\n' "$$name" "$$port" $$! "$$log"; \
+		any=1; \
+	done; \
+	[ "$$any" = "0" ] && printf '\033[33mNenhum server iniciado (todos os nodes são CLI).\033[0m\n' || true
+
+nodes-down: ## Mata os processos iniciados por nodes-up (lê /tmp/den-nodes.pids)
+	@if [ -f $(NODES_PIDS) ]; then \
+		printf '\033[33m⏻ Derrubando node servers...\033[0m\n'; \
+		while read pid; do \
+			[ -z "$$pid" ] && continue; \
+			kill "$$pid" 2>/dev/null && printf '  killed %s\n' "$$pid" || true; \
+		done < $(NODES_PIDS); \
+		rm -f $(NODES_PIDS); \
+		printf '\033[32m✓ Nodes derrubados.\033[0m\n'; \
+	else \
+		printf '\033[90m(nenhum node rodando)\033[0m\n'; \
+	fi
 
 preview: ## Gera preview/preview.html com todas as páginas
 	cargo run --bin preview

@@ -486,7 +486,10 @@ fn collect_events_node(
         None => rect,
     };
 
-    let sense = if node.interact.is_clickable() {
+    // Inputs precisam de Sense::click() pra `resp.clicked()` disparar e
+    // habilitar focus-on-click em `handle_input_events`. Sem isso, input
+    // sem `@click` fica em Sense::hover() e nunca recebe teclas.
+    let sense = if node.interact.is_clickable() || matches!(node.kind, RenderKind::Input { .. }) {
         Sense::click()
     } else {
         Sense::hover()

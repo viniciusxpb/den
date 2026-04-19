@@ -1,0 +1,88 @@
+<div class="page">
+    <div class="display__flex header-row">
+        <div class="title">Nodes</div>
+        <div class="subtitle">{{ self.nodes.len() }} discovered</div>
+        <div class="nav-link" @goto="HomePage">Home</div>
+        <div class="nav-link" @goto="PostLogsPage">Pipeline</div>
+    </div>
+
+    <div class="discovery">
+        <div class="discovery-header">
+            <div class="section-label">Discovered nodes</div>
+            <div class="btn-mini" @click="refresh_nodes()">↻ Atualizar</div>
+        </div>
+        <div class="display__flex node-cards">
+            @for(node in self.nodes) {
+                <div class="node-card">
+                    <div class="display__flex card-top">
+                        <div class="card-name">{{ node.config.name }}</div>
+                        <div class="card-port">{{ node.config.port_str() }}</div>
+                    </div>
+                    <div class="card-id">{{ node.config.id }} · v{{ node.config.version }}</div>
+                    <div class="card-desc">{{ node.config.description | truncate(120) }}</div>
+                    <div class="card-cat">{{ node.config.category | upper }}</div>
+                </div>
+            } @empty {
+                <div class="empty-state">Nenhum node em "nodes/" — cada node deve ter um node.toml na raiz da sua pasta.</div>
+            }
+        </div>
+    </div>
+
+    <div class="active">
+        <div class="section-label">Active node</div>
+
+        <div class="field">
+            <div class="field-label">Path do node.toml</div>
+            <input @bind="self.active_path" placeholder="nodes/.../node.toml" class="field-input" />
+        </div>
+
+        @if(!self.active.id.is_empty()) {
+            <div class="config-card">
+                <div class="config-row"><div class="config-key">id</div><div class="config-val">{{ self.active.id }}</div></div>
+                <div class="config-row"><div class="config-key">name</div><div class="config-val">{{ self.active.name }} v{{ self.active.version }}</div></div>
+                <div class="config-row"><div class="config-key">category</div><div class="config-val">{{ self.active.category }}</div></div>
+                <div class="config-row"><div class="config-key">desc</div><div class="config-val">{{ self.active.description }}</div></div>
+                <div class="config-row"><div class="config-key">command</div><div class="config-val mono">{{ self.active.command }}</div></div>
+                <div class="config-row"><div class="config-key">endpoint</div><div class="config-val mono">{{ self.active.endpoint_run() }}</div></div>
+            </div>
+        } ! {
+            <div class="empty-state">Nenhum node carregado. Clique em "Carregar".</div>
+        }
+
+        <div class="display__flex actions">
+            <div class="btn-secondary" @click="load_active()">Carregar</div>
+            <div class="btn-secondary" @click="check_health()">Health check</div>
+            @if(self.running) {
+                <div class="btn-running">Executando… {{ self.progress_pct }}%</div>
+            } ! {
+                <div class="btn-primary" @click="run_active()">Executar node</div>
+            }
+            <div class="btn-danger" @click="clear_logs()">Limpar logs</div>
+        </div>
+
+        @if(self.running) {
+            <div class="progress-wrap">
+                <div class="progress-track">
+                    <div class="progress-fill pb-{{ self.progress_bucket }}"></div>
+                </div>
+                <div class="progress-text">{{ self.progress_label | default("waiting...") }}</div>
+            </div>
+        }
+    </div>
+
+    <div class="logs">
+        <div class="logs-header">Execution log</div>
+        @for(log in self.logs) {
+            <div class="log-entry kind-{{ log.kind }}">
+                <div class="display__flex log-meta">
+                    <div class="log-kind kind-badge-{{ log.kind }}">{{ log.kind | upper }}</div>
+                    <div class="log-time">{{ log.time }}</div>
+                    <div class="log-title">{{ log.title }}</div>
+                </div>
+                <div class="log-detail">{{ log.detail | truncate(400) }}</div>
+            </div>
+        } @empty {
+            <div class="log-empty">Sem eventos ainda.</div>
+        }
+    </div>
+</div>

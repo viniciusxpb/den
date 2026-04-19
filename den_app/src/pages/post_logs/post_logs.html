@@ -1,0 +1,70 @@
+<div class="page">
+    <div class="display__flex header-row">
+        <div class="title">Image Pipeline</div>
+        <div class="subtitle">{{ self.steps.len() }} nodes</div>
+        <div class="nav-link" @goto="NodesPage">Nodes</div>
+        <div class="nav-link" @goto="HomePage">Home</div>
+    </div>
+
+    <div class="control">
+        <div class="field">
+            <div class="field-label">Prompt</div>
+            <input @bind="self.prompt" placeholder="a beautiful sunset over the ocean, oil painting" class="field-input" />
+        </div>
+
+        <div class="display__flex actions">
+            @if(self.running) {
+                <div class="btn-running">Gerando…</div>
+            } ! {
+                <div class="btn-primary" @click="generate()">Gerar imagem</div>
+            }
+            <div class="btn-secondary" @click="reset_pipeline()">Recarregar pipeline</div>
+            <div class="btn-danger" @click="clear_logs()">Limpar logs</div>
+        </div>
+
+        @if(self.last_image != "") {
+            <div class="last-image">
+                <div class="display__flex image-header">
+                    <div class="field-label">Última imagem</div>
+                    <div class="btn-open" @click="open_image()">Abrir no viewer</div>
+                </div>
+                <div class="image-path">{{ self.last_image }}</div>
+            </div>
+        }
+    </div>
+
+    <div class="pipeline">
+        <div class="section-label">Pipeline</div>
+        <div class="display__flex steps-row">
+            @for(step in self.steps) {
+                <div class="step step-{{ step.status }}">
+                    <div class="step-status-dot dot-{{ step.status }}"></div>
+                    <div class="step-name">{{ step.config.name }}</div>
+                    <div class="step-meta">{{ step.config.id }}</div>
+                    <div class="step-port">{{ step.config.port_str() }}</div>
+                    @if(step.elapsed_ms > 0) {
+                        <div class="step-elapsed">{{ step.elapsed_ms }} ms</div>
+                    }
+                </div>
+            } @empty {
+                <div class="empty-state">Nenhum node carregado. Cheque os TOMLs em nodes/.</div>
+            }
+        </div>
+    </div>
+
+    <div class="logs">
+        <div class="logs-header">Execution log</div>
+        @for(log in self.logs) {
+            <div class="log-entry kind-{{ log.kind }}">
+                <div class="display__flex log-meta">
+                    <div class="log-kind kind-badge-{{ log.kind }}">{{ log.kind | upper }}</div>
+                    <div class="log-time">{{ log.time }}</div>
+                    <div class="log-title">{{ log.title }}</div>
+                </div>
+                <div class="log-detail">{{ log.detail | truncate(400) }}</div>
+            </div>
+        } @empty {
+            <div class="log-empty">Sem eventos ainda.</div>
+        }
+    </div>
+</div>

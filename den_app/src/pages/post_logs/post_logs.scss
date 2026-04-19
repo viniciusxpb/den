@@ -1,0 +1,400 @@
+$bg: #0f172a;
+$card: #1e293b;
+$card-soft: #273449;
+$text: #e2e8f0;
+$muted: #94a3b8;
+$accent: #38bdf8;
+$accent-soft: #0ea5e9;
+$danger: #f87171;
+$ok: #4ade80;
+$warn: #fbbf24;
+$violet: #a78bfa;
+$border: #334155;
+
+.page {
+    background: $bg;
+    padding: 20px;
+    width: 100%;
+    gap: 18px;
+}
+
+.header-row {
+    gap: 12px;
+    align-items: center;
+}
+
+.title {
+    color: $accent;
+    font-size: 28px;
+    font-weight: 700;
+}
+
+.subtitle {
+    color: $muted;
+    font-size: 13px;
+    flex: 1;
+}
+
+.nav-link {
+    color: $muted;
+    font-size: 13px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid $border;
+}
+
+.nav-link:hover {
+    background: $card-soft;
+    color: $text;
+    cursor: pointer;
+}
+
+.section-label {
+    color: $muted;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.field-label {
+    color: $muted;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.control {
+    background: $card;
+    border: 1px solid $border;
+    border-radius: 10px;
+    padding: 16px;
+    width: 100%;
+    gap: 12px;
+}
+
+.field {
+    width: 100%;
+    gap: 6px;
+}
+
+.field-input {
+    background: $card-soft;
+    border: 1px solid $border;
+    border-radius: 6px;
+    padding: 10px 12px;
+    color: $text;
+    font-size: 14px;
+    width: 100%;
+}
+
+.actions {
+    gap: 10px;
+    align-items: center;
+}
+
+.btn-primary {
+    background: $accent;
+    color: $bg;
+    font-weight: 700;
+    font-size: 15px;
+    padding: 12px 24px;
+    border-radius: 6px;
+}
+
+.btn-primary:hover {
+    background: $accent-soft;
+    cursor: pointer;
+}
+
+.btn-secondary {
+    background: $card-soft;
+    color: $text;
+    font-size: 14px;
+    padding: 10px 14px;
+    border-radius: 6px;
+    border: 1px solid $border;
+}
+
+.btn-secondary:hover {
+    background: $border;
+    cursor: pointer;
+}
+
+.btn-running {
+    background: $card-soft;
+    color: $warn;
+    font-size: 15px;
+    padding: 12px 24px;
+    border-radius: 6px;
+    border: 1px solid $warn;
+    font-weight: 700;
+}
+
+.btn-danger {
+    background: transparent;
+    color: $danger;
+    font-size: 14px;
+    padding: 10px 14px;
+    border-radius: 6px;
+    border: 1px solid $border;
+}
+
+.btn-danger:hover {
+    background: $card-soft;
+    cursor: pointer;
+}
+
+.last-image {
+    background: $card-soft;
+    border: 1px solid $border;
+    border-left: 3px solid $ok;
+    border-radius: 6px;
+    padding: 10px 14px;
+    width: 100%;
+    gap: 6px;
+}
+
+.image-header {
+    gap: 12px;
+    align-items: center;
+    width: 100%;
+}
+
+.image-header .field-label {
+    flex: 1;
+}
+
+.btn-open {
+    background: $ok;
+    color: $bg;
+    font-weight: 700;
+    font-size: 12px;
+    padding: 6px 12px;
+    border-radius: 4px;
+}
+
+.btn-open:hover {
+    background: $accent;
+    cursor: pointer;
+}
+
+.image-path {
+    color: $ok;
+    font-size: 13px;
+    font-family: "monospace";
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pipeline {
+    width: 100%;
+    gap: 10px;
+}
+
+.steps-row {
+    gap: 10px;
+    width: 100%;
+}
+
+.step {
+    background: $card;
+    border: 1px solid $border;
+    border-radius: 8px;
+    padding: 12px;
+    width: 180px;
+    gap: 6px;
+}
+
+.step-pending {
+    border-left: 3px solid $border;
+    opacity: 0.7;
+}
+
+.step-running {
+    border-left: 3px solid $warn;
+    background: $card-soft;
+}
+
+.step-ok {
+    border-left: 3px solid $ok;
+}
+
+.step-error {
+    border-left: 3px solid $danger;
+    background: $card-soft;
+}
+
+.step-status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 100px;
+    background: $border;
+}
+
+.dot-pending {
+    background: $border;
+}
+
+.dot-running {
+    background: $warn;
+}
+
+.dot-ok {
+    background: $ok;
+}
+
+.dot-error {
+    background: $danger;
+}
+
+.step-name {
+    color: $text;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.step-meta {
+    color: $muted;
+    font-size: 11px;
+    font-family: "monospace";
+}
+
+.step-port {
+    color: $accent;
+    font-size: 11px;
+    font-family: "monospace";
+}
+
+.step-elapsed {
+    color: $muted;
+    font-size: 11px;
+    font-family: "monospace";
+}
+
+.empty-state {
+    background: $card;
+    border: 1px solid $border;
+    color: $muted;
+    font-size: 13px;
+    padding: 18px;
+    border-radius: 8px;
+    width: 100%;
+    text-align: center;
+}
+
+.logs {
+    width: 100%;
+    gap: 10px;
+}
+
+.logs-header {
+    color: $muted;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 0 0 4px 0;
+    border-bottom: 1px solid $border;
+    width: 100%;
+}
+
+.log-entry {
+    background: $card;
+    border: 1px solid $border;
+    border-left: 3px solid $border;
+    border-radius: 6px;
+    padding: 10px 12px;
+    width: 100%;
+    gap: 6px;
+}
+
+.kind-info {
+    border-left: 3px solid $muted;
+}
+
+.kind-request {
+    border-left: 3px solid $accent;
+}
+
+.kind-response {
+    border-left: 3px solid $ok;
+}
+
+.kind-error {
+    border-left: 3px solid $danger;
+}
+
+.kind-image {
+    border-left: 3px solid $violet;
+}
+
+.log-meta {
+    gap: 12px;
+    align-items: center;
+}
+
+.log-kind {
+    color: $bg;
+    font-weight: 700;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-family: "monospace";
+    letter-spacing: 0.5px;
+}
+
+.kind-badge-info {
+    background: $muted;
+}
+
+.kind-badge-request {
+    background: $accent;
+}
+
+.kind-badge-response {
+    background: $ok;
+}
+
+.kind-badge-error {
+    background: $danger;
+}
+
+.kind-badge-image {
+    background: $violet;
+}
+
+.log-time {
+    color: $muted;
+    font-size: 12px;
+    font-family: "monospace";
+}
+
+.log-title {
+    color: $text;
+    font-size: 13px;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.log-detail {
+    color: $muted;
+    font-size: 12px;
+    font-family: "monospace";
+    background: $card-soft;
+    padding: 8px 10px;
+    border-radius: 4px;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.log-empty {
+    color: $muted;
+    font-size: 13px;
+    padding: 24px;
+    background: $card;
+    border: 1px solid $border;
+    border-radius: 8px;
+    width: 100%;
+    text-align: center;
+}

@@ -1,0 +1,432 @@
+$bg: #0f172a;
+$card: #1e293b;
+$card-soft: #273449;
+$text: #e2e8f0;
+$muted: #94a3b8;
+$accent: #38bdf8;
+$accent-soft: #0ea5e9;
+$danger: #f87171;
+$ok: #4ade80;
+$warn: #fbbf24;
+$violet: #a78bfa;
+$border: #334155;
+
+.page {
+    background: $bg;
+    padding: 20px;
+    width: 100%;
+    gap: 18px;
+}
+
+.header-row {
+    gap: 12px;
+    align-items: center;
+}
+
+.title {
+    color: $accent;
+    font-size: 28px;
+    font-weight: 700;
+}
+
+.subtitle {
+    color: $muted;
+    font-size: 13px;
+    flex: 1;
+}
+
+.nav-link {
+    color: $muted;
+    font-size: 13px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid $border;
+}
+
+.nav-link:hover {
+    background: $card-soft;
+    color: $text;
+    cursor: pointer;
+}
+
+.section-label {
+    color: $muted;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.discovery {
+    width: 100%;
+    gap: 10px;
+}
+
+.discovery-header {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    width: 100%;
+}
+
+.btn-mini {
+    color: $accent;
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    border: 1px solid $border;
+    background: $card-soft;
+}
+
+.btn-mini:hover {
+    background: $border;
+    cursor: pointer;
+}
+
+.node-cards {
+    gap: 12px;
+    width: 100%;
+}
+
+.node-card {
+    background: $card;
+    border: 1px solid $border;
+    border-left: 3px solid $violet;
+    border-radius: 8px;
+    padding: 12px 14px;
+    width: 280px;
+    gap: 8px;
+}
+
+.card-top {
+    gap: 12px;
+    align-items: center;
+    width: 100%;
+}
+
+.card-name {
+    color: $text;
+    font-size: 15px;
+    font-weight: 700;
+    flex: 1;
+}
+
+.card-port {
+    color: $accent;
+    font-size: 12px;
+    font-family: "monospace";
+    background: $card-soft;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.card-id {
+    color: $muted;
+    font-size: 12px;
+    font-family: "monospace";
+}
+
+.card-desc {
+    color: $text;
+    font-size: 12px;
+}
+
+.card-cat {
+    color: $violet;
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    font-family: "monospace";
+}
+
+.empty-state {
+    background: $card;
+    border: 1px solid $border;
+    color: $muted;
+    font-size: 13px;
+    padding: 18px;
+    border-radius: 8px;
+    width: 100%;
+    text-align: center;
+}
+
+.active {
+    background: $card;
+    border: 1px solid $border;
+    border-radius: 10px;
+    padding: 16px;
+    width: 100%;
+    gap: 12px;
+}
+
+.field {
+    width: 100%;
+    gap: 6px;
+}
+
+.field-label {
+    color: $muted;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.field-input {
+    background: $card-soft;
+    border: 1px solid $border;
+    border-radius: 6px;
+    padding: 10px 12px;
+    color: $text;
+    font-size: 13px;
+    font-family: "monospace";
+    width: 100%;
+}
+
+.config-card {
+    background: $card-soft;
+    border: 1px solid $border;
+    border-left: 3px solid $accent;
+    border-radius: 8px;
+    padding: 12px 14px;
+    width: 100%;
+    gap: 6px;
+}
+
+.config-row {
+    display: flex;
+    gap: 12px;
+    width: 100%;
+}
+
+.config-key {
+    color: $muted;
+    font-size: 12px;
+    font-family: "monospace";
+    width: 90px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.config-val {
+    color: $text;
+    font-size: 13px;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.config-val.mono {
+    font-family: "monospace";
+    color: $accent;
+}
+
+.actions {
+    gap: 10px;
+    margin: 4px 0 0 0;
+}
+
+.btn-primary {
+    background: $accent;
+    color: $bg;
+    font-weight: 700;
+    font-size: 14px;
+    padding: 10px 18px;
+    border-radius: 6px;
+}
+
+.btn-primary:hover {
+    background: $accent-soft;
+    cursor: pointer;
+}
+
+.btn-secondary {
+    background: $card-soft;
+    color: $text;
+    font-size: 14px;
+    padding: 10px 14px;
+    border-radius: 6px;
+    border: 1px solid $border;
+}
+
+.btn-secondary:hover {
+    background: $border;
+    cursor: pointer;
+}
+
+.btn-running {
+    background: $card-soft;
+    color: $warn;
+    font-size: 14px;
+    padding: 10px 18px;
+    border-radius: 6px;
+    border: 1px solid $warn;
+}
+
+.progress-wrap {
+    width: 100%;
+    gap: 6px;
+    margin: 2px 0 0 0;
+}
+
+.progress-track {
+    background: $card-soft;
+    border: 1px solid $border;
+    border-radius: 4px;
+    height: 8px;
+    width: 100%;
+    overflow: hidden;
+}
+
+.progress-fill {
+    background: $accent;
+    height: 8px;
+}
+
+.pb-0 { width: 0%; }
+.pb-5 { width: 5%; }
+.pb-10 { width: 10%; }
+.pb-15 { width: 15%; }
+.pb-20 { width: 20%; }
+.pb-25 { width: 25%; }
+.pb-30 { width: 30%; }
+.pb-35 { width: 35%; }
+.pb-40 { width: 40%; }
+.pb-45 { width: 45%; }
+.pb-50 { width: 50%; }
+.pb-55 { width: 55%; }
+.pb-60 { width: 60%; }
+.pb-65 { width: 65%; }
+.pb-70 { width: 70%; }
+.pb-75 { width: 75%; }
+.pb-80 { width: 80%; }
+.pb-85 { width: 85%; }
+.pb-90 { width: 90%; }
+.pb-95 { width: 95%; }
+.pb-100 { width: 100%; }
+
+.progress-text {
+    color: $muted;
+    font-size: 11px;
+    font-family: "monospace";
+}
+
+.btn-danger {
+    background: transparent;
+    color: $danger;
+    font-size: 14px;
+    padding: 10px 14px;
+    border-radius: 6px;
+    border: 1px solid $border;
+}
+
+.btn-danger:hover {
+    background: $card-soft;
+    cursor: pointer;
+}
+
+.logs {
+    width: 100%;
+    gap: 10px;
+}
+
+.logs-header {
+    color: $muted;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 0 0 4px 0;
+    border-bottom: 1px solid $border;
+    width: 100%;
+}
+
+.log-entry {
+    background: $card;
+    border: 1px solid $border;
+    border-left: 3px solid $border;
+    border-radius: 6px;
+    padding: 10px 12px;
+    width: 100%;
+    gap: 6px;
+}
+
+.kind-info {
+    border-left: 3px solid $muted;
+}
+
+.kind-request {
+    border-left: 3px solid $accent;
+}
+
+.kind-response {
+    border-left: 3px solid $ok;
+}
+
+.kind-error {
+    border-left: 3px solid $danger;
+}
+
+.log-meta {
+    gap: 12px;
+    align-items: center;
+}
+
+.log-kind {
+    color: $bg;
+    font-weight: 700;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-family: "monospace";
+    letter-spacing: 0.5px;
+}
+
+.kind-badge-info {
+    background: $muted;
+}
+
+.kind-badge-request {
+    background: $accent;
+}
+
+.kind-badge-response {
+    background: $ok;
+}
+
+.kind-badge-error {
+    background: $danger;
+}
+
+.log-time {
+    color: $muted;
+    font-size: 12px;
+    font-family: "monospace";
+}
+
+.log-title {
+    color: $text;
+    font-size: 13px;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.log-detail {
+    color: $muted;
+    font-size: 12px;
+    font-family: "monospace";
+    background: $card-soft;
+    padding: 8px 10px;
+    border-radius: 4px;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.log-empty {
+    color: $muted;
+    font-size: 13px;
+    padding: 24px;
+    background: $card;
+    border: 1px solid $border;
+    border-radius: 8px;
+    width: 100%;
+    text-align: center;
+}
